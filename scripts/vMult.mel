@@ -1,0 +1,8 @@
+// vMult v20060101 pinkwerks @7 gmail
+// component wise multiply of a vector
+global proc vector 
+vMult(vector $v1, vector $v2)
+{
+	return ( <<$v1.x * $v2.x, $v1.y * $v2.y, $v1.z * $v2.z>> );
+}
+

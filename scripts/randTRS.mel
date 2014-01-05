@@ -1,0 +1,173 @@
+//
+//
+//  info:
+//	randTRS - v1.0 3/98 pinkwerks
+//
+//  discription:
+//	applies relative, random, transformations to selected object(s)
+//
+//  usage:
+//	randTRS <xform_type> <vector_type> <min> <max> <direction>
+//
+//  where:
+//	<xfrom_type>	either t|r|s
+//	<vector_type>	either x|y|z|xyz
+//	<min>		minimum value to transform object
+//	<max>		maximum value to transform object
+//	<direction>	float
+//
+//  inputs:
+//	select one or more objects to transform.
+//
+//  returns:
+//	0 if everything is groovy, else 1.
+//
+//  notes:	
+//	if two or more objects are selected then the first
+//	selected object acts as the reference object.
+//
+//	direction:
+//	    if direction > 0, then objects are transformed away from reference.
+//	    if direction < 0, then objects are transformed toward reference.
+//	    if direction == 0, then you don't care where it transfroms.
+// 	    if type == rotation then direction < 0 ccw, > 0 cw, 0 don't care.
+//	
+//	the usage of the word "random" implies pseudo-random.
+//	
+//	you can either do a translate, rotate or scale.  no combinations.
+//
+//
+
+global proc int randTRS(
+    string $xformtype,
+    string $vectortype,
+    float $min,
+    float $max,
+    float $direction
+) {
+    // debugging/verbose info - 1/on or 0/off
+
+    $debug = 0;
+
+    $objs = `ls -sl`;	// array of selected objects
+
+    $sobjs = size($objs);
+
+    if ($sobjs < 1) {
+	print("randTRS : select at least one object\n");
+	return(1);
+    } else if ($sobjs == 1)
+	$i = 0;
+    else
+	$i = 1;
+
+    $refobj = $objs[0];
+    $rx = getAttr($refobj + ".boundingBoxCenterX");
+    $ry = getAttr($refobj + ".boundingBoxCenterY");
+    $rz = getAttr($refobj + ".boundingBoxCenterZ");
+
+    if ($debug) {
+	print("refobj is : " + $refobj + " " + $rx + " " + $ry + " " +
+	    $rz + "\n\n"
+	);
+	print("min is : " + $min + "\n");
+	print("max is : " + $max + "\n");
+	print("xformtype is : " + $xformtype + "\n");
+	print("vectortype is : " + $vectortype + "\n");
+    }
+
+for ($obj in $objs)
+    for ($i; $i < $sobjs; $i++) {
+	$cx = getAttr($objs[$i] + ".boundingBoxCenterX");
+	$cy = getAttr($objs[$i] + ".boundingBoxCenterY");
+	$cz = getAttr($objs[$i] + ".boundingBoxCenterZ");
+
+	switch ($vectortype) {
+	    case "x":
+		print("is x\n");
+		$x = rand($min, $max);
+		$y = 0;
+		$z = 0;
+		break;
+	    case "y":
+		print("is y\n");
+		$x = 0;
+		$y = rand($min, $max);
+		$z = 0;
+		break;
+	    case "z":
+		print("is z\n");
+		$x = 0;
+		$y = 0;
+		$z = rand($min, $max);
+		break;
+	    case "xyz":
+		print("is xyz\n");
+		$x = rand($min, $max);
+		print($x + "\n");
+		$y = rand($min, $max);
+		print($y + "\n");
+		$z = rand($min, $max);
+		print($z + "\n");
+		break;
+	    default:
+		print("randTRS : invalid <vector_type> : " +
+		    "valid types, xyz x y z "
+		);
+		return(1);
+		break;
+	}
+
+	print $x;
+	print $y;
+	print $z;
+
+	if ($direction > 0) {
+	    if ($cx < $rx && $x > 0) $x *= -1;
+	    if ($cx > $rx && $x < 0) $x *= -1;
+	    if ($cy < $ry && $y > 0) $y *= -1;
+	    if ($cy > $ry && $y < 0) $y *= -1;
+	    if ($cz < $rz && $z > 0) $z *= -1;
+	    if ($cz > $rz && $z < 0) $z *= -1;
+	} else if ($direction < 0) {
+	    if ($cx < $rx && $x < 0) $x *= -1;
+	    if ($cx > $rx && $x > 0) $x *= -1;
+	    if ($cy < $ry && $y < 0) $y *= -1;
+	    if ($cy > $ry && $y > 0) $y *= -1;
+	    if ($cz < $rz && $z < 0) $z *= -1;
+	    if ($cz > $rz && $z > 0) $z *= -1;
+	}
+
+	switch ($xformtype) {
+	    case "t":
+	    case "T":
+		move -r $x $y $z $objs[$i];
+		break;
+	    case "r":
+	    case "R":
+		rotate -r $x $y $z $objs[$i];
+		break;
+	    case "s":
+	    case "S":
+		scale -r $x $y $z $objs[$i];
+		break;
+	    default:
+		print("randTRS : invalid <xform_type> : " +
+		    "valid types, t r s"
+		);
+		return(1);
+		break;
+	}
+
+	if ($debug) {
+	    print("obj : " + $objs[$i] + "\n");
+	    print("\tdelta : " + $x + " " + $y + " " + $z + "\n");
+	    print("\twas   : " + $cx + " " + $cy + " " + $cz + "\n");
+	    print("\tnow   : " + ($cx + $x) + " " + ($cy + $y) +
+		" " + ($cz + $z) + "\n\n"
+	    );
+	}
+    }
+
+    return(0);
+};

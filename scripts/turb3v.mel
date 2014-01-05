@@ -1,0 +1,15 @@
+global proc vector
+turb3v (
+	int $octaves,
+	vector $index
+) {
+	vector $v = <<0, 0, 0>>;
+	float $frequency = 1;
+	float $amplitude = 1;
+	for ($i = 0; $i <= $octaves; $i++) {
+		$v += $amplitude * dnoise($index * $frequency);
+		$frequency += $frequency;
+		$amplitude *= .5;
+	}
+	return($v);
+}

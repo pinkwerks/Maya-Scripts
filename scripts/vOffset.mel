@@ -1,0 +1,20 @@
+global proc vector 
+vOffset(float $offset, vector $v)
+{
+    float $flipx = 1;
+    float $flipy = 1;
+    float $flipz = 1;
+    float $x = $v.x;
+    float $y = $v.y;
+    float $z = $v.z;
+    if ($x < 0) $flipx = -1;
+    if ($y < 0) $flipy = -1;
+    if ($z < 0) $flipz = -1;
+    return(
+	<<
+	    $x + ($offset * $flipx),
+	    $y + ($offset * $flipy),
+	    $z + ($offset * $flipz)
+	>>
+    );
+};

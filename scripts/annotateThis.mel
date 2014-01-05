@@ -1,0 +1,51 @@
+/*  This file downloaded from Highend3d.com
+''  
+''  Highend3d.com File Information:
+''  
+''    Script Name: annotateThis v1.0
+''    Author: Julian Love
+''    Last Updated: January 14, 2002
+''    Update/Change this file at:
+''    http://www.highend3d.com/maya/mel/?section=interface#1430
+''  
+''  Please do not alter any information above this line
+''  it is generated dynamically by Highend3d.com and will
+''  be changed automatically on any updates.
+*/
+
+//annotateThis v1.0, by Julian Love. Developed entirely on OSX.
+//
+//modify this at the risk of having a painful bunion on your left foot
+//
+//usage: select any object that has a shapenode (maya's annotate command does
+//		 nothing for joints for some reason), such as any locator, polygon or
+//		 nurb object. Run: annotateThis from the command line. A dialog will
+//		 appear where you can type in your notation. Annotations do appear as
+//		 objects in the view port and outliner. You can grab them an reposition
+//		 them to your liking.
+
+
+global proc annotateThis (){
+	string	$sel[] = `ls -sl`;
+	string	$note, $x;
+	string	$fileDialogResult;
+	float	$anyPos[];
+
+	//...query the user for the message
+    $fileDialogResult = `promptDialog
+    	-title "Add annotation"
+    	-message "Enter message:"
+    	-button "OK" -button "Cancel"
+    	-defaultButton "OK" -cancelButton "Cancel"
+    	-dismissString "Cancel"`;
+
+	//...if the user didn't cancel, add the message
+    if ($fileDialogResult == "OK") {
+    	$note = `promptDialog -q`;
+
+    	for ($x in $sel){
+    		$anyPos = `xform -q -ws -rotatePivot ($x)`;
+			annotate -point $anyPos[0] ($anyPos[1] -10) $anyPos[2] -text $note;
+		}
+	}
+}

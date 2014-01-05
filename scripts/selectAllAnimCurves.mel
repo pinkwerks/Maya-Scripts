@@ -1,0 +1,5 @@
+global proc int
+selectAllAnimCurves() {
+	select -r `ls -type animCurve`;
+	return(0);
+}

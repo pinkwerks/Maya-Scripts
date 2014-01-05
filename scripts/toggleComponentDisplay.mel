@@ -1,0 +1,4 @@
+global proc
+toggleComponentDisplay(int $state) {
+	toggle -cv -lp -pt -st $state;
+}

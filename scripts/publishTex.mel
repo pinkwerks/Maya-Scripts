@@ -1,0 +1,2171 @@
+{ //script begin
+global int $usegroups = 0;
+global string $texAttribList[]={"rmanColor","rmanSpec","rmanOpac","rmanDisp","rmanTrans","rmanDirt"};
+//global string $texAttribList[]={"rmanColor","rmanSpec","rmanOpac","rmanDisp","rmanTrans","rmanDirt"};
+global string $ubertexpath = "/asylum/cg/common/shaders/prman/uberTex_srf_v5_automap.slo";
+	global int $autoColor = 0 ;
+	global int $autoDirt = 0 ;
+	global int $autoSpec = 0 ;
+	global int $autoOpac  = 0 ;
+	global int $autoDisp = 0;
+	global int $autoOccl  = 0;
+	global int $autoTrans  = 0;
+	global int $doShaders  = 0;
+	global int $doSingleShaders  = 0;
+	global int $doMayaShaders  = 0;
+	global int $doReplaceShaders = 0;
+	global int $dohardcopy = 0;
+   global int $useshapelinks=0;
+   global int $STRIPNUMERIC = 1;
+   global int $linktoorigtex = 1;
+  global string $txColor="";
+  global string $txSpec="";
+  global string $txOpac="";
+  global string $txDisp="";
+  global string $txTrans="";
+  global string $txDirt="";
+  global string $dummyfile="/hosts/max-t2/v11/cg/common/textures/UVguides/UVorientation.tx";;
+  global string $txsurf="";
+  global string $txdisp="";
+  global string $savedscene;
+  global int $VERBOSE = 0;
+  global string
+	$setmaps_doshaders_check,
+	$setmaps_doshaders_single_check,
+	$setmaps_3Dshaders_check,
+	$setmaps_3Dprojection_check,
+	$setmaps_doshaders_replace_check,
+	$setmaps_useshapelink_check,
+	$setmaps_window,
+	$setmaps_intructions,
+	$setmaps_rootdir_edit,
+	$setmaps_subdir_edit,
+		
+	$setmaps_color_edit,
+	$setmaps_color_auto_check,
+		
+	$setmaps_spec_edit,
+	$setmaps_spec_auto_check,
+		
+	$setmaps_opac_edit,
+	$setmaps_opac_auto_check,
+		
+	$setmaps_disp_edit,
+	$setmaps_disp_auto_check,
+		
+	$setmaps_occl_edit,
+	$setmaps_occl_auto_check,
+	
+	$setmaps_trans_edit,
+	$setmaps_trans_auto_check,
+
+	$setmaps_dirt_edit,
+	$setmaps_dirt_auto_check;
+
+
+   global string $amap_button_group;
+   global string $saveshaders_button_group;
+   global string $amap_cb_pre;   
+	global string $amap_cb_suf;
+	global string $amap_cb_updatesel;
+
+global proc printf(string $str)
+{
+  if($VERBOSE)
+		print($str);
+}
+
+//--------isgroup-----------//
+//check if node is a group node
+global proc int isgroup(string $transform)
+{
+    if(!$usegroups) return 0;
+    if ( size( `listRelatives -shapes $transform` ) == 0 )
+    {		
+  	return 1;
+
+    } else return 0;    
+}
+
+//------------getSceneName-----------------------//
+//get current scene name
+global proc string getWorkDir()
+{ 
+  
+  $savedscene=""; //clear scene name global
+  if(`objExists "automapPrefsSN"`) scriptNode -executeBefore "automapPrefsSN";
+  if($savedscene!="")
+  {
+	
+	return $savedscene;
+  }
+
+  string $scn = `file -q -sceneName`;
+  $scn = `match "[^/\\]*$" $scn`;
+  $scn = `match "^[^\.]*" $scn`;
+  
+  return $scn;
+}
+
+
+
+//get base dir from shot
+global proc string getBaseDir()
+{
+  string $tmp =`getenv "MAYA_PROJECT"`;
+  return $tmp;
+}
+
+//get subdir
+global proc string getSubDir()
+{
+  return "textures";  
+}
+
+global proc string getRootDir()
+{
+ return (getBaseDir()+"/"+getSubDir());
+}
+
+global proc string getDefaultDir()
+{ return getRootDir() + "/"+getWorkDir();
+}
+
+global proc deleteTexAttrib()
+{
+	string $shapes[] = `ls -sl -long -dag`;
+	if ( !size($shapes) ) {
+		printf "no selection!\n";
+		return;
+	}
+
+	for($sh in $shapes)
+ 	{
+		for($attrib in $texAttribList)
+		if(`attributeExists $attrib $sh`)
+		{
+		deleteAttr ($sh+"."+$attrib);
+		}
+	}
+	
+}
+
+
+global proc deleteExistingMap(string $item)
+{
+   $children = `ls -long -dag $item`;
+   for($child in $children)
+   {
+	if(hasautomap($child))
+	{
+		select -r $child;
+		deleteTexAttrib();
+		select -cl;	
+	}
+
+   }
+}
+
+global proc addAutomapAttrib()
+{
+
+	string $mappath="";
+	string $color="";
+	string $spec="";
+	string $opac="";
+	string $disp="";
+	string $occl="";
+	string $trans="";
+	string $dirt="";
+   string $shapes[];
+	string $basedir = getBaseDir(); //full path to shot
+
+	//see if we're selelecting a group
+	string $items[] = `ls -sl -long`;
+	if ( !size($items) ) {
+		printf "no selection!\n";
+		return;
+	}
+
+
+	for($item in $items)
+	{
+	   //deleteExistingMap($item);
+	
+	   //check if the item is a group or a bunch of shapes
+	   if(isgroup($item))
+	   {
+		$shapes = `ls -long $item`;
+		$children = `ls -long -dag -shapes $shapes`;
+	   }
+	   else
+	   {
+	     	$shapes = `ls -long -dag -shapes $item`;	
+	   }
+
+	   for ( $shape in $shapes ) 
+	   {
+			
+		string $attrib;
+		string $subdir = getSubDir();
+		string $scenename = getWorkDir();
+		string $shapeShorts[] ;
+		int $numTokens = `tokenize $shape "|" $shapeShorts`;
+		
+		string $shapeShort = `substitute "Shape" $shapeShorts[$numTokens - 1] ""`;
+
+		if ($autoColor)
+		{
+			$color = "color/tx/" + $shapeShort + "_C.tx";
+		}
+		if ($autoSpec)
+		{
+			$spec = "spec/tx/" + $shapeShort + "_S.tx";	
+		}
+		if ($autoOpac)
+		{
+			$opac = "opac/tx/" + $shapeShort + "_O.tx";	
+		}
+		if ($autoDisp)
+		{
+			$disp = "disp/tx/" + $shapeShort + "_D.tx";	
+		}
+		if ($autoOccl)
+		{
+			$occl = "occl/tx/" + $shapeShort + "_Occl.tx";	
+		}
+		if ($autoTrans)
+		{
+			$trans = "trans/tx/" + $shapeShort + "_Trans.tx";	
+		}
+		if ($autoDirt)
+		{
+			$dirt = "dirt/tx/" + $shapeShort + "_Dirt.tx";	
+		}
+		
+
+		string $tmp;
+
+		//loop through each attrib
+		for($attrib in $texAttribList)
+		{		
+	
+		  if($attrib == "rmanColor" && (""!=$color)){ $mappath = $color;}
+		  else if($attrib == "rmanSpec" && (""!=$spec)){ $mappath = $spec;}
+		  else if($attrib == "rmanOpac" && (""!=$opac)){ $mappath = $opac;}
+		  else if($attrib == "rmanDisp" && (""!=$disp)){ $mappath = $disp;}
+		  else if($attrib == "rmanOccl" && (""!=$occl)){ $mappath = $occl;}
+		  else if($attrib == "rmanTrans" && (""!=$trans)) { $mappath = $trans;}
+		  else if($attrib == "rmanDirt" && (""!=$dirt)) { $mappath = $dirt;}
+		  else $mappath="";
+
+		  //if($attrib=="") continue;
+		  //printf("\n map path for attrib " + $attrib + " is " + $mappath + "\n");
+
+		  
+		  if (!`attributeExists $attrib $shape`)
+		  {
+			addAttr -ln $attrib -dt "string" $shape;
+			setAttr -e -type "string" ($shape + "." + $attrib) "";		
+		  }
+		  if (size( `getAttr ($shape + "." + $attrib)`) <=0 )
+		  {
+			setAttr -e -type "string" ($shape + "." + $attrib) "";		
+		  }		
+		  if ("" != $mappath) 
+		  {
+			$tmp = $mappath;		
+			if ("" != $subdir)
+			{
+				$tmp = $subdir + "/" + $scenename + "/" + $tmp;
+			}
+			if($useshapelinks)
+			{
+			setAttr -e -type "string" ($shape+"."+$attrib) $tmp;			
+			}
+			else
+			{ 
+				$tmp=`match "^.*/" $tmp`;
+				$tmp+=`match "[^/\\]*$" $dummyfile`;
+				setAttr -e -type "string" ($shape+"."+$attrib) $tmp;			
+			}
+	//		error bah;
+			createMap($basedir, $tmp, $shape,$doMayaShaders);		
+		  }
+
+		}
+
+      		 $color = "";
+		 $spec = "";
+		 $opac = "";
+		 $disp = "";
+		 $disp = "";
+		 $occl = "";
+		 $trans = "";
+		 $dirt = "";
+		
+	   }
+	}
+
+}
+
+
+global proc createMap(string $basedir,string $subdir,string $mapname,int $doMayaShader)
+{
+  $mapname = `match "[^|]*$" $mapname`; //strip path info if it exists
+  
+  string $mappath = $basedir + "/" + $subdir;
+  
+  string $txdir = `match "^.*/" $mappath`;
+
+//  string $defaultdir = $basedir + "/"+ getSubDir() + "/"+getWorkDir();
+  string $defaultdir = getDefaultDir();
+
+	//create tex dir if one does not exist
+	if (! `filetest -d $txdir`)
+  	{ 
+		if ( ! `sysFile -makeDir ($txdir)`) 
+		{ 
+			printf("Error: Couldn't create " + $txdir + "\n"); 
+			return;
+		}
+		else 	printf ("Creating directory " + $txdir + "\n");	
+		
+	}
+		
+	//create tex file if one does not exist		
+	if(!`filetest -f $mappath`)
+	{ 
+		printf ("Adding UVguide texture \n");
+		if(!`filetest -f $dummyfile`) warning "couldnt find dummyfile. UVguide texture not applied";
+		
+		//see if the dummy texture exists in the base dir and if not copy it over
+		if(!`filetest -f ($defaultdir+"/UVorientation.tx")`)
+		{  printf("copying over DUMMY\n");
+			if ( ! `sysFile -copy ($defaultdir+"/UVorientation.tx") $dummyfile`)
+			{
+			     printf ("Error: Couldn't copy " +  $dummyfile + " to " + $mappath+"/UVorientation.tx" + "\n");
+			}
+		}
+		
+		//ready to do the linking
+		string $syscmd = "ln -sf " + ($defaultdir+"/UVorientation.tx") + " " + $mappath;
+		system $syscmd;
+						
+	}
+		
+	
+}
+
+//detect if this shape has an automap attrib
+global proc int hasautomap(string $sh)
+{ 
+  for($a in $texAttribList)
+  {
+   if(`attributeExists $a $sh`) return 1;
+  }
+
+  return 0;
+}
+
+
+
+
+global proc createPalleteFromScene()
+{
+  string $pltss = `slimcmd slim GetPalettes`;
+  string $plts[];
+  string $shapes[];
+  tokenize($pltss, $plts);
+	//delete any existing palettes
+        if (size($plts) > 0)
+        {
+                printf "Deleting all pallettes before attaching Automap.\n";
+        }
+        for ($plt in $plts)
+        {
+                printf ("deleting pallette " + $plt + "\n");
+                slimcmd $plt Delete 1;
+        }
+
+        // add new pallete
+        string $plth = `slimcmd slim FindPalette`;
+        if (size ($plth) <= 0)
+        {
+                $plth = `slimcmd slim CreatePalette -edit -new`;
+        }
+
+
+ 	string $items[] = `ls -long`;
+	if ( !size($items) ) {
+		printf "no items in scene!\n";
+		return;
+	}
+
+
+	for($item in $items)
+	{
+	   select -cl;
+	   //check if the item is a group or a bunch of shapes
+	   if(isgroup($item))
+	   {	
+		
+		if(!hasautomap($item)) continue;  
+		//get all items in the group node
+	     	$shapes = `ls -long -dag -shapes $item`;	
+	  	//add ubertex slims
+          	slimcmd slim WindowCmd Show palettes;
+		string $shname=`match "[^|]*$" $item`;
+		string $theshader = `slimcmd $plth CreateInstance -file $ubertexpath`;
+ 		string $appID = `slimcmd $theshader GetID`;
+         	slimcmd $theshader SetLabel ($shname);
+		
+		for($sh in $shapes)
+	  	{  
+			select -r $sh;
+			mtor control attach surface $appID;
+			select -cl;
+	    	}
+		
+
+	   }
+	   else
+	   {
+	     	$shapes = `ls -long -dag -shapes $item`;	
+	  	//add ubertex slims
+          	slimcmd slim WindowCmd Show palettes;
+	  	for($sh in $shapes)
+	  	{  
+			if(hasautomap($sh))
+			{
+			string $shname=`match "[^|]*$" $sh`;
+			string $theshader = `slimcmd $plth CreateInstance -file $ubertexpath`;
+ 			string $appID = `slimcmd $theshader GetID`;
+         		slimcmd $theshader SetLabel ($shname);
+
+			select -r $sh;
+			mtor control attach surface $appID;
+			select -cl;
+			}
+	    	}
+	     }
+	}
+	
+}
+
+
+//update textures on objects
+global proc setmaps_create_window()
+{
+ 	if($savedscene==""){ error "you have not selected a subdir in your preferences\n";}
+	
+  if(`window -exists setmaps_create_window`) 
+	deleteUI -window setmaps_create_window;
+  window -title "Setup texture Maps" -iconName "TexDir" -sizeable 1 setmaps_create_window;
+
+	
+	//$setmaps_window = `window -title "Setup texture Maps" -iconName "TexDir" -sizeable 1`;
+
+	$Flay = `formLayout`;
+
+	int $label_width = 55;
+
+	global string $root = "";
+	$root =getRootDir();
+	//global string $subdir ;
+        //$subdir = getWorkDir();
+	global string $colorpath ;
+	global string $specpath ;
+	global string $opacpath ;
+	global string $disppath ;
+	global string $occlpath ;
+	global string $transpath ;
+	global string $dirtpath ;
+
+	
+	$setmaps_intructions = `text -w 260 -fn "boldLabelFont" -l "Leave empty to leave values unchanged."`;
+
+	
+	//$setmaps_rootdir_edit = `textField -tx $root`;
+	$setmaps_rootdir_label = `text -w $label_width -al "right" -l ("Root Dir: " + $root)`;
+	$setmaps_rootdir_label2 = `text -w $label_width -al "right" -l ("Sub Dir: " + getWorkDir())`;
+
+//	$setmaps_rootdir_browse = `button -width 20 -label "..." -command "setmaps_texdir_browse($setmaps_rootdir_edit)"`;
+
+//	$setmaps_subdir_edit = `textField -tx $subdir`;
+//	$setmaps_subdir_label = `text -w $label_width -al "right" -l "Sub Dirs"  `;
+
+	$setmaps_color_edit = `textField -tx $colorpath`;
+	$setmaps_color_label = `text -w $label_width -al "right" -l "Map Color"`;
+	$setmaps_color_browse = `button -width 20 -label "..." -command "setmaps_texfile_browse($setmaps_color_edit, \"color\")"`;
+	$setmaps_color_auto_check = `checkBox -l "auto" -value $autoColor /*-changeCommand "setmaps_autocheck_change($setmaps_color_auto_check,$setmaps_color_edit)"*/`;
+//	setmaps_autocheck_change($setmaps_color_auto_check,$setmaps_color_edit)	;
+	
+	$setmaps_spec_edit = `textField -tx $specpath`;
+	$setmaps_spec_label = `text -w $label_width -al "right" -l "Map Spec"`;
+	$setmaps_spec_browse = `button -width 20 -label "..." -command "setmaps_texfile_browse($setmaps_spec_edit, \"spec\")"`;
+	$setmaps_spec_auto_check = `checkBox -l "auto" -value $autoSpec /*-changeCommand "setmaps_autocheck_change($setmaps_spec_auto_check,$setmaps_spec_edit)"*/`;
+//	setmaps_autocheck_change($setmaps_spec_auto_check,$setmaps_spec_edit) ;
+		
+	$setmaps_opac_edit = `textField -tx $opacpath`;
+	$setmaps_opac_label = `text -w $label_width -al "right" -l "Map Opac"`;
+	$setmaps_opac_browse = `button -width 20 -label "..." -command "setmaps_texfile_browse($setmaps_opac_edit, \"opac\")"`;
+	$setmaps_opac_auto_check = `checkBox -l "auto" -value $autoOpac /*-changeCommand "setmaps_autocheck_change($setmaps_opac_auto_check,$setmaps_opac_edit)"*/`;
+//	setmaps_autocheck_change($setmaps_opac_auto_check,$setmaps_opac_edit) ;
+		
+	$setmaps_disp_edit = `textField -tx $disppath`;
+	$setmaps_disp_label = `text -w $label_width -al "right" -l "Map Disp"`;
+	$setmaps_disp_browse = `button -width 20 -label "..." -command "setmaps_texfile_browse($setmaps_disp_edit, \"disp\")"`;
+	$setmaps_disp_auto_check = `checkBox -l "auto" -value $autoDisp /*-changeCommand "setmaps_autocheck_change($setmaps_disp_auto_check,$setmaps_disp_edit)"*/`;
+//	setmaps_autocheck_change($setmaps_disp_auto_check,$setmaps_disp_edit);
+		
+	$setmaps_dirt_edit = `textField -tx $dirtpath`;
+	$setmaps_dirt_label = `text -w $label_width -al "right" -l "Map Dirt"`;
+	$setmaps_dirt_browse = `button -width 20 -label "..." -command "setmaps_texfile_browse($setmaps_dirt_edit, \"dirt\")"`;
+	$setmaps_dirt_auto_check = `checkBox -l "auto" -value $autoDirt`;
+	setmaps_autocheck_change($setmaps_dirt_auto_check,$setmaps_dirt_edit);
+	
+	$setmaps_trans_edit = `textField -tx $transpath`;
+	$setmaps_trans_label = `text -w $label_width -al "right" -l "Map Trans"`;
+	$setmaps_trans_browse = `button -width 20 -label "..." -command "setmaps_texfile_browse($setmaps_trans_edit, \"trans\")"`;
+	$setmaps_trans_auto_check = `checkBox -l "auto" -value $autoTrans /*-changeCommand "setmaps_autocheck_change($setmaps_trans_auto_check,$setmaps_trans_edit)"*/`;
+//	setmaps_autocheck_change($setmaps_trans_auto_check,$setmaps_trans_edit);
+		
+	$setmaps_doshaders_check = `checkBox -l "Attach Slim Shader" -value $doShaders `;
+	$setmaps_doshaders_single_check = `checkBox -l "Attach only one shader for all selected items" -value $doSingleShaders `;
+	$setmaps_doshaders_replace_check = `checkBox -l "Over-write existing attachments" -value $doReplaceShaders `;
+
+//	$setmaps_3Dshaders_check = `checkBox -l "Attach Maya 3D Paint Shader (colour only)" -value $do3DShaders -cc setmaps_3Dshader_CB`;
+//	$setmaps_3Dprojection_check = `checkBox -l "As 3D projection" -value 0 -enable 0`;
+
+	
+	$ok_button = `button -width 60 -height 23 -label "Update" -command "setmaps_ok"`;
+	$close_button = `button -width 60 -height 23 -label "Close" -command "window -e -vis 0 setmaps_create_window"`;
+
+	formLayout -edit
+
+
+		-attachForm $setmaps_intructions "top" 15
+		-attachForm $setmaps_intructions "left" 20
+
+		// -------------------------------------
+
+		-attachForm $setmaps_rootdir_label "top" 52
+		-attachForm $setmaps_rootdir_label "left" 5
+		-attachForm $setmaps_rootdir_label "right" 130
+
+		-attachForm $setmaps_rootdir_label2 "top" 72
+		-attachForm $setmaps_rootdir_label2 "left" 5
+		-attachForm $setmaps_rootdir_label2 "right" 130
+
+
+		//-attachForm $setmaps_rootdir_edit "top" 50
+		//-attachForm $setmaps_rootdir_edit "left" ($label_width+12)
+		//-attachForm $setmaps_rootdir_edit "right" 90
+
+		//-attachForm $setmaps_rootdir_browse "top" 50
+		//-attachForm $setmaps_rootdir_browse "right" 65
+		
+		// -------------------------------------
+/*
+		-attachForm $setmaps_subdir_label "top" 82
+		-attachForm $setmaps_subdir_label "left" 5
+	
+		-attachForm $setmaps_subdir_edit "top" 80
+		-attachForm $setmaps_subdir_edit "left" ($label_width+12)
+		-attachForm $setmaps_subdir_edit "right" 90
+	*/	
+		// -------------------------------------
+
+		-attachForm $setmaps_color_label "top" 112
+		-attachForm $setmaps_color_label "left" 5
+
+		-attachForm $setmaps_color_edit "top" 110
+		-attachForm $setmaps_color_edit "left" ($label_width+12)
+		-attachForm $setmaps_color_edit "right" 90
+
+		-attachForm $setmaps_color_browse "top" 110
+		-attachForm $setmaps_color_browse "right" 65
+
+		-attachForm $setmaps_color_auto_check "top" 113
+		-attachForm $setmaps_color_auto_check "right" 5
+
+		// -------------------------------------
+
+		-attachForm $setmaps_spec_label "top" 142
+		-attachForm $setmaps_spec_label "left" 5
+
+		-attachForm $setmaps_spec_edit "top" 140
+		-attachForm $setmaps_spec_edit "left" ($label_width+12)
+		-attachForm $setmaps_spec_edit "right" 90
+
+		-attachForm $setmaps_spec_browse "top" 140
+		-attachForm $setmaps_spec_browse "right" 65
+
+		-attachForm $setmaps_spec_auto_check "top" 143
+		-attachForm $setmaps_spec_auto_check "right" 5
+
+		// -------------------------------------
+
+		-attachForm $setmaps_opac_label "top" 172
+		-attachForm $setmaps_opac_label "left" 5
+
+		-attachForm $setmaps_opac_edit "top" 170
+		-attachForm $setmaps_opac_edit "left" ($label_width+12)
+		-attachForm $setmaps_opac_edit "right" 90
+
+		-attachForm $setmaps_opac_browse "top" 170
+		-attachForm $setmaps_opac_browse "right" 65
+
+		-attachForm $setmaps_opac_auto_check "top" 173
+		-attachForm $setmaps_opac_auto_check "right" 5
+
+		// -------------------------------------
+
+		-attachForm $setmaps_disp_label "top" 202
+		-attachForm $setmaps_disp_label "left" 5
+
+		-attachForm $setmaps_disp_edit "top" 200
+		-attachForm $setmaps_disp_edit "left" ($label_width+12)
+		-attachForm $setmaps_disp_edit "right" 90
+
+		-attachForm $setmaps_disp_browse "top" 200
+		-attachForm $setmaps_disp_browse "right" 65
+
+		-attachForm $setmaps_disp_auto_check "top" 203
+		-attachForm $setmaps_disp_auto_check "right" 5
+
+		// -------------------------------------
+
+
+		-attachForm $setmaps_trans_label "top" 232
+		-attachForm $setmaps_trans_label "left" 5
+
+		-attachForm $setmaps_trans_edit "top" 230
+		-attachForm $setmaps_trans_edit "left" ($label_width+12)
+		-attachForm $setmaps_trans_edit "right" 90
+
+		-attachForm $setmaps_trans_browse "top" 230
+		-attachForm $setmaps_trans_browse "right" 65
+
+		-attachForm $setmaps_trans_auto_check "top" 233
+		-attachForm $setmaps_trans_auto_check "right" 5
+		// -------------------------------------
+		
+		-attachForm $setmaps_dirt_label "top" 262
+		-attachForm $setmaps_dirt_label "left" 5
+
+		-attachForm $setmaps_dirt_edit "top" 260
+		-attachForm $setmaps_dirt_edit "left" ($label_width+12)
+		-attachForm $setmaps_dirt_edit "right" 90
+
+		-attachForm $setmaps_dirt_browse "top" 260
+		-attachForm $setmaps_dirt_browse "right" 65
+
+		-attachForm $setmaps_dirt_auto_check "top" 263
+		-attachForm $setmaps_dirt_auto_check "right" 5
+		
+		// -------------------------------------
+
+		-attachForm $setmaps_doshaders_check "top" 295
+		-attachForm $setmaps_doshaders_check "left" ($label_width+20)
+
+		-attachForm $setmaps_doshaders_single_check "top" 320
+		-attachForm $setmaps_doshaders_single_check "left" ($label_width+20)
+
+		-attachForm $setmaps_doshaders_replace_check "top" 350
+		-attachForm $setmaps_doshaders_replace_check "left" ($label_width+20)
+
+		//-attachForm $setmaps_doshaders_replace_check
+/*
+		-attachForm $setmaps_3Dshaders_check "top" 320
+		-attachForm $setmaps_3Dshaders_check "left" ($label_width+20)
+
+		-attachForm $setmaps_3Dprojection_check "top" 340
+		-attachForm $setmaps_3Dprojection_check "left" ($label_width+20)
+*/
+		// -------------------------------------
+
+		-attachForm $close_button "right" 8
+		-attachForm $close_button "bottom" 20
+
+		-attachForm $ok_button "right" 78
+		-attachForm $ok_button "bottom" 20
+		
+		$Flay;
+
+	window -edit -width 480 -height 410 setmaps_create_window;
+	showWindow;
+
+}
+
+global proc setmaps_ok()
+{
+ //get values from ui
+ string $newcolor = `textField -q -tx $setmaps_color_edit`;
+ string $newspec = `textField -q -tx $setmaps_spec_edit`;
+ string $newopac = `textField -q -tx $setmaps_opac_edit`;
+ string $newdisp = `textField -q -tx $setmaps_disp_edit`;
+ string $newtrans = `textField -q -tx $setmaps_trans_edit`;
+ string $newdirt = `textField -q -tx $setmaps_dirt_edit`;
+ $autoColor = `checkBox -q -v $setmaps_color_auto_check`;
+ $autoSpec = `checkBox -q -v $setmaps_spec_auto_check`;
+ $autoOpac  = `checkBox -q -v $setmaps_opac_auto_check`;
+ $autoDisp = `checkBox -q -v $setmaps_disp_auto_check`;
+ $autoTrans  = `checkBox -q -v $setmaps_trans_auto_check`;
+ $autoDirt  = `checkBox -q -v $setmaps_dirt_auto_check`;
+
+ int $attachshaders = `checkBox -q -v $setmaps_doshaders_check`;
+ int $attachonlyone = `checkBox -q -v $setmaps_doshaders_single_check`;
+ int $overwriteexisting  = `checkBox -q -v $setmaps_doshaders_replace_check`;
+ 
+ addAutomapAttrib();
+ 
+ string $shapes[]=`ls -sl -long -dag -shapes`;
+
+ if(size($shapes) < 0 ) 
+ {
+	error "no objects selected to update";
+ }
+
+ 
+
+ if(`filetest -f $newcolor`)
+ {
+	printf("Updating rmanColor\n");
+	updateTexAttr($newcolor,"rmanColor",$shapes);
+ }
+ 
+ if(`filetest -f $newspec`)
+ {
+	printf("Updating rmanSpec\n");
+	updateTexAttr($newspec,"rmanSpec",$shapes);
+ }
+ if(`filetest -f $newopac`)
+ {
+	printf("Updating rmanOpac\n");
+	updateTexAttr($newopac,"rmanOpac",$shapes);
+ }
+ if(`filetest -f $newdisp`)
+ {
+	printf("Updating rmanDisp\n");
+	updateTexAttr($newdisp,"rmanDisp",$shapes);
+ }
+ if(`filetest -f $newtrans`)
+ {
+	printf("Updating rmanTrans\n");
+	updateTexAttr($newtrans,"rmanTrans",$shapes);
+ }
+
+ if(`filetest -f $newdirt`)
+ {
+	printf("Updating rmanDirt\n");
+	updateTexAttr($newdirt,"rmanDirt",$shapes);
+ }
+
+
+ //
+ //attach slim shaders section
+ //
+ $shapes=`ls -long -dag -shapes $shapes`; //make sure all our shapes are picked again 
+
+ if($attachshaders && !$attachonlyone)
+ {
+	for($sh in $shapes)
+	{
+	  select -r $sh;
+	  //if(size(`mtor control showpicked`)==0 && !$overwriteexisting)
+	  //{
+	  attachSlimShaders($sh,$overwriteexisting);
+	  //}else warning "did not create new shader. A shader is already attached";
+	}
+ }
+
+ if($attachshaders && $attachonlyone)
+ {
+	//attach first
+	string $appID = "";
+	select -r $shapes[0];
+	$appID = attachSlimShaders($shapes[0],$overwriteexisting);
+        printf("app id is:  "+ $appID);
+        for($sh in $shapes)
+	{
+		select -r $sh;
+		mtor control attach surface $appID;		
+ 	}
+      
+  }
+
+ select -cl;
+ //clear all varr
+ $newcolor = "";
+ $newspec = "";
+ $newopac = "";
+ $newdisp = "";
+ $newtrans = "";
+ $newdirt = "";
+ 
+ $autoColor = 0;
+ $autoSpec = 0;
+ $autoOpac  = 0;
+ $autoDisp = 0;
+ $autoTrans  = 0;
+ $autoDirt  = 0;
+
+  select -r $shapes;
+
+}
+
+//given a attribute and a shapename, create a valid automap path
+global proc string getMapFile(string $attrib, string $shape)
+{	
+		string $shapeShort = `match "[^|]*$" $shape`;
+		string $newtexname="";
+
+		if ($attrib == "rmanColor")
+		{
+			$newtexname = "color/tx/" + $shapeShort + "_C.tx";
+		}
+		if ($attrib=="rmanSpec")
+		{
+			$newtexname = "spec/tx/" + $shapeShort + "_S.tx";	
+		}
+		if ($attrib=="rmanOpac")
+		{
+			$newtexname = "opac/tx/" + $shapeShort + "_O.tx";	
+		}
+		if ($attrib=="rmanDisp")
+		{
+			$newtexname = "disp/tx/" + $shapeShort + "_D.tx";	
+		}
+		if ($attrib=="rmanTrans")
+		{
+			$newtexname = "trans/tx/" + $shapeShort + "_Trans.tx";	
+		}
+		if ($attrib=="rmanDirt")
+		{
+			$newtexname = "dirt/tx/" + $shapeShort + "_Dirt.tx";	
+		}
+
+	return $newtexname ;
+}
+
+
+//update tex attr V2
+global proc updateTexAttr(string $newtexfile,string $attrib,string $shapes[])
+{
+  string $oldtexfile="";
+  string $oldtexrel = "";
+  int $i = 0;
+  int $sz = size($shapes);
+  int $firsttime = 1;  
+  printf("using new2\n");
+  if($newtexfile == "" || $attrib == "" || size($shapes)==0 ){ return; };
+
+  for($sh in $shapes)
+  {   
+		//add automap if it doesnt exist
+		if(!`attributeExists $attrib $sh`)
+		{
+	  	addAutomapAttrib();	
+		}
+		if(`attributeExists $attrib $sh`)
+		{	  
+	   	string $oldtexfile = `getAttr ($sh+"."+$attrib)`;
+	  	 	if($oldtexfile == $newtexfile) continue;
+			 $oldtexfile = getRootDir()+"/"+getWorkDir()+"/"+getMapFile($attrib,$sh); 
+			 string $txdir = `match "^.*/" $oldtexfile`;
+
+			 if ( ! `sysFile -makeDir ($txdir)`) 
+		    { 
+				
+				printf("Error: Couldn't create " + $txdir + "\n"); 
+				return;
+		  	 }
+
+				string $actualtexfile = `match "^.*/" $oldtexfile`; //dir to put base tex
+				string $txname = `match "[^/\\]*$" $newtexfile`;
+			
+ 			 if($useshapelinks)
+			 	setAttr -e -type "string" ($sh+"."+$attrib) (getSubDir()+"/"+getWorkDir()+"/"+getMapFile($attrib,$sh));	
+			 else
+			 { string $tmp = getMapFile($attrib,$sh);
+				string $mapdir = `match "^.*/" $tmp`;
+			 	setAttr -e -type "string" ($sh+"."+$attrib) (getSubDir()+"/"+getWorkDir()+"/"+$mapdir+$txname);	
+			
+			 }
+				$actualtexfile +=$txname;
+				//copy the new texture over to the texture dir (done only once per call to this func)
+				if($firsttime)
+				{	if(!$linktoorigtex)
+					{	
+						if ( !`sysFile -copy $actualtexfile $newtexfile`)
+	   				{  
+							warning ("failed to copy " + $newtexfile + " to " +  $actualtexfile);
+							continue;
+	     				}
+						else
+						{
+							$firsttime = 0;
+						}
+					}
+					else
+					{
+						string $syscmd = "ln -sf " + $newtexfile + " " + $actualtexfile;
+					//	string $syscmd = "ln -sf " + $actualtexfile + " " + $newtexfile;
+
+					//	print("system: " + $syscmd + "\n");
+						system $syscmd;
+					}
+				}
+				//link the actual texture to the texture name
+			if($useshapelinks)
+			{
+				string $syscmd = "ln -sf " + $actualtexfile + " " + $oldtexfile;
+				system $syscmd;
+			}
+			//	printf("system: " + $syscmd + "\n");
+	      
+		}
+
+  }
+    
+}
+
+
+//update tex attr V2
+global proc updateTexAttrV2(string $newtexfile,string $attrib,string $shapes[])
+{
+  string $oldtexfile="";
+  string $oldtexrel = "";
+  int $i = 0;
+  int $sz = size($shapes);
+  int $firsttime = 1;  
+  printf("using new\n");
+  if($newtexfile == "" || $attrib == "" || size($shapes)==0 ){ return; };
+
+  for($sh in $shapes)
+  {   
+		//add automap if it doesnt exist
+		if(!`attributeExists $attrib $sh`)
+		{
+	  	addAutomapAttrib();	
+		}
+		if(`attributeExists $attrib $sh`)
+		{	  
+	   	string $oldtexfile = `getAttr ($sh+"."+$attrib)`;
+	  	 	if($oldtexfile == $newtexfile) continue;
+      	if($oldtexfile == "") 
+			{
+			 $oldtexfile = getRootDir()+"/"+getWorkDir()+"/"+getMapFile($attrib,$sh); 
+			 string $txdir = `match "^.*/" $oldtexfile`;
+
+			 if ( ! `sysFile -makeDir ($txdir)`) 
+		    { 
+				
+				printf("Error: Couldn't create " + $txdir + "\n"); 
+				return;
+		  	 }
+			
+			 setAttr -e -type "string" ($sh+"."+$attrib) (getSubDir()+"/"+getWorkDir()+"/"+getMapFile($attrib,$sh));	
+
+			}else //make oldtexfile absoulte by tagging on root dir
+			{
+				$oldtexfile = getBaseDir() + "/"+$oldtexfile;
+			}
+
+
+
+				string $actualtexfile = `match "^.*/" $oldtexfile`; //dir to put base tex
+				string $txname = `match "[^/\\]*$" $newtexfile`;
+				$actualtexfile +=$txname;
+				//copy the new texture over to the texture dir (done only once per call to this func)
+				if($firsttime)	
+					if ( ! `sysFile -copy $actualtexfile $newtexfile`)
+	   			{  
+						warning ("failed to copy " + $newtexfile + " to " +  $actualtexfile);
+						continue;
+	     			}
+					else
+					{
+						$firsttime = 0;
+					}
+				
+				//link the actual texture to the texture name
+				string $syscmd = "ln -sf " + $actualtexfile + " " + $oldtexfile;
+			//	printf("system: " + $syscmd + "\n");
+				system $syscmd;
+	      
+		}
+
+  }
+    
+}
+
+
+
+//update the texture on the given attribute on all selected shapes
+global proc updateTexAttr_OLD(string $newtex,string $attrib,string $shapes[])
+{
+  string $oldtex="";
+  string $oldtexrel = "";
+  int $i = 0;
+  int $sz = size($shapes);
+  
+  for($sh in $shapes)
+  {     
+	//check if this attrib exists
+	if(!`attributeExists $attrib $sh`)
+	{
+	  addAutomapAttrib();	
+	}
+	
+	if(`attributeExists $attrib $sh`)
+	{  
+	   string $oldtex = `getAttr ($sh+"."+$attrib)`;
+	   if($oldtex == $newtex) continue;
+	   
+	   //old texture path is empty so figure out path
+	   if($oldtex == "")
+	   {	string $temp = getMapFile($attrib,$sh);
+		   $oldtex = getRootDir() + "/" +  getWorkDir() + "/" + $temp;
+	   	$oldtexrel=getSubDir() + "/" + getWorkDir() + "/" + $temp;
+		   string $txdir = `match "^.*/" $oldtex`;
+		   if ( ! `sysFile -makeDir ($txdir)`) 
+		   { 
+				printf("Error: Couldn't create " + $txdir + "\n"); 
+				return;
+		   }
+		   else //set the path to the new texture	
+	      { 
+		      setAttr -e -type "string" ($sh+"."+$attrib) $oldtexrel;	
+		   }
+	   }
+	   else
+	   {
+	   	$oldtex = getBaseDir() + "/" + `getAttr ($sh+"."+$attrib)`;
+	   }
+    
+	   if($dohardcopy)
+	   {	if ( ! `sysFile -copy $oldtex $newtex`)
+	     	{
+				warning ("failed to copy " + $oldtex + " to " +  $newtex);
+				continue;
+	     	}
+	   }
+	   else  //we're going to use a symbolic link to the file (saves disk space n shit)
+	   {
+				printf("soft linking texture\n");
+				string $defaultdir = `match "^.*/" $oldtex`;
+				//get the name of the texture
+				string $txname = `match "[^/\\]*$" $newtex`;
+				$defaultdir +=$txname;
+				//copy the new file to the default dir
+				if ( ! `sysFile -copy $defaultdir $newtex`)
+	     		{
+					warning ("failed to copy " + $newtex + " to " +  $defaultdir);
+					continue;
+	     		}
+				string $syscmd = "ln -sf " + $defaultdir + " " + $oldtex;
+				printf("system: " + $syscmd + "\n");
+				system $syscmd;
+	    }  
+	}
+	else
+	{
+		warning "WTF! something went horribly wrong";
+	}
+
+  }
+    
+}
+
+//browse for texmap
+global proc setmaps_texfile_browse(string $edit, string $mapType)
+{
+	string $dir = getRootDir()+"/"+getWorkDir();
+	//string $dir = $baseDir;
+	// as a convenience to user, set the directory in the file browser
+	// to the subdirectory for the type of map (if it exists)
+	string $types[] = {"color", "spec", "opac", "disp", "occl", "trans"};	
+
+	string $dm = $dir + "/*.tx" ; 
+	//printf ("init dir is " + $dm + "\n");
+	
+	string $texfile = `fileDialog -dm $dm` ;
+	if ( $texfile == "" ) return;	
+	textField -edit -text $texfile $edit; 
+
+}
+
+global proc amap_browse()
+{
+   string $basedir = getRootDir()+"/"+getWorkDir();
+
+	string $dm = $basedir + "/*.amap" ; 
+
+	string $texfile = `fileDialog -dm $dm` ;
+
+	if ( $texfile == "" ) return;	
+
+	textField -edit -text $texfile $amap_button_group; 
+
+}
+
+global proc setmaps_autocheck_change(string $auto_check, string $edit)
+{
+	int $enabled = 0;
+	if (!`checkBox -q -value $auto_check`) $enabled = 1;
+	
+	textField -e -enable $enabled $edit;	
+}
+
+
+global proc viewTex(string $texfile)
+{
+
+  if(`filetest -f $texfile`)
+  {
+  string $syscmd = "sho " + $texfile +" &";
+  printf($syscmd +"\n");
+  system $syscmd;
+  }
+  else {error "failed to show image";}
+}
+
+global proc texInfoUI()
+{
+
+  string $shs[] = `ls -sl -long -dag -shapes`;
+  if(size($shs) > 1 || size($shs)==0) error "must select exactly one object";
+  string $shname=`match "[^|]*$" $shs[0]`;
+  string $sh  = $shs[0];
+  $txColor="";
+  $txSpec="";
+  $txOpac="";
+  $txDisp="";
+  $txTrans="";
+  $txDirt="";
+  $txsurf="";
+  $txdisp="";
+
+
+  if(`attributeExists "rmanColor" $sh`){$txColor = `getAttr ($sh+"."+"rmanColor")`;}
+  if(`attributeExists "rmanSpec" $sh`){$txSpec = `getAttr ($sh+"."+"rmanSpec")`;}
+  if(`attributeExists "rmanOpac" $sh`){$txOpac = `getAttr ($sh+"."+"rmanOpac")`;}
+  if(`attributeExists "rmanDisp" $sh`){$txDisp = `getAttr ($sh+"."+"rmanDisp")`;}
+  if(`attributeExists "rmanTrans" $sh`){$txTrans = `getAttr ($sh+"."+"rmanTrans")`;}
+  if(`attributeExists "rmanDirt" $sh`){$txDirt = `getAttr ($sh+"."+"rmanDirt")`;}
+  
+  if(`attributeExists "surface" $sh`)
+  	$txsurf = `getAttr ($sh+"."+"surface")`;
+ 
+  if(`attributeExists "displacement" $sh`)
+  	$txdisp = `getAttr ($sh+"."+"displacement")`;
+ 
+  string $basedir = getBaseDir() + "/";
+  if(`window -exists texinfoUI`) 
+	deleteUI -window texinfoUI;
+   window -title "Automap Tex Info" texinfoUI;
+   
+   frameLayout -collapsable true -label ("Texinfo for shape: "+$shname) ;
+   columnLayout -adjustableColumn true;
+   global string $shotemp="";
+   if($txColor!="")
+   {
+   $shotemp = $basedir+$txColor;
+   textFieldButtonGrp -label "Color" -ed 0 -text $shotemp -buttonLabel "View" -bc ("viewTex(getBaseDir()+\"/\"+$txColor)");
+   }
+   
+   if($txSpec!="")
+   {
+   $shotemp = $basedir+$txSpec;
+   textFieldButtonGrp -label "Spec" -ed 0 -text $shotemp -buttonLabel "View" -bc ("viewTex(getBaseDir()+\"/\"+$txSpec)");
+   }
+
+   if($txOpac!="")
+   {
+   $shotemp = $basedir+$txOpac;
+   textFieldButtonGrp -label "Opac" -ed 0 -text $shotemp -buttonLabel "View" -bc ("viewTex(getBaseDir()+\"/\"+$txOpac)");
+   }
+
+   if($txDisp!="")
+   {
+   $shotemp = $basedir+$txDisp;
+   textFieldButtonGrp -label "Disp" -ed 0 -text $shotemp -buttonLabel "View" -bc ("viewTex(getBaseDir()+\"/\"+$txDisp)");
+   }
+   if($txTrans!="")
+   {
+   $shotemp = $basedir+$txTrans;
+   textFieldButtonGrp -label "Trans" -ed 0 -text $shotemp -buttonLabel "View" -bc ("viewTex(getBaseDir()+\"/\"+$txTrans)");
+   }
+   if($txDirt!="")
+   {
+   $shotemp = $basedir+$txDirt;
+   textFieldButtonGrp -label "Dirt" -ed 0 -text $shotemp -buttonLabel "View" -bc ("viewTex(getBaseDir()+\"/\"+$txDirt)");
+   }
+
+   if($txsurf!="")
+   {
+   textFieldButtonGrp -label "SurfShader" -ed 0 -text $txsurf -buttonLabel "Detach";
+   }
+   if($txdisp!="")
+   {
+   textFieldButtonGrp -label "DispShader" -ed 0 -text $txdisp -buttonLabel "Detach";
+   }
+
+   $shotemp ="";
+
+   button -label "Close" -command "deleteUI -window texinfoUI";
+   setParent ..;
+
+   showWindow;
+
+}
+
+//returns the apearence key attached to the object if one exists
+/*
+global proc string getApearenceKey(string $longname)
+{
+  string $app;
+  string $apphs[];
+  string $apph = `slimcmd slim GetAppearances -all`;
+  if (size($apph) > 0)
+  {
+	
+	tokenize ($apph, " ", $apphs);
+  }
+  else { printf("no apps found \n"); return "";}
+  for($app in $apphs)
+  { 	select -cl;
+	printf("app: " + $app + "\n");
+	mtor control pickobjects $app;
+	string $sel[] = `ls -sl -dag -long -shapes`;
+	for($item in $sel)
+	{
+  		if($item == $longname) return $app;
+	}	
+
+  }	
+  printf("no apps found \n"); return "";
+  //return "";
+}
+
+*/
+
+
+
+global proc string attachSlimShaders(string $name,int $overwriteexisting)
+{
+	
+
+	string $longname = $name;
+	string $name = `match "[^|]*$" $name`;
+	string $plt = `slimcmd slim FindPalette`;
+
+
+	// create pallette if one doesn't exist
+	if (size($plt) <= 0)
+	{
+		$plt = `slimcmd slim CreatePalette -new -edit`;
+	}
+	
+	string $appID;
+	string $AutomapTest = $name + "_Automap";
+	string $apph="";
+	//if this shape is already attached then just exit
+	//if(hasapearence($apph,$longname)){ return; }
+
+	// if found shader(s), just get the first one from list in case there 
+	// is more than one shader with same name
+	if (size($apph) > 0 && !$overwriteexisting)
+	{	$apph = `slimcmd slim GetAppearances -name ($AutomapTest)`;
+		string $apphs[] ;
+		tokenize ($apph, " ", $apphs);
+		$apph = $apphs[0];
+		$appID = `slimcmd $apph GetID`;
+	}// no shader, so load one from disk
+	else
+	{
+		printf("creating ubertex instance: ");
+		$apph = `slimcmd $plt CreateInstance -file $ubertexpath`;
+ 		$appID = `slimcmd $apph GetID`;
+		printf($apph + "\n");
+//		$apph = `slimcmd $plt CreateInstance  -template ("pixar,CsAutoMap#0")`;
+		//printf("setting label " + $AutomapTest + "\n");
+		slimcmd $apph SetLabel $AutomapTest;
+		
+	}
+	printf("attaching shader to " + $appID + "\n");
+	// attaches shader to selected geometry
+	mtor control attach surface $appID;
+	return $appID;
+	
+	
+}
+
+//get the name of the shader attached to the given shape with the requested types
+global proc string getShaderNameOfType(string $shape,string $requestedtype)
+{
+  
+  if(!`objExists $shape`) return 0;
+  if($shape=="") return 0;
+
+  select -r $shape;
+  
+  string $appKeyArray[] = `mtor control showpicked`;
+
+  select -cl;
+
+  if(size($appKeyArray) == 0) return "";
+
+
+  string $appKey="";
+  string $type = "";  
+  string $shdname="";
+  string $apph="";
+ 
+  for($appKey in $appKeyArray)
+  {     
+	$apph = `slimcmd slim GetAppearances -id $appKey`;
+  	if(size($apph) > 0) //if more than one appearence get the first occurnance
+  	{	 
+	string $apphs[] ;
+	tokenize ($apph, " ", $apphs);
+	$apph = $apphs[0];
+  	} 
+  	$type =  `slimcmd $apph GetType`;
+        printf("compairing type " + $type + "with requested " + $requestedtype + "\n");
+	if($type==$requestedtype)
+	{
+	  $shdname = `slimcmd $apph GetLabel`;
+	  printf("getting shader: " + $shdname + "\n");
+	  break;
+	} 
+  }
+  return $shdname;  
+}
+
+global proc updateAllSlimAttachments(string $prefix)
+{
+  string $shapes[] = `ls -sl -dag -long -shapes -type "mesh" -type "nurbsSurface"`;
+
+  if(size($shapes) ==0){error "nothing selected"; return;}
+  for($sh in $shapes)
+  {
+   string $nt = `nodeType $sh`;
+   if ($nt == "camera") continue; 
+   if ($nt == "nurbsCurve") continue;
+
+ 		updateSlimAttachment($sh);
+	
+  }
+  string $filename = getRootDir() + "/" + (getWorkDir()+".amap");
+
+
+ print("PREFIX IS: " + $prefix + "\n");
+
+  saveSlimAttachments($shapes,$filename,$prefix);
+ 
+  confirmDialog -title "slim attachments updated" -message (".amap file created! " + $filename)
+
+ 		-button "Ok";
+
+
+ 
+
+}
+
+//
+//  remove slim attachments
+//
+global proc removeAllSlimAttachments()
+{
+  string $shapes[] = `ls -dag -long -shapes -type "mesh" -type "nurbsSurface"`;
+
+  for($sh in $shapes)
+  {
+		removeSlimAttachment($sh,"surface");
+		removeSlimAttachment($sh,"displacement");
+		removeSlimAttachment($sh,"light");
+  }
+}
+
+global proc removeSlimAttachment(string $shape,string $attrib)
+{
+  if(`attributeExists $attrib $shape`)
+		deleteAttr($shape+"."+$attrib);
+}
+
+
+//
+//update the shape node DispShader and SrfShader attribute if a shape has a shader attached 
+//
+
+global proc updateSlimAttachment(string $shape)
+{
+  if(!`objExists $shape` || ($shape == "")) return;
+  
+  string $ntype = `nodeType $shape`;
+  
+  if($ntype == "mesh" || $ntype == "nurbsSurface")
+  { 
+
+    string $attrib = "surface";
+    if(!`attributeExists $attrib $shape`)
+ 			addAttr -ln $attrib -dt "string" $shape;
+     
+    string $shadername = getShaderNameOfType($shape,$attrib); //get surf shader
+    
+	if($shadername=="")
+	 {	string $attrib = "shadingmodel";
+		$shadername = getShaderNameOfType($shape,$attrib);
+	 }
+	if($shadername=="")
+	{	string $attrib = "ensemble";
+		$shadername= getShaderNameOfType($shape,$attrib);
+
+	}
+	 setAttr -e -type "string" ($shape + "." + $attrib) $shadername;
+ 
+    string $attrib = "displacement";
+    if(!`attributeExists $attrib $shape`)
+	addAttr -ln $attrib -dt "string" $shape;
+
+    string $shadername = getShaderNameOfType($shape,$attrib); //get disp shader
+    setAttr -e -type "string" ($shape + "." + $attrib) $shadername; 	
+	}
+  else if(gmatch($ntype,"*Light"))
+  { 
+    string $attrib = "light";
+    if(!`attributeExists $attrib $shape`)
+ 	 	addAttr -ln $attrib -dt "string" $shape;
+    
+    string $shadername = getShaderNameOfType($shape,$attrib); //get surf shader
+	 setAttr -e -type "string" ($shape + "." + $attrib) $shadername;
+  }
+  else
+  {
+
+  }
+
+}
+
+//
+//load slim attachments from file
+//
+global proc string[] loadSlimAttachments(string $filename)
+{
+ if(!`filetest -f $filename`)  error "could not load file. Make sure file exists and path is valid\n";
+
+ string $filedata[];
+ 
+ if(!`filetest -f $filename`) error "file does not exist";
+
+ $fileId=`fopen $filename "r"`;
+ if(!$fileId) error "failed to open: " $filename "\n";
+  
+ int $i = 0;
+
+ $filedata[$i++]=chopendline(`fgetline $fileId`);
+
+  while ( size( $filedata[$i-1] ) > 0 ) 
+  { 
+    $filedata[$i++] = chopendline(`fgetline $fileId`);
+  }	
+
+	
+  fclose $fileId; 
+  return $filedata;
+}
+
+//
+// UI for autoattach
+//
+global proc autoAttachUI()
+{
+  if(`window -exists autoAttachUI`) 
+	deleteUI -window autoAttachUI;
+   window -title "Automap Tex Info" autoAttachUI;
+   
+   frameLayout -collapsable true -label ("Auto Attach Shaders") ;
+   	rowColumnLayout -cw 1 380 -nc 2;
+   		$amap_button_group=`textFieldGrp -tx "" -label "path to .amap file"`;   
+			button -label "Attach" -command "attachShadersCB";
+			
+	$amap_cb_pre = `checkBox -l "wildcard prefix" -v 1 -align left`;
+	text -l "";
+
+	$amap_cb_suf = `checkBox -l "wildcard suffix" -v 1 -align left`;
+	text -l "";
+
+	$amap_cb_updatesel = `checkBox -l "update only selected" -v 0 -align left`;
+	text -l "";
+
+
+setParent ..;
+			
+   showWindow;
+
+}
+
+global proc saveAttachUI()
+{
+  if(`window -exists saveAttachUI`) 
+	deleteUI -window saveAttachUI;
+   window -title "SaveAttach" saveAttachUI;
+   
+   frameLayout -collapsable true -label ("save shader attachments") ;
+   	rowColumnLayout -cw 1 380 -nc 2;
+   		$saveshaders_button_group=`textFieldGrp -tx "" -label "remove prefix:"`;   
+			button -label "Save" -command "saveShadersCB";
+
+	setParent ..;
+			
+   showWindow;
+
+}
+
+global proc saveShadersCB()
+{
+  string $prefix = `textFieldGrp -q -tx $saveshaders_button_group`;
+  updateAllSlimAttachments($prefix);
+deleteUI -window saveAttachUI;
+}
+
+//
+//query input from user and do the autoattach
+//
+global proc attachShadersCB()
+{
+  string $tx = `textFieldGrp -q -tx $amap_button_group`;
+  if($tx =="") error "no .amap file specified";
+  string $format = `match "\\..*" $tx`;
+  if($format !=".amap") error ("format of type " + $format + "is invalid");
+  if(!`filetest -f $tx`) error ("file " + $tx + " does not exist");
+
+  int $dopre = `checkBox -q -v $amap_cb_pre`;
+  int $dosuf = `checkBox -q -v $amap_cb_suf`;
+  int $doonlysel =`checkBox -q -v $amap_cb_updatesel`;
+   
+  string $affectedobjs[] = createSlimAttribsFromFile($tx,$dopre,$dosuf,$doonlysel);
+
+  autoAttachSlimPalette($affectedobjs);
+  
+}
+
+
+//see if the shape to check and the original shape have the same name if their prefixes and numeric suffixes are removed
+global proc string removeprefixandsuffix(string $shapetocheck,string $delim)
+{
+  
+  //get the shape name only
+  //string $shapname = `match "[^|]*$" $shapetocheck`;
+  //strip prefix from dag
+  string $shapename = stripPrefixFromDag($shapetocheck,$delim);
+  //strip numeric suffix
+  $shapename = stripNumericSuffixFromDag($shapename);
+  //$shapename =`match ".*[^0-9]" $shapename`;
+
+  return $shapename;
+}
+
+
+global proc string[] fetchShaderDataFromFile(string $shapetofetch,string $filebuf[],int $usenumeric)
+{
+ string $buf[];
+ for($line in $filebuf)
+ {
+		tokenize $line "," $buf;
+		string $shape = $buf[0];
+	/*
+   if($usenumeric)
+   {
+	
+		//add numeric suffixes from the file back on to the shape we are checking
+		string $buf2[];
+		tokenize $shapetofetch "|" $buf2;
+		int $size = size($buf2);
+		
+		string $buf3[];
+		tokenize $shape "|" $buf3;
+		int $size2 = size($buf3);
+		for($b in $buf3)
+		{
+			$temp = 
+
+		}
+		
+
+
+   }
+*/
+		print("matching " + $shapetofetch + " with " + $shape+ "\n");
+		
+		if ($shapetofetch == $shape){
+			 
+			 return $buf;
+		}
+ }
+ return {""};
+}
+
+
+global proc string getParentDAG(string $shDAG)
+{
+	string $buf[];
+   tokenize $shDAG "|" $buf;
+   int $sz = size($buf);
+   if($sz <= 2) return $shDAG; //there is no parent so just return the shapenode;
+   
+   return ("|"+$buf[$sz-3]+"|"+$buf[$sz-2]+"|"+$buf[$sz-1]);
+}
+/*
+global proc string[] createSlimAttribsFromFileB(string $filename)
+{
+  string $filedata[] = loadSlimAttachments($filename);
+  string $shapes[] = `ls -dag -long -shapes`;  
+  string $shdata[]={""};
+  for($sh in $shapes)
+  {	
+		//strip path up 3 levels
+		string $shparentDAG = getParentDAG($sh);
+		//strip prefixes and numeric suffixes
+		string $shtocheck = removeprefixandsuffix($shparentDAG,"_");
+		$shdata = fetchShaderDataFromFile($shtocheck,$filedata,$STRIPNUMERIC);		
+		if(size($shdata) > 0) print("found data: shape: " + $shdata[0] + "\n");
+
+  }
+
+  return $shdata;;
+}
+*/
+global proc int isselected(string $shape)
+{
+  string $sels[] = `ls -sl -long -dag -shapes`;
+  for($s in $sels)
+  {
+		if($shape == $s) return 1;
+  }
+ return 0;
+
+}
+
+
+global proc string[] createSlimAttribsFromFile(string $filename,int $wildprefix,int $wildsuffix,int $onlyselected)
+{
+
+  string $filedata[] = loadSlimAttachments($filename);
+  if(size($filedata) == 0) error "file had no data or an error occured";
+
+  string $buf[];
+  string $updatedshapes[];
+  int $j=0;
+  for($line in $filedata)
+  {
+		printf("processing line: " + $line + "\n");
+		if($line == "") continue;
+  		tokenize $line "," $buf;
+		string $shapeinfile = $buf[0];
+		//string $shapeinfile = addPrefixToDag($shapeinfile,$prefix); 
+      //get only the shape name and strip out the rest of the dag path
+		string $shapesn = `match "[^|]*$" $shapeinfile`;
+		
+      if($wildprefix)
+			$shapesn =  "*"+$shapesn;
+      if($wildsuffix)
+			$shapesn = $shapesn+"*";
+		string $matchingshapes[] = `ls -dag -long -shapes $shapesn`;
+      	
+		for($match in $matchingshapes)
+		{
+			if($onlyselected && !isselected($match)) continue;
+
+			int $i;
+			for($i = 1; $i < size($buf); $i++)
+			{
+				string $attrib = `substitute "|[^|]*$" $buf[$i] ""`;
+				string $value = `match "[^|]*$" $buf[$i]`;
+				printf("adding attrib: " + $attrib + " to shape " + $match + "with val " + $value + "\n");
+		
+				if(!`attributeExists $attrib $match`)
+					addAttr -ln $attrib -dt "string" $match;
+			
+				setAttr -e -type "string" ($match + "." + $attrib) $value;	
+				
+			}	
+
+			$updatedshapes[$j++]=$match;
+  		}
+
+	}
+
+  return $updatedshapes;
+}
+
+
+/*
+global proc string[] createSlimAttribsFromFile(string $filename,string $prefix)
+{
+//  select -cl;
+  string $filedata[] = loadSlimAttachments($filename);
+  if(size($filedata) == 0) error "file had no data or an error occured";
+
+  string $buf[];
+  string $updatedshapes[];
+  int $j=0;
+  for($line in $filedata)
+  {
+		printf("processing line: " + $line + "\n");
+		if($line == "") continue;
+  		tokenize $line "," $buf;
+		string $shape = $buf[0];
+		string $shape = addPrefixToDag($shape,$prefix); 
+      //get only the shape name and strip out the rest of the dag path
+		string $shapesn = `match "[^|]*$" $shape`;
+      string $temp[] = `ls -dag -long -shapes $shapesn`;
+      $shape = $temp[0];
+	
+		if(!`objExists $shape`){warning ("couldnt find shape: " + $shape + " while processing line " + $line + " skipping\n"); continue;}
+	
+		//select -r $shape;
+		int $i;
+		for($i = 1; $i < size($buf); $i++)
+		{
+			string $attrib = `substitute "|[^|]*$" $buf[$i] ""`;
+			string $value = `match "[^|]*$" $buf[$i]`;
+			printf("adding attrib: " + $attrib + " to shape " + $shape + "with val " + $value + "\n");
+		
+			if(!`attributeExists $attrib $shape`)
+				addAttr -ln $attrib -dt "string" $shape;
+			
+			setAttr -e -type "string" ($shape + "." + $attrib) $value;	
+			//addAttr -ln $attrib -dt "string" $shape;
+		}	
+//		select -add $shape;
+		$updatedshapes[$j++]=$shape;
+  }
+
+  return $updatedshapes;
+}
+*/
+
+global proc setAutoPrefsUI()
+{
+  if(`window -exists setAutoPrefsUI`) 
+	deleteUI -window setAutoPrefsUI;
+   window -title "Automap Tex Info" setAutoPrefsUI;
+   
+   frameLayout -collapsable true -label ("Create slim pallete") ;
+   columnLayout -adjustableColumn true;
+   
+   global string $setSubDir_tf;
+   string $scn=getWorkDir();
+   $setSubDir_tf=`textFieldGrp -label "path to sub dir" -text $scn`;
+
+	$setmaps_useshapelink_check = `checkBox -al left -l "use shape-texture linking" -value $useshapelinks /*-changeCommand "setmaps_autocheck_change($setmaps_color_auto_check,$setmaps_color_edit)"*/`;
+
+
+   button -label "Save" -command "saveSubDir($setSubDir_tf)";
+   setParent ..;
+
+   showWindow;
+
+}
+
+global proc saveSubDir(string $texttf)
+{
+ // if($texttf=="") 
+//	$savedscene = getWorkDir();
+ // else 
+  	$savedscene = `textFieldGrp -q -tx $texttf`;
+  
+ // if($savedscene=="")
+//	$savedscene = getWorkDir();
+   $useshapelinks=`checkBox -q -v  $setmaps_useshapelink_check`;
+
+   if(`objExists "automapPrefsSN"`) delete automapPrefsSN;
+   string $thescript = "$savedscene = ";
+   $thescript += "\"";
+   $thescript += $savedscene;
+   $thescript += "\"\;\n";
+
+   //add the script node
+   scriptNode -st 1 -bs $thescript -n "automapPrefsSN";
+   
+   //execute the script node so as to have the latest vars
+   scriptNode -executeBefore "automapPrefsSN";
+   if(`window -exists setAutoPrefsUI`) 
+	deleteUI -window setAutoPrefsUI;
+ }
+
+global proc string[] getNameKeyPairsFromPalette()
+{
+
+  string $pltList = `slimcmd slim GetPalettes`;
+  string $pltArray[];
+  string $namekey[];
+  string $data[];
+  if ( $pltList == "" )
+  {
+      error "No palette loaded !!";
+  }
+  else
+  {
+	//get all the apearences from all the palettes
+	string $apphs[];
+	string $apph= `slimcmd slim GetAppearances -all`;
+	if (size($apph) > 0)
+  	{
+  	  tokenize ($apph, " ", $apphs);
+	}
+	int $i = 0;
+	for($appKey in $apphs)
+  	{	
+		string $appID = `slimcmd $appKey GetID`;
+		string $name = `slimcmd $appKey GetLabel`;
+		$data[$i++] = $name+"|"+$appID;	 
+	}
+   }
+  
+  return $data;
+
+}
+
+
+global proc string getApearenceKey(string $appname)
+{
+  string $allapps[] = getNameKeyPairsFromPalette();
+  for($app in $allapps)
+  {
+	string $temp[];
+	tokenize $app "|" $temp;
+	if($temp[0]==$appname) return $temp[1];
+
+  }
+
+  return "";
+}
+
+
+global proc autoAttachSlimPalette(string $shapes[])
+{
+
+  if(size($shapes) == 0) { warning "autoAttachSlimPallete got no shapes"; return; }
+
+//  string $shapes[] = `ls -dag -long -shapes`;
+  string $allapearences[] =  getNameKeyPairsFromPalette();
+  
+
+  //string $filepath = `textFieldGrp -q -tx $textf`;
+  
+  if(size($allapearences) == 0) error "found no apearences";
+  
+  for($sh in $shapes)
+  { 
+	//get the shader names from the object
+	string $surface,$disp,$light;
+	if(`attributeExists "surface" $sh`)
+		$surface = `getAttr ($sh+".surface")`;
+	if(`attributeExists "displacement" $sh`)
+		$disp = `getAttr ($sh+".displacement")`;
+	
+	if(`attributeExists "light" $sh`)
+	{  printf("got a light\n");
+		$light = `getAttr ($sh+".light")`;
+	}
+	//check against each of the apearences
+	for($apearence in $allapearences)
+	{
+		
+		string $buf[];
+		tokenize $apearence "|" $buf;
+	
+	
+		if($buf[0]==$surface && ($surface!="") && (`attributeExists "surface" $sh`) ) //we have a match
+		{
+			select -r $sh;
+			printf("attaching shape: " + $sh + " to surf " + $buf[1] + "\n");
+			printf("mtor control attach surface " + $buf[1] + "\n");
+			mtor control attach surface $buf[1];
+			select -cl;
+			continue;
+		}
+		if($buf[0]==$disp && ($disp!="") && (`attributeExists "displacement" $sh`)) //we have a match
+		{
+			select -r $sh;
+			printf("attaching shape: " + $sh + " to disp " + $buf[1] + "\n");
+			printf("mtor control attach displacement " + $buf[1] + "\n");
+			mtor control attach displacement $buf[1];
+			select -cl;
+			continue;
+		}
+		if($buf[0]==$light && ($light!="") && (`attributeExists "light" $sh`)) //we have a match
+		{	print("attaching " + $sh + " to light\n");
+			select -r $sh;
+			printf("attaching shape: " + $sh + " to light " + $buf[1] + "\n");
+			printf("mtor control attach light " + $buf[1] + "\n");	
+			mtor control attach light $buf[1];
+			select -cl;
+			continue;
+		}
+
+
+	}
+	
+  }
+}
+
+global proc convertLinked()
+{
+  string $shapes[] = `ls -sl -dag -long -shapes -type "mesh" -type "nurbsSurface"`;
+  if(size($shapes) == 0) error "select something";
+  for($sh in $shapes)
+  {
+		for($att in $texAttribList)
+		{
+			if(`attributeExists $att $sh`)
+			{
+				string $oldfile = `getAttr ($sh+"."+$att)`;
+				if($oldfile=="") continue;
+				string $oldfile = getBaseDir()+"/"+$oldfile;
+				string $temp = "ls -l " + $oldfile;
+				
+				printf("system " + $temp + "\n");
+				string $temp = `system $temp`;
+				if($temp=="") printf("EMPTY\n");
+			   else printf("returned : " + $temp + "\n");
+				string $tokbuf[];
+  				tokenize $temp "->" $tokbuf;
+  				string $file = `match "[^/\\]*$" $tokbuf[1]`;
+				printf("file is: " + $file + "\n");
+				string $mapfile = getMapFile($att,$sh);
+				string $mapdir = `match "^.*/" $mapfile`;
+				printf("map dir is1: " + $mapdir + "\n");
+				$mapdir = getSubDir()+"/"+getWorkDir()+"/"+$mapdir+$file;
+				printf("map dir is2: " + $mapdir + "\n");
+				$mapdir = chopendline($mapdir);
+				setAttr -e -type "string" ($sh + "." + $att) $mapdir;		
+			}
+
+		}
+  }
+}
+
+
+//--------
+global proc string stripNumericSuffixFromDag(string $dag)
+{
+ 
+  string $buf[];
+  tokenize $dag "|" $buf;
+  string $fixedDAG="";
+  
+  for($b in $buf)
+  {
+	$fixedDAG = $fixedDAG+"|"+	`match ".*[^0-9]" $b`;
+  }
+    
+  return $fixedDAG;
+}
+
+//strips prefix from dag pagh
+
+global proc string stripPrefixFromDag(string $dag,string $seperator)
+{
+ string $buf[];
+  tokenize $dag "|" $buf;
+  string $fixedname;
+  for($b in $buf)
+  {
+		string $expr = "^[^" + $seperator + "]*\\" + $seperator;
+		//string $tmp = `substitute "^[^_]*\\_" $b ""`;
+		string $tmp = `substitute $expr $b ""`;
+		$fixedname = $fixedname + "|" + $tmp;
+  }
+  return $fixedname;
+
+}
+
+/*
+global proc string stripPrefixFromDag(string $dag,string $seperator)
+{
+  if($dag=="") return "";
+  //break it up
+  string $buf[];
+  tokenize $dag "|" $buf;
+  string $fixedname;
+  for($b in $buf)
+  {
+		string $expr = $seperator + "[^\" " + $seperator + "]*$";
+		string $prefix = `substitute $expr $b ""`;
+		string $temp = `substitute ($prefix+$seperator)  $b ""`;
+		$fixedname = $fixedname + "|" + $temp;
+  }
+  return $fixedname;
+  //printf("name without prefix: " + $fixedname  + "\n");
+}
+*/
+global proc string getprefix(string $str)
+{
+   string $prefix = `match "^[^\_]*" $str`;
+   if($prefix == $str) return "";
+   else return $prefix+"_";
+}
+
+//get prefix from a dag path
+global proc string getPrefixFromDag(string $dag,string  $seperator)
+{
+  if($dag=="") return "";
+  
+
+  string $buf[];
+  tokenize $dag "|" $buf;
+  string $b = $buf[0];
+
+  string $expr =  $seperator + "[^\" " +  $seperator + "]*$";
+  string $prefix = `substitute $expr $b ""`;
+  if($prefix == $b) return "";
+  
+  return ($prefix + $seperator);
+}
+
+//add prefix to dag path
+global proc string addPrefixToDag(string $dag,string $prefix)
+{
+  if($dag=="") return "";
+  
+  //break it up
+  string $buf[];
+  tokenize $dag "|" $buf;
+  string $fixedname;
+  for($b in $buf)
+  {
+		$fixedname = $fixedname + "|" + $prefix + $b;
+  }
+  
+//  printf("name with prefix: " + $fixedname  + "\n");
+  return $fixedname;
+}
+
+global proc int hasSlimAttribs(string $sh)
+{
+  if(`attributeExists "surface" $sh`) return 1;
+  if(`attributeExists "displacement" $sh`) return 1;
+  if(`attributeExists "light" $sh`) return 1;
+
+  return 0;
+}
+
+//save slim attachments to file
+global proc saveSlimAttachments(string $shapes[], string $filename,string $prefix)
+{
+  if(size($shapes) == 0){warning "nothing saved. no shapes specified"; return; }
+
+  //string $shapes[] = `ls -dag -long -shapes`;
+
+  //string $filename = getRootDir() + "/" + (getWorkDir()+".amap");
+  printf("saving map file to: " + $filename + "\n");
+  $fileId=`fopen $filename "w"`;
+  string $data,$surf,$disp,$light;
+
+  for($sh in $shapes)
+  { 
+	 if(hasSlimAttribs($sh)==0) continue;
+
+	 $surf ="";
+    $disp="";
+    $light="";
+
+    if(`attributeExists "surface" $sh`)
+	 {  
+			$surf = `getAttr ($sh+".surface")`;
+		
+	 }
+    if(`attributeExists "displacement" $sh`)
+	 { 
+			$disp = `getAttr ($sh+".displacement")`;
+		
+	 }
+    if(`attributeExists "light" $sh`)
+	 { 
+			$light = `getAttr ($sh+".light")`;
+	 }
+
+	  //strip prefix from shape
+	if($prefix!="")
+	{
+		string $tbuf[];
+		string $tmp="";
+		tokenize $sh "|" $tbuf;
+		for($tb in $tbuf)
+		{
+	 		$tmp = $tmp + "|" + `substitute $prefix $tb ""`;
+		}
+   	$sh = $tmp;
+	}
+	
+   //print("Shape without prefix: " + $sh + "\n");
+
+	 $data = $sh;
+    $data+=",surface|"+$surf;
+    $data+=",displacement|"+$disp;
+    $data+=",light|"+$light;
+
+    fprint $fileId ($data+"\n");
+    
+  }
+  printf("saving slim attachments to file: " + $filename + "\n");
+  fclose $fileId;
+
+}
+/*
+//save slim attachments to file
+global proc saveSlimAttachments()
+{
+  string $shapes[] = `ls -dag -long -shapes`;
+
+  string $filename = getRootDir() + "/" + (getWorkDir()+".amap");
+  printf("saving map file to: " + $filename + "\n");
+  $fileId=`fopen $filename "w"`;
+  string $data;
+  for($sh in $shapes)
+  {
+    if(!`attributeExists "surface" $sh`) continue;
+    if(!`attributeExists "displacement" $sh`) continue;
+
+    $data = `match "[^|]*$" $sh`; 
+    $data+=",surface|"+`getAttr ($sh+".surface")`;
+    $data+=",displacement|"+`getAttr ($sh+".displacement")`;
+    fprint $fileId ($data+"\n");
+    
+  }
+
+  fclose $fileId;
+
+}
+
+*/
+global proc makepathsabsolute()
+{
+  string $shapes[] = `ls -dag -long -shapes -type "mesh" -type "nurbsSurface"`;
+  
+  if(size($shapes) == 0) error "select something";
+  for($sh in $shapes)
+  {
+		for($att in $texAttribList)
+		{
+			if(`attributeExists $att $sh`)
+			{
+			
+				string $oldfile = `getAttr ($sh+"."+$att)`;
+				if($oldfile=="") continue;
+				$oldfile = getBaseDir()+"/"+$oldfile;
+				setAttr -e -type "string" ($sh + "." + $att) $oldfile;		
+
+			}
+		}
+	}
+}
+
+}  //endscript

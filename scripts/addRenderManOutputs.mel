@@ -1,0 +1,23 @@
+global proc addRenderManOutputs()
+{
+	string $channels[] = {"N", "Ambient", "DiffuseColor", "DiffuseDirect", "DiffuseDirectShadow", "DiffuseIndirect", "DiffuseEnvironment", "SpecularColor", "SpecularDirect", "SpecularDirectShadow", "SpecularIndirect", "SpecularEnvironment", "Backscattering", "Incandescence", "Refraction", "Rim", "Translucence", "Subsurface", "OcclusionDirect", "OcclusionIndirect"};
+	string $output;
+	string $chan;
+	string $quant = rmanGetImageFormatQuantization("OpenEXR (exr)");
+	string $dither = rmanGetImageFormatDither("OpenEXR (exr)");
+	
+	for ($chan in $channels) {
+		$output = rmanAddOutput("rmanFinalGlobals", $chan);
+		rmanSetAttr($output, "rman__riopt__Display_type", "openexr");
+		if($quant != "") {
+			rmanAddAttr rmanFinalOutput1 rman__riopt__Display_quantize $quant;
+			rmanAddAttr rmanFinalOutput1 rman__riopt__Display_dither $dither;
+		} else {
+			deleteAttr rmanFinalOutput1.rman__riopt__Display_quantize;
+			deleteAttr rmanFinalOutput1.rman__riopt__Display_dither;
+		}
+		rmanUpdateAE;
+	}
+}
+
+

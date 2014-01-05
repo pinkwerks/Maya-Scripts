@@ -1,0 +1,38 @@
+print("// Pinkwerks : Start ~/maya/scripts/userSetup.mel\n");
+pinkwerksSetup; // add menu bar
+
+print("// Pinkwerks : Enabling unlimited incremental saves.\n");
+optionVar -iv isIncrementalSaveEnabled 1;
+optionVar -iv incrimentalSaveLimitBackups 0;
+
+print("// Pinkwerks : Turning on auto conversion of textures for mentalray\n");
+optionVar -iv "miCacheOptimFileTextures" 2;
+
+//print("// Pinkwerks : Attaching bonusTools.\n");
+////////////////////////////////
+//  bonusTools userSetup.mel
+////////////////////////////////
+//
+// if you have an existing userSetup.mel file you will need to append 
+// this code to have all the bonusTools available
+// cut and paste the contents of this file into your existing userSetup.mel
+// and restart maya to get the full effect
+
+// scriptJob to rebuild menu as working mode changes
+/*
+scriptJob
+    -permanent
+    -event "MenuModeChanged" "bonusToolsMenu";
+*/
+
+/*
+// build the menu the first time
+bonusToolsMenu;
+
+// publish (ctrl+RMB in channelBox)
+// aka Quick Connect Attributes
+// uncomment the next line if you wish to use this functionality
+//publish;
+
+
+*/

@@ -1,0 +1,74 @@
+/*
+    importChan
+    v20040330
+    pink@aslumfx
+
+    The file must be laid out in the following format:
+    '#' are comments :
+
+---snip---
+# frame tx ty tz rx ry rz focal aspect apetureHorizontal near far
+34 -0.52 -0.001 -0.04 -2.93 0.02 -0.50 69.6 1.31387 24.576 1 1e+06
+---snip---
+
+*/
+
+global proc importChan()
+{
+    string $shotPath = `workspace -q -rd`;
+    string $chanFile = `fileDialog -dm ($shotPath + "/*.chan")`;
+
+    int $fileId;
+    if ( $chanFile != "" ) {
+	$fileId = `fopen $chanFile "r"`;
+    } else {
+    	error("importChan : No data file selected!");
+    }
+
+    string $obj = `group -empty -n importChan`;
+
+    //while $nextline is not emtpy(end of file) do the following 
+    string $nextLine = `fgetline $fileId`;
+    while ( size( $nextLine ) > 0 )
+    {
+	// Comments???
+	if ( `gmatch $nextLine "#*"` == 1) {
+	    continue;
+	}
+
+	//tokenize(split) line into separate elements of an array  
+    	string $channels[];
+        tokenize ($nextLine, $channels);
+
+	int $numChannels = `size $channels`;
+
+
+	int $j = 0;
+	float $val = 0;
+		
+	while ( $j < $numChannels )
+	{
+	    $val = float($channels[$j]);
+
+	    if ( $j == 0 ) {
+	    	currentTime $val;
+	    }
+
+	    string $channelName = ("channel_" + $j);
+	    $longChannelName = ($obj + ".channel_" + $j);
+
+	    if ( ! `attributeExists $channelName $obj` ) {
+		addAttr -k on -ln $channelName -at double ("|" + $obj);
+	    }
+	    setAttr $longChannelName $val;
+	    setKeyframe $longChannelName;
+	    setKeyframe ($obj + "." + $channelName);
+	    $j++;
+	}
+
+        //get the next line in the ascii file.       
+        $nextLine = `fgetline $fileId`;
+    }
+
+    fclose $fileId;
+}

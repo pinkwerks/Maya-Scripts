@@ -1,0 +1,36 @@
+$objs = `ls -sl`;
+$sobjs = size($objs);
+
+// query the state of the first object selected
+
+if (`toggle -q -ep $objs[0]`) $ep = 1;
+if (`toggle -q -cv $objs[0]`) $cv = 1;
+if (`toggle -q -hl $objs[0]`) $hl = 1;
+
+// check to see if the selected objs are all the same,
+// if so turn everything off otherwise toggle the offenders
+
+
+for ($i = 1; $i < $sobjs; $i++) {
+    if (`toggle -q -cv $objs[$i]`)
+}
+
+for ($i; $i < $sobjs; $i++) {
+    if ($ep) {
+	toggle -state 1 -ep $objs[$i];
+    else
+	toggle -state 0 -ep $objs[$i];
+    }
+
+    if ($cv) {
+	toggle -state 1 -cv $objs[$i];
+    else
+	toggle -state 0 -cv $objs[$i];
+    }
+
+    if ($ep) {
+	toggle -state 1 -hl $objs[$i];
+    else
+	toggle -state 0 -hl $objs[$i];
+    }
+};

@@ -1,0 +1,33 @@
+global proc string
+tile(int $i, int $nx, int $ny, int $rx, int $ry)
+{
+  int $r; 
+  int $x; 
+  int $y; 
+  int $y; 
+  int $xoff;
+  int $yoff;
+  int $ix;
+  int $iy;
+  // 0,0 is lower left pixel
+  // 5x5 is smallest resolution (even though maya lies and says 4x4).
+  if ( $nx < 1 || $ny < 1 )
+      error("Must have at least 1x1 tiles!");
+  int $total = $nx * $ny;
+  if ( $i < 1 )
+      error("Index must be at least 1!");
+  if ( $i > $total )
+      error("Index greater than possible number of tiles! I > X*Y");
+  int $tileSizeX = trunc($rx / $nx); 
+  int $tileSizeY = trunc($ry / $ny);
+
+  $x = $i % $nx;
+  $y = trunc($x/$nx);
+
+  int $iy = $ny - ($ny / $i);
+  //print("iy = "+ $iy + "\n");
+  $y = ($i % $ny) * $tileSizeY;
+  $t = $y + $tileSizeY - 1; 
+
+  return(" -reg "+$x+" "+$r+" "+$y+" "+$t+" ");
+}

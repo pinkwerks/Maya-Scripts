@@ -1,0 +1,584 @@
+// deed
+//
+// version : 20051216
+// author : pink
+//
+
+//========================================================
+// getProjects
+//========================================================
+proc string
+getProjects()
+{
+  string $wget = "wget -o /dev/null -O - ";
+  string $url = ("http://neuron/mavis/maya/get_projects.php");
+
+  string $projList[] = url("read", $url);
+  if (size($projList) != 1)
+    {
+      print("getProjects " + $url + "\n");
+      error("deed : Malformed project string from database!");
+    }
+  return $projList[0];
+}
+
+//========================================================
+// getAssetAttrs
+//========================================================
+proc string
+getAssetAttrs(string $attrID)
+{
+  string $wget = "wget -o /dev/null -O - ";
+  string $url = ("http://neuron/mavis/maya/get_asset_attributes.php"+"?asset_id="+$attrID);
+
+  string $assetList[] = url("read", $url);
+  if (size($assetList) != 1)
+    {
+      print("getAssetAttrs " + $url + "\n");
+      error("deed : Malformed asset string from database!");
+    }
+  return $assetList[0];
+}
+
+
+//========================================================
+// getAssets
+//========================================================
+proc string
+getAssets(string $proj)
+{
+  string $wget = "wget -o /dev/null -O - ";
+  string $url = ("http://neuron/mavis/maya/get_assets.php"+"?project="+$proj);
+
+  string $assetList[] = url("read", $url);
+  if (size($assetList) != 1)
+    {
+      print("getAssets " + $url + "\n");
+      error("deed : Malformed asset string from database!");
+    }
+  return $assetList[0];
+}
+
+//========================================================
+// getAssetFilename
+//========================================================
+proc string
+getAssetFilename(string $ID, string $attribute)
+{
+  string $url = ("http://neuron/mavis/maya/get_asset_filename.php"
+		 + "?asset_id="  + $ID
+		 + "&attribute=" + $attribute);
+  string $contents[] = url("read", $url);
+  //  print $contents;
+  //  print `size $contents`;
+  if ( `size $contents` != 1 )
+    error("deed -getAssetFilename : Unexpeted value from " + $url);
+  return $contents[0];
+}
+
+//========================================================
+// setAssetFilename
+//========================================================
+proc
+setAssetFilename(string $proj, int $assetID, string $attr, string $filename,
+		string $user)
+{
+  string $url = ("http://neuron/mavis/maya/set_asset.php?" + 
+		 "project =" + $proj +
+		 "&asset_id=" + $assetID +
+		 "&attribute=" + $attr +
+		 "&filename=" + $filename +
+		 "&user=Luke");
+//		 "&user=" + $user);
+  url("write", $url);
+}
+
+//========================================================
+// splitColonString
+//========================================================
+proc string[]
+splitColonString(string $in)
+{
+  string $array[];
+  $num = `tokenize $in ";" $array`;
+  return $array;
+}
+
+//========================================================
+// makeIdList
+//========================================================
+proc string[]
+makeIdList(string $array[])
+{
+  string $ids[];
+  int $i = 0;
+  for ($a in $array) {
+    string $split[];
+    int $num = `tokenize $a "," $split`;
+    if ( $num != 2 )
+      error("deed -makeIdList : bad value" + $num);
+    $ids[$i] = $split[0];
+    $i++;
+  }
+  return $ids;
+}
+
+//========================================================
+// makeNameList
+//========================================================
+proc string[]
+makeNameList(string $array[])
+{
+  string $ids[];
+  int $i = 0;
+  for ($a in $array) {
+    string $split[];
+    int $num = `tokenize $a "," $split`;
+    if ( $num != 2 )
+      error("deed -makeNameList : bad value, " + $num);
+    $ids[$i] = $split[1];
+    $i++;
+  }
+  return $ids;
+}
+
+//========================================================
+// buildOptionMenuGrpItems
+//========================================================
+proc
+buildOptionMenuGrpItems(string $ctl, string $items[])
+{
+  for ($item in $items)
+    {
+      //print("// Building menu item : " + $ctl + "|OptionMenu " + $item + "\n");
+      menuItem -parent ($ctl + "|OptionMenu") -label $item $item;
+    } 
+  // HACK:0 is needed to redraw optionMenus correctly
+  if ( `size $items` <= 1 )
+    menuItem -parent ($ctl + "|OptionMenu") -label "";
+  if ( `size $items` < 2 )
+    menuItem -parent ($ctl + "|OptionMenu") -label "";
+}
+
+//========================================================
+// deleteOptionMenuGrpItems
+//========================================================
+proc
+deleteOptionMenuGrpItems(string $ctl)
+{
+  // Delete exisiting menu items.
+  int $numItems = `optionMenuGrp -q -ni $ctl`;
+  if ( $numItems != 0 )
+    {
+      string $itemsToDelete[] = `optionMenuGrp -q -ill $ctl`;
+      for ( $item in $itemsToDelete )
+	{
+	  //print("// Deleting menu item : " + $item + "\n");
+	  deleteUI -menuItem $item;
+	}
+    }
+}
+
+//========================================================
+// getIDforAsset
+//========================================================
+proc int getIDforAsset(string $proj, string $assetName)
+{
+  string $assetsString = `getAssets $proj`;
+  string $assets[] = `splitColonString $assetsString`;
+  string $assetNames[] = `makeNameList $assets`;
+  string $assetIDs[] = `makeIdList $assets`;
+  int $i = 0;
+  for ( $asset in $assetNames )
+    {
+      if ( $asset == $assetName )
+	break;
+      $i++;
+    }
+  return $assetIDs[$i];
+}
+
+//========================================================
+// deedUpdate
+//========================================================
+global proc
+deedUpdate(string $mode,
+		   string $projCtl,
+		   string $assetsCtl,
+		   string $attrCtl, string $attrOptsCtl,
+		   string $filenameCtl)
+{
+  // Projects
+  //
+  if ( $mode == "init" ) {
+    string $projsString = `getProjects`;
+    string $projs[] = `splitColonString $projsString`;
+    string $projNames[] = `makeNameList $projs`;
+    buildOptionMenuGrpItems $projCtl $projNames;
+    string $curproj = basenameEx(`workspace -q -sn`);
+    // check that the luser's project is set to /hdx/projects/FOO
+    if (
+       	`file -q -ex ("/hdx/projects/" + $curproj)` == 0
+	|| $curproj == ""
+	|| $curproj == "default" )
+      {
+	error("deed : Set a valid /hdx/projects/PROJECT first!  Try : [MENU] File > Project > Set...");
+      }
+    catchQuiet(`optionMenuGrp -e -v $curproj $projCtl`);
+  }
+  string $proj = `optionMenuGrp -q -v $projCtl`;
+
+  // Assets
+  //
+  int $hasAssets = 0;
+  string $asset;
+  string $assetsRaw[];
+  string $assetNames[];
+  string $assetIDs[];
+  string $assetsString = `getAssets $proj`;
+  if ( $assetsString == "" )
+      warning($proj + " has no Assets.");
+  else
+    {
+      $hasAssets = 1;
+      $assetsRaw = `splitColonString $assetsString`;
+      $assetNames = `makeNameList $assetsRaw`;
+      $assetIDs = `makeIdList $assetsRaw`;
+    }
+  if ( $mode == "init" || $mode == "projchange" )
+    {
+      if ( $mode == "init" )
+	{
+	  buildOptionMenuGrpItems($assetsCtl, $assetNames);
+	  string $test1 = `namedPathPiece shots`;
+	  string $test2 = `namedPathPiece shot`;
+	  if ( $test1 == "assets" )
+	    catch(`optionMenuGrp -e -v $test2 $assetsCtl`);
+	}
+      else if ( $mode == "projchange" )
+	{
+	  deleteOptionMenuGrpItems $assetsCtl;
+	  buildOptionMenuGrpItems($assetsCtl, $assetNames);
+	  // HACK:0 is needed to redraw optionMenus correctly
+	  optionMenu -e -sl 2 ($assetsCtl + "|OptionMenu");
+	  optionMenu -e -sl 1 ($assetsCtl + "|OptionMenu");
+	}
+    }
+  $asset = `optionMenuGrp -q -v $assetsCtl`;
+  int $assetIndex = `optionMenuGrp -q -sl $assetsCtl`;
+
+  // Attributes
+  //
+  string $attrs[];
+  if ( $mode == "init" || $mode == "projchange"
+       || $mode == "assetchange" || $mode == "attrOptsChange" )
+    {
+      string $attrsString = `getAssetAttrs $assetIDs[$assetIndex - 1]`;
+      $attrs = `splitColonString $attrsString`;
+      deleteOptionMenuGrpItems $attrCtl;
+      /*
+      if ( `checkBox -q -v $attrOptsCtl` == 0 )
+	// Show only a few attributes
+	{
+	  string $tmps;
+	  string $tmpsa[];
+	  int $i = 0;
+	  for ( $tmps in $attrs )
+	    //if ( $tmps == "model" || $tmps == "models"
+	//	|| $tmps == "rig" || $tmps == "rigs")
+	    if ( $tmps == "rig" || $tmps == "rigs")
+	      {
+		$tmpsa[$i] = $tmps;
+		$i ++;
+	      }
+	  $attrs = $tmpsa;
+	}
+	*/
+      buildOptionMenuGrpItems($attrCtl, $attrs);
+      // HACK:0 is needed to redraw optionMenus correctly
+      optionMenu -e -sl 2 ($attrCtl + "|OptionMenu");
+      optionMenu -e -sl 1 ($attrCtl + "|OptionMenu");
+    }
+  string $attr = `optionMenuGrp -q -v $attrCtl`;
+
+  // Filename
+  //
+  if ( $mode == "init" || $mode == "projchange"
+       || $mode == "assetchange" || $mode == "attrOptsChange"
+       || $mode == "attrchange" )
+    {
+      if ( $hasAssets )
+	{
+	  string $filename = `getAssetFilename $assetIDs[$assetIndex - 1] $attr`;
+	  if ( $filename == "" )
+	    textFieldGrp -e -tx "No value in database." $filenameCtl;
+	  else
+	    textFieldGrp -e -tx $filename $filenameCtl;
+	}
+      else
+	textFieldGrp -e -tx "No Assets in project." $filenameCtl;
+    }
+}
+
+//========================================================
+// deedAction
+//========================================================
+global proc
+deedAction(string $mode, string $projCtl, string $assetsCtl,
+		   string $attrCtl, string $filenameCtl, string $ro, string $io, string $file2cpCtl)
+{
+  string $proj  = `optionMenuGrp -q -v $projCtl`;
+  string $asset = `optionMenuGrp -q -v $assetsCtl`;
+  string $attr  = `optionMenuGrp -q -v $attrCtl`;
+  string $filenameNew = `file -q -sn`;
+  string $filename = `textFieldGrp -q -tx $filenameCtl`;
+  string $deedFile = `textFieldGrp -q -tx $file2cpCtl`;
+  string $short = `file -q -sn -shn`;
+  string $assetLower = `tolower $asset`;
+  string $attrUpper = `toupper $attr`;
+  string $assetUpper = `toupper $asset`;
+  string $attrLower = `tolower $attr`;
+  string $namespace = ($assetUpper+"_"+$attrUpper);
+  string $file = ("/hdx/projects/"+$proj+"/assets/"+$assetLower+"/"+$attr+"/pub/"+$assetLower+"_"+$attrLower+"_MASTER");
+  if ( $mode == "export" )
+    // EXPORT
+    {
+      // error checking.
+      if ( $filenameNew == "" )
+	error("deedAction : Won't publish bullshit files!");
+
+      string $msg = "Please ensure everything below is correct!\n\n\n";
+      string $dialog = `confirmDialog
+	-message ("Publish this DEED as "+toupper($attr)+" for "+toupper($asset)+"?")
+	//-message ($msg
+		  //+ "PROJECT = " + $proj + "/assets\n\n"
+		  //+ "ASSET = " + $assetLower + "/" + $attrLower + "\n\n"
+		  //+ "LINK = " + $short + "  <--  pub/" + $assetLower + "_" + $attrLower + "_MASTER\n")
+	-button "Publish"
+	-button "Cancel"
+	-defaultButton "Cancel"
+	-cancelButton "Cancel"
+	-dismissString "Cancel"`;
+      if ( $dialog == "Publish" )
+	  {
+		  int $id = `getIDforAsset $proj $asset`;
+		  string $user = `getenv USER`;
+		  setAssetFilename $proj $id $attrLower $deedFile $user;
+		  textFieldGrp -e -tx $short $filenameCtl;
+	}
+    }
+  else if ( $mode == "reference" )
+    // REFERENCE
+    {
+      int $displayLayers = `checkBoxGrp -q -v1 $ro`;
+      int $shaders = `checkBoxGrp -q -v2 $ro`;
+      string $opts = "";
+      if ($displayLayers && $shaders)
+	file -r -gl -shd "displayLayers" -shd "shadingNetworks" -ns $namespace -op "v=0;p=17" $file;
+      else if ($displayLayers)
+	file -r -gl -shd "displayLayers" -ns $namespace -op "v=0;p=17" $file;
+      else if ($shaders)
+	file -r -gl -shd "shadingNetworks" -ns $namespace -op "v=0;p=17" $file;
+      else
+	file -r -gl -ns $namespace -op "v=0;p=17" $file;
+    }
+  else if ( $mode == "import" )
+    // IMPORT
+    {
+      int $namespaces = `checkBoxGrp -q -v1 $io`;
+      int $shaders = `checkBoxGrp -q -v2 $io`;
+      if ($namespaces && $shaders)
+	file -i -rdn -ns $namespace -op "v=0;p=17" -pr $file;
+      else if ($namespaces)
+	file -i -ns $namespace -op "v=0;p=17" -pr $file;
+      else if ($shaders)
+	file -i -rdn -op "v=0;p=17" -pr $file;
+      else
+	file -i -op "v=0;p=17" -pr $file;
+    }
+   else if ( $mode == "open" )
+    // OPEN
+    {
+	file -f -op "v=0" -o $file;
+    }
+  else
+    {
+      error("deedAction : Error in calling function.");
+    }
+}
+
+///========================================================
+///
+/// deed
+///
+///========================================================
+global proc
+deed()
+{
+  string $procName = "deed";
+  if ( `window -exists $procName` )
+    deleteUI -window $procName;
+  string $window = `window -rtf on -t "Dirty Deeds" $procName`;
+
+  string $form = `formLayout`;
+  string $hdx = `picture -image "hdx_logo.xpm"`;
+
+  // Create the selectors
+  string $projCtl = `optionMenuGrp -label "Project" projCtl`;
+  string $assetsCtl = `optionMenuGrp -label "Asset" assetsCtl`;
+  string $attrCtl = `optionMenuGrp -label "Attribute" attrCtl`;
+  string $filenameCtl = `textFieldGrp -label "Last Published File" -adj 2 -editable 0 fileNameCtl`;
+  string $file2cpCtl = `textFieldGrp -label "File to copy." -adj 2 -editable 1`;
+  string $attrOptsCtl = `checkBox -label "List All Attributes" -vis 0 -v 0 -al "left"`;
+  string $rs = `checkBoxGrp -label "Reference Sharing" -ncb 2 -v1 0 -v2 0 -la2 "Display Layers" "Shaders"`;
+  string $is = `checkBoxGrp -label "Import Options" -ncb 2 -v1 0 -v2 0 -la2 "Namespaces" "Share Shaders"`;
+
+  // Update the command callbacks
+  string $cc;
+
+  $cc = ("deedUpdate projchange "
+      +$projCtl+" "+$assetsCtl+" "+$attrCtl+" "+$attrOptsCtl+" "+$filenameCtl);
+  optionMenuGrp -e -cc $cc $projCtl;
+
+  $cc = ("deedUpdate assetchange "
+      +$projCtl+" "+$assetsCtl+" "+$attrCtl+" "+$attrOptsCtl+" "+$filenameCtl);
+  optionMenuGrp -e -cc $cc $assetsCtl;
+
+  $cc = ("deedUpdate attrchange "
+      +$projCtl+" "+$assetsCtl+" "+$attrCtl+" "+$attrOptsCtl+" "+$filenameCtl);
+  optionMenuGrp -e -cc $cc $attrCtl;
+
+  $cc = ("deedUpdate attrOptsChange "
+      +$projCtl+" "+$assetsCtl+" "+$attrCtl+" "+$attrOptsCtl+" "+$filenameCtl);
+  checkBox -e -cc $cc $attrOptsCtl;
+
+  // Initialize
+  deedUpdate "init" $projCtl $assetsCtl $attrCtl $attrOptsCtl $filenameCtl;
+
+  // UI Controls
+  string $sep = `separator`;
+
+  // Buttons
+  $bf = `formLayout -numberOfDivisions 5`;
+  $eb = `button -label "Publish"`;
+  $openBtn = `button -label "Open"`;
+  $ra = `button -label "Reference"`;
+  $ia = `button -label "Import"`;
+  //$cl = `button -label "Close" -c ("deleteUI -window " + $window)`;
+  $cl = `button -label "Close" -c ("window -e -vis 0 " + $window)`;
+
+  // Assign button commands
+  // Publish
+  $cc = ("deedAction export " +
+     $projCtl+" "+$assetsCtl+" "+$attrCtl+" "+ $filenameCtl+" "+$rs+" "+$is+" "+$file2cpCtl);
+  button -e -c $cc $eb;
+  // Reference
+  $cc = ("deedAction reference " +
+     $projCtl+" "+$assetsCtl+" "+$attrCtl+" "+ $filenameCtl+" "+$rs+" "+$is);
+  button -e -c $cc $ra;
+  // Import
+  $cc = ("deedAction import " +
+     $projCtl+" "+$assetsCtl+" "+$attrCtl+" "+ $filenameCtl+" "+$rs+" "+$is);
+  button -e -c $cc $ia;
+  // Open
+  $cc = ("deedAction open " +
+     $projCtl+" "+$assetsCtl+" "+$attrCtl+" "+ $filenameCtl+" "+$rs+" "+$is);
+  button -e -c $cc $openBtn;
+
+  formLayout -edit
+    -an $hdx "top"
+    -an $hdx "left"
+    -af $hdx "right" 0
+    -an $hdx "bottom"
+
+    -af $projCtl "top"    5
+    -af $projCtl "left"   5
+    -af $projCtl "right"  5
+    -an $projCtl "bottom"
+    
+    -ac $assetsCtl "top"    5 $projCtl
+    -af $assetsCtl "left"   5
+    -af $assetsCtl "right"  5
+    -an $assetsCtl "bottom"
+
+    -ac $attrCtl "top"    5 $assetsCtl
+    -af $attrCtl "left"   5
+    //-af $attrCtl "right"  5
+    -an $attrCtl "right"
+    -an $attrCtl "bottom" 
+
+    -ac $attrOptsCtl "top"	5	$assetsCtl
+    -ac $attrOptsCtl "left"	5	$attrCtl
+    -af $attrOptsCtl "right"	5
+    -an $attrOptsCtl "bottom"
+
+    /*
+    -ac $attrOptsCtl "top"	5	$attrCtl
+    -af $attrOptsCtl "left"   5
+    -af $attrOptsCtl "right"  5
+    -an $attrOptsCtl "bottom"
+    */
+
+    -ac $filenameCtl "top"    5 $attrCtl
+    -af $filenameCtl "left"   5
+    -af $filenameCtl "right"  5
+    -an $filenameCtl "bottom" 
+
+    -ac $file2cpCtl "top"    5 $filenameCtl
+    -af $file2cpCtl "left"   5
+    -af $file2cpCtl "right"  5
+    -an $file2cpCtl "bottom" 
+
+    -ac $sep "top"    5 $file2cpCtl
+    -af $sep "left"   0
+    -af $sep "right"  0
+    -an $sep "bottom"
+
+    -ac $rs "top"	5	$sep
+    -af $rs "left"   5
+    -af $rs "right"  5
+    -an $rs "bottom"
+
+    -ac $is "top"	5	$rs
+    -af $is "left"   5
+    -af $is "right"  5
+    -an $is "bottom"
+
+    -ac $bf "top"    5 $is
+    -af $bf "left"   5
+    -af $bf "right"  5
+    -af $bf "bottom" 5
+
+    $form;
+  
+  formLayout -edit
+    -af  $eb "top"    5
+    -af  $eb "left"   5
+    -af  $eb "bottom" 5
+    -ap  $eb "right"  5 1
+    
+    -af  $openBtn "top"    5
+    -ap  $openBtn "left"   5 1
+    -ap  $openBtn "right"  5 2
+    -af  $openBtn "bottom" 5
+
+    -af  $ra "top"    5
+    -ap  $ra "left"   5 2
+    -ap  $ra "right"  5 3
+    -af  $ra "bottom" 5
+    
+    -af  $ia "top"    5
+    -ap  $ia "left"   5 3
+    -ap  $ia "right"  5 4
+    -af  $ia "bottom" 5
+
+    -af  $cl "top"    5
+    -ap  $cl "left"   5 4
+    -af  $cl "right"  5  
+    -af  $cl "bottom" 5
+
+    $bf;
+  
+  showWindow $window;
+}
+

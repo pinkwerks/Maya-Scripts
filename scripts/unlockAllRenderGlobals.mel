@@ -1,0 +1,25 @@
+// stupid shit v20061217 pink
+global proc
+unlockAllRenderGlobals()
+{
+  string $nodes[] = {
+	"defaultRenderGlobals",
+  	"defaultHardwareRenderGlobals",
+	"defaultResolution",
+	"defaultRenderQuality",
+	"mentalrayGlobals" ,
+	"miDefaultOptions" 
+	};
+  for ( $node in $nodes )
+  {
+	  string $dick;
+	  if ( `objExists  $node`) 
+	  {
+		  string $cunts[] = `listAttr $node`;
+		  for ( $dick in $cunts )
+		  {
+			setAttr -lock off ($node+"."+$dick);
+		  }
+	  }
+  }
+}

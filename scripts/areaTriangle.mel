@@ -1,0 +1,16 @@
+proc areaTriangle(float $sideA, $sideB, $sideC)
+{
+	float $s = ($sideA + $sideB + $sideC) / 2;
+	return sqrt($s * ($s - $sideA) * ($s - $sideB) * ($s - $sideC));
+}
+	
+global proc elementArea(string $vtx)
+{
+	float $area = 0;
+	float $third = 1.0 / 3.0;
+	string $faces[] = `polyInfo -vertexToFace $vtx`;
+	for ( $face in $faces ) {
+	 	$area += `polyEvaluate -area $face`;
+	}
+	$area *= $third;
+}

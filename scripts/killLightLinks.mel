@@ -1,0 +1,11 @@
+global proc killLightLinks() {
+  string $GetRid[];
+  string $item;
+  catch($GetRid = `connectionInfo -dfs defaultLightSet.message`);
+  if( `size $GetRid` > 0 ) {
+      for($item in $GetRid) {
+	  disconnectAttr defaultLightSet.message $item;
+       }
+       print ("--deleted lightLinker connections--\n");
+  };
+}

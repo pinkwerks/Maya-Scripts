@@ -1,0 +1,171 @@
+// vim:ts=4:sw=4
+proc unknownNodes()
+{
+	string $cunts[] = `ls -type unknown`;
+	if ( `size $cunts` > 0 ) {
+		string $cunt;
+		for ( $cunt in $cunts ) {
+			warning("UNKNOWN node : "+ $cunt);
+		}
+//		error("UNKNOWN nodes, see script editor for details.");
+	}
+}
+
+proc resetCameraViews()
+{
+	warning("PINKWERKS : prepRender()::resetCameraViews - Fixing zoomerate bullshit.");
+	string $cams[] = `ls -type camera`;
+	for ( $cam in $cams ) {
+		setAttr ($cam+".horizontalFilmOffset") 0;
+		setAttr ($cam+".verticalFilmOffset") 0;
+		setAttr ($cam+".overscan") 1;
+	}
+}
+
+global proc prepRenderCommon()
+{
+	int $locked = `getAttr -l defaultRenderGlobals.imageFilePrefix`;
+	if ( $locked )
+		setAttr -l 0 defaultRenderGlobals.imageFilePrefix;
+	setAttr -type "string" defaultRenderGlobals.imageFilePrefix "<Scene>/<Scene>_<RenderLayer>";
+	setAttr defaultRenderGlobals.animation 1;
+	setAttr defaultRenderGlobals.extensionPadding 4;
+	setAttr defaultRenderGlobals.enableDefaultLight 0;
+
+	// these 2 have to be together
+	setAttr defaultRenderGlobals.imageFormat 51; // exr
+	setAttr -type "string" defaultRenderGlobals.imfPluginKey "exr";
+
+//	setAttr defaultRenderGlobals.imageFormat 5; // sgi
+
+	setAttr defaultRenderGlobals.outFormatControl 0;
+	setAttr defaultRenderGlobals.putFrameBeforeExt 1;
+	setAttr defaultRenderGlobals.periodInExt 1;
+
+	if ( `getApplicationVersionAsFloat` >= 2011 ) {
+		setAttr defaultRenderGlobals.multiCamNamingMode 1;
+		setAttr -type "string" defaultRenderGlobals.bufferName "<RenderPass>";
+	}
+
+}
+
+global proc useMipMaps()
+{
+	warning("PINKWERKS : prepRender() : Setting all file texture filtering to MIPMAP");
+	string $texs[] = `ls -typ file`;
+	for ($t in $texs) {
+		string $a = ($t+".filterType");
+		// make sure we're not locked otherwise bad things happen
+		if (`getAttr -l $a` == 0)
+			setAttr $a 1;
+	}
+}
+
+global proc prepRenderVray()
+{
+	if (`objExists vraySettings`) {
+		setAttr -type "string" "vraySettings.fileNamePrefix" "<Scene>/<Scene>_<Layer>.";
+		setAttr -type "string" "vraySettings.fileNameRenderElementSeparator" "_";
+		setAttr "vraySettings.fileNamePadding" 4;
+		setAttr -type "string" vraySettings.imageFormatStr "exr (multichannel)";
+		setAttr "vraySettings.imgOpt_exr_compression" 3;
+		setAttr "vraySettings.animation" 1;
+		setAttr "vraySettings.animBatchOnly" 1;
+//		setAttr "vraySettings.sRGBOn" 1;
+	}
+}
+
+global proc prepRenderMentalray()
+{
+	if (`objExists miDefaultFramebuffer`) {
+		warning("PINKWERKS : prepRender()::prepRenderMentalray - Setting half float.");
+		setAttr "miDefaultFramebuffer.datatype" 16;
+		warning("PINKWERKS : prepRender()::prepRenderMentalray - Setting framebuffer gamma to 1.0");
+		setAttr "miDefaultFramebuffer.gamma" 1.0;
+	}
+	if (`objExists mentalrayGlobals`) {
+		setAttr "mentalrayGlobals.bspDepth" 70;
+		setAttr "mentalrayGlobals.imageCompression" 4;
+		setAttr "mentalrayGlobals.exportMotionOffset" 0;
+		setAttr "mentalrayGlobals.exportVertexColors" 1;
+		setAttr "mentalrayGlobals.shadowEffectsWithPhotons" 1;
+//		setAttr "mentalrayGlobals.finalGatherFast" 1;
+	}
+	if (`objExists miDefaultOptions`) {
+		setAttr "miDefaultOptions.autoVolume" 1;
+		setAttr "miDefaultOptions.finalGatherMode" 3;
+	}
+}
+
+global proc linearWorkFlow(string $mode)
+{
+	warning("PINKWERKS : prepRender()::prepRenderGammaIssues - Setting all mia_exposure_simple nodes to Compression=0 Gamma=1.");
+	string $mia_exposure_simples[] = `ls -type mia_exposure_simple`;
+	for ($m in $mia_exposure_simples) {
+		if ($mode == "off") {
+			for ($m in $mia_exposure_simples) {
+				setAttr ($m+".compression") 0;
+				setAttr ($m+".gamma") 1;
+			}
+		} else if ($mode == "on") {
+				setAttr ($m+".compression") 0;
+				setAttr ($m+".gamma") 2.2;
+		} else if ($mode == "preview") {
+				setAttr ($m+".compression") 2;
+				setAttr ($m+".gamma") 2.2;
+		}
+	}
+}
+
+global proc prepArnold()
+{
+	setAttr "defaultArnoldRenderOptions.driverHalfPrecision" 1;
+	setAttr "defaultArnoldRenderOptions.log_console_verbosity" 5;
+	setAttr "defaultArnoldRenderOptions.log_file_verbosity" 5;
+	setAttr "defaultArnoldRenderOptions.aovMode" 2;
+	setAttr "defaultArnoldRenderOptions.textureAutomip" 0;
+	setAttr "defaultArnoldRenderOptions.textureMaxMemoryMB" 2048;
+	setAttr "defaultArnoldRenderOptions.bucketScanning" 6;
+}
+
+global proc prepHardwareRenderBuffer()
+{
+  print("PINKWERKS : prepRender() : prepHardwareRenderBuffer()\n");
+  string $f = `file -q -sn -shn`;
+  setAttr -type "string" defaultHardwareRenderGlobals.filename `basenameEx $f`;
+  setAttr defaultHardwareRenderGlobals.extension 4;
+  //  setAttr defaultHardwareRenderGlobals.startFrame 1;
+  //setAttr defaultHardwareRenderGlobals.endFrame 171;
+  setAttr defaultHardwareRenderGlobals.multiPassRendering 1;
+  setAttr defaultHardwareRenderGlobals.motionBlur 0.5;
+  setAttr defaultHardwareRenderGlobals.alphaSource 1;
+  setAttr defaultHardwareRenderGlobals.lineSmoothing 1;
+  setAttr defaultHardwareRenderGlobals.texturing 1;
+  //  setAttr defaultHardwareRenderGlobals.fullImageResolution 1;
+  setAttr defaultHardwareRenderGlobals.renderPasses 36;
+  setAttr defaultHardwareRenderGlobals.antiAliasPolygons 1;
+  setAttr defaultHardwareRenderGlobals.imageFormat 32; // PNG
+}
+
+global proc prepRender()
+{
+	string $renderer = `getAttr defaultRenderGlobals.currentRenderer`;
+	print("PINKWERKS : prepRender() : "+$renderer+"\n");
+	prepRenderCommon();
+	if ($renderer == "vray") {
+		prepRenderVray();
+	} else if ($renderer == "arnold") {
+	  prepArnold();
+	} else {
+		prepRenderMentalray();
+	}
+	setAttr "defaultRenderGlobals.imageFormat" 8; // JPEG
+	setAttr "defaultRenderGlobals.imageFormat" 32; // PNG
+	unknownNodes();
+	useMipMaps();
+	resetCameraViews;
+	prepHardwareRenderBuffer();
+	
+//	setAttr -type "string" defaultRenderGlobals.preMel "preRender";
+}
+

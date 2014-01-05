@@ -1,0 +1,17 @@
+// v20070516 --pink bobsledder
+//
+global proc
+constrainAndBake(string $objs[], float $fs, float $fe)
+{
+	int $sizeObjs = `size $objs`;
+	if ( $sizeObjs < 1 )
+		return;
+	string $obj;
+	for ( $obj in $objs ) {
+		if ( `nodeType $obj` != "transform" ) {
+			warning("constrainAndBake : Not a transform!  Skipping"+ $obj +"\n");
+			continue;
+		}
+	}
+}
+

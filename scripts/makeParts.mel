@@ -1,0 +1,29 @@
+// Creates a particle object for each selected surface, and parents
+// them appropriately.  For "man made of particles" technique.
+//
+global proc makeParts()
+{
+    $surfs = `ls -sl`;
+    string $surf;
+    for ($surf in $surfs)
+      {
+	string $children[] = `listRelatives $surf`;
+	string $emit;
+	if (size($children) > 1)
+	  {
+	    $emit = $children[1];
+	    if (nodeType($emit) != "pointEmitter") {
+		print("Skipping "+$surf+"\n");
+		continue;
+	    }
+	    string $base[];
+	    tokenize($surf, "|", $base);
+	    $newPart = $base[0]+"PART";
+	    $newShape = $newPart+"Shape";
+	    particle -n $newPart;
+	    $parent = `listRelatives -p $surf`;
+	    parent -r $newPart $parent;
+	    connectDynamic -em $emit $newPart;
+	}
+    }
+}

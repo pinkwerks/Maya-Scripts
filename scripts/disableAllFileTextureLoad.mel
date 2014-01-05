@@ -1,0 +1,9 @@
+global proc disableAllFileTextureLoad(int $mode)
+{
+  string $texs[] = `ls -type file`;
+  string $tex;
+  for ($tex in $texs)
+    {
+      setAttr -e ($tex + ".disableFileLoad") $mode; 
+    }
+}

@@ -1,0 +1,293 @@
+//
+// volumeSelect - filter listed objects based on thier vol size
+//
+// v20060811 pinkwerks
+//
+
+global int $DEBUG = 1;
+global int $DEBUG_MORE = 0;
+
+global proc string[]
+volCalc( float $sizeLimit, string $things[] )
+{
+    waitCursor -state on;
+
+    global int $DEBUG;
+    global int $DEBUG_MORE;
+    if ( $DEBUG ) { 
+	print "volCalc() : START\n";
+	print ("sizeLimit == " + $sizeLimit + "\n");
+    }
+
+    global int $numFselected;
+
+    global float $volMin;
+    global float $volMax;
+
+    float $sizeX[];
+    float $sizeY[];
+    float $sizeZ[];
+    global float $vol[];
+
+    float $sizeXmin = 0.0;
+    float $sizeYmin = 0.0;
+    float $sizeZmin = 0.0;
+
+    float $sizeXmax = 0.0;
+    float $sizeYmax = 0.0;
+    float $sizeZmax = 0.0;
+
+    string $fSelection[];
+
+    clear $fSelection;
+
+    if ( $sizeLimit == -1 ) {
+	if ( $DEBUG )
+	    print ("volCalc() : sizeLimit == -1 ; clearing arrays\n");
+
+	clear $sizeX;
+	clear $sizeY;
+	clear $sizeZ;
+	clear $vol;
+
+    	$volMin = 0;
+    	$volMax = 0;
+    }
+
+    int $i = 0;
+    int $j = 0;
+
+    if ( $DEBUG ) {
+	int $size = `size $things`;
+	print ("volCalc() : size($things) = " + $size + "\n");
+    }
+
+    if ( $sizeLimit == -1 ) {
+	if ( $DEBUG ) 
+	    print ("volCalc() : sizeLimit == -1 ; initloops\n");
+
+	for ( $thing in $things ) {
+	    $sizeX[$i] = `getAttr ($thing + ".boundingBoxSizeX")`;
+	    $sizeY[$i] = `getAttr ($thing + ".boundingBoxSizeY")`;
+	    $sizeZ[$i] = `getAttr ($thing + ".boundingBoxSizeZ")`;
+
+	    if ( $i == 0 ) $sizeXmin = $sizeX[$i];
+	    if ( $i == 0 ) $sizeYmin = $sizeY[$i];
+	    if ( $i == 0 ) $sizeZmin = $sizeZ[$i];
+
+	    if ( $sizeX[$i] < $sizeXmin ) $sizeXmin = $sizeX[$i];
+	    if ( $sizeX[$i] > $sizeXmax ) $sizeXmax = $sizeX[$i];
+
+	    if ( $sizeY[$i] < $sizeYmin ) $sizeYmin = $sizeY[$i];
+	    if ( $sizeY[$i] > $sizeYmax ) $sizeYmax = $sizeY[$i];
+
+	    if ( $sizeZ[$i] < $sizeZmin ) $sizeZmin = $sizeZ[$i];
+	    if ( $sizeZ[$i] > $sizeZmax ) $sizeZmax = $sizeZ[$i];
+
+	    /* XXX this sucks!  breaks things under size of 1*/
+	    if ( $sizeX[$i] == 0 ) $sizeX[$i] = 1;
+	    if ( $sizeY[$i] == 0 ) $sizeY[$i] = 1;
+	    if ( $sizeZ[$i] == 0 ) $sizeZ[$i] = 1;
+
+	    $vol[$i] = $sizeX[$i] * $sizeY[$i] * $sizeZ[$i];
+
+	    // first time through we establish a minumum value for volume...
+	    if ( $i == 0 ) $volMin = $vol[$i];
+
+	    // ... otherwise check for new limits;
+	    if ( $vol[$i] < $volMin ) $volMin = $vol[$i];
+	    if ( $vol[$i] > $volMax ) $volMax = $vol[$i];
+
+	    if ( $DEBUG ) {
+		if ( $vol[$i] <= 0 ) {
+		    print ("Volume < 0! : " + $vol[$i] + "\n");
+		}
+	    }
+
+	    $fSelection[$j] = $thing;
+
+	    $j ++;
+	    $i ++;
+	}
+    } else {
+	for ( $thing in $things ) {
+	    if ( $DEBUG_MORE ) print ($thing + "'s volume is " + $vol[$i] + "\n");
+
+	    if ( $vol[$i] <= $sizeLimit ) {
+	    	$fSelection[$j] = $thing;
+		$j ++;
+	    }
+	    $i ++;
+	}
+
+	$numFselected = $j;
+    }
+
+    waitCursor -state off;
+
+    if ( $DEBUG ) print "volCalc() : END\n";
+
+    return($fSelection);
+}
+
+//
+// after you drag the threshold slider, this is executed
+//
+
+global proc filter()
+{
+    global int $DEBUG;
+    global int $DEBUG_MORE;
+    global float $sizeLimit; 
+
+    if ( $sizeLimit != 0 ) undo;
+
+    if ( $DEBUG ) {
+	print ("filter() : undoing...\n");
+	print ("filter() : sizeLimit = " + $sizeLimit + "\n");
+	print "filter() : START\n";
+    }
+
+    waitCursor -state on;
+
+    global int $numFselected;
+
+    global float $volMin;
+    global float $volMax;
+
+    global string $cutOffCtl;
+    global string $numSelCtl;
+    global string $fSelCtl;
+
+    float $threshold = `floatSliderGrp -q -v threshold`;
+
+    string $sel[] = `ls -sl -l -fl`;
+
+    // Change the value of the Filtered Selection size field
+    int $numSelected = `size $sel`;
+    textFieldGrp -e -tx $numSelected $numSelCtl;
+
+    $sizeLimit = remap($threshold, 0.0, 1.0, $volMin, $volMax);
+
+    string $newSel[] = `volCalc $sizeLimit $sel`;
+
+    $numFselected = `size $newSel`;
+
+    if ( $DEBUG ) {
+	print ("filter() : numFselected == " + $numFselected + "\n");
+    }
+
+    textFieldGrp -e -tx $sizeLimit $cutOffCtl;
+    textFieldGrp -e -tx $numFselected $fSelCtl;
+
+    select $newSel;
+
+    if ( $DEBUG ) print "filter() : END\n";
+    waitCursor -state off;
+}
+
+//
+// after you PRESS the RECALCULATE BUTTON, this is executed
+//
+
+global proc
+recalculate()
+{
+    global int $DEBUG;
+    waitCursor -state on;
+/*    if ( $DEBUG ) print "recalcuate() : START\n";*/
+
+    // XXX
+    warning "volumeSelect : recalculate() : Broken Feature.  Relaunch after selecting a bunch of stuff.";
+
+/*    if ( $DEBUG ) print "recalcuate() : END\n";*/
+    waitCursor -state off;
+}
+
+
+//
+// after you PRESS the RECALCULATE BUTTON, this is executed
+//
+
+global proc
+autoRecalculate()
+{
+    global int $DEBUG;
+    waitCursor -state on;
+/*    if ( $DEBUG ) print "recalcuate() : START\n";*/
+
+    warning "volumeSelect : autoRecalculate() : Broken Feature.";
+
+/*    if ( $DEBUG ) print "recalcuate() : END\n";*/
+    waitCursor -state off;
+}
+
+//
+// build the GUI
+//
+
+global proc
+volumeSelect()
+{
+    waitCursor -state on;
+
+    string $procName = "volumeSelect";
+
+    global int $DEBUG;
+    global int $DEBUG_MORE;
+    if ( $DEBUG ) print "volumeSelect : START\n";
+
+    global int $numFselected;
+    global float $sizeLimit = 0.0; 
+    global float $volMin = 0.0;
+    global float $volMax = 0.0;
+    global string $cutOffCtl;
+    global string $numSelCtl;
+    global string $fSelCtl;
+    global string $volMinCtl;
+    global string $volMaxCtl;
+
+    string $ogSelection[] = `ls -sl -l -fl`;
+
+    int $numSelected = `size $ogSelection`;
+
+    $numFselected = $numSelected;
+
+    if ( `window -exists $procName` ) {
+        showWindow $procName;
+        return;
+    }
+
+    window -t "Select by Volume" $procName;
+
+    columnLayout;
+
+    floatSliderGrp -l "Threshold" -f 1 -pre 5 -min 0 -max 1 -v 1 -cc filter threshold;
+
+    $numSelCtl = `textFieldGrp -label "Initial Selection Size" -editable false -tx $numSelected`;
+
+    $fSelCtl = `textFieldGrp -label "Filtered Selection Size" -editable false -tx $numFselected`;
+
+    $volMinCtl = `textFieldGrp -label "Smallest Volume" -editable false -tx $volMin`;
+
+    $volMaxCtl = `textFieldGrp -label "Largest Volume" -editable false -tx $volMax`;
+
+    $cutOffCtl = `textFieldGrp -label "Cutoff Volume" -editable false -tx $volMax`;
+
+    button -label "Undo" -c "undo";
+    button -label "Close" -c ("deleteUI -window " + $procName);
+    button -label "Recalculate Selection" -c recalculate;
+    checkBoxGrp -ncb 1 -label "Options :" -l1 "Auto Recalc." -cc1 autoRecalculate;
+
+    showWindow $procName;
+
+    volCalc -1 $ogSelection;
+
+    if ( $DEBUG ) print "volumeSelect() : END\n";
+
+    textFieldGrp -e -tx $volMin $volMinCtl;
+    textFieldGrp -e -tx $volMax $volMaxCtl;
+    textFieldGrp -e -tx $volMax $cutOffCtl;
+
+    waitCursor -state off;
+}

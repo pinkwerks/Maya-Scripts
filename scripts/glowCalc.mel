@@ -1,0 +1,51 @@
+//
+// glowCalc.mel v.1 10/1/99 pinkwerks <pinkwerks@netscape.net> 
+// 
+// usage: glowCalc <intensity> <scaleFactor>
+//
+// notes:
+//	if <intensity> is '-666' the gui is brought up.
+//
+//	`glowCalc 8 2` would return 2 which is : intensity/(scaleFactor^2)
+
+
+proc float
+glowCalcEngine(float $I, float $S)
+{
+    return $I/($S*$S);
+}
+
+proc string
+createUI()
+{
+    $winName = "glowCalcWindow";
+    if (`window -ex $winName`) deleteUI $winName;
+
+    //
+    // create the top window, everything is parented to this bad boy.
+    //
+
+    window -title "Glow Calculator" -s 0 -in glowCalc $winName;
+
+    rowLayout -numberOfColumns 2
+	  -rat 1 "bottom" 0
+	  -rat 2 "bottom" 0
+	  -cal 1 "right"
+	  -cal 2 "right";
+	  text "Intensity";
+          floatField;
+
+    //
+    //
+
+    showWindow;
+
+    return 0;
+}
+
+global proc float
+glowCalc(string $intensity, float $scaleFactor)
+{
+    if ($intensity == "_GUI") $intensity = createUI();
+    return glowCalcEngine((float)$intensity, (float)$scaleFactor);
+}

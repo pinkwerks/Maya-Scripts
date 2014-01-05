@@ -1,0 +1,27 @@
+global proc
+setPositionToParent()
+{
+  string $sl[] = `ls -sl -l`;
+  if ( `size $sl` < 1 )
+    error("setPositionToParent : select more than one curve!");
+  string $crv;
+  string $parent[];
+  string $cons[];
+  float $wsp[];
+  for ( $crv in $sl )
+  {
+    if ( `nodeType $crv` != "transform" )
+      {
+	warning("setCurvePivotToCv : "+$crv+" is not of type 'transform', skipping.");
+	continue;
+      }
+    select $crv;
+    $parent = `pickWalk -d up`;
+    if ( $crv != $parent[0] )
+      {
+	select -add $crv;
+	$cons = `pointConstraint`;
+	delete $cons[0];
+      }
+  }
+}

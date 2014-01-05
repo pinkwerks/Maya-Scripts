@@ -1,0 +1,196 @@
+// This script fixes several render layer outAdjustment problems caused by a bug which
+// will result damaged scenes. The bug is caused by uncontrolled reference operations when 
+// render layer outAdjustment presence.
+// 
+// If you get errors like this:
+// Error:, Connection not made: 'XXXShape.instObjGroups[0].objectGroups[0]' -> 'XXXSG.dagSetMembers[-1]'.,  Destination node will not allow the connection., // 
+// This script will help.
+//
+// Usage:
+// 1. Make sure all reference are loaded
+// 2. Source this script and run fixRenderLayerOutAdjustmentErrors
+
+global proc fixMissingAdjustments() {
+    print "------------------------------------------------\n";
+    print "\tFix missing render layer outAdjustments:\n";
+    print "------------------------------------------------\n";
+    string $layers[] = `ls -type renderLayer`;
+    $currentLayer = `editRenderLayerGlobals -q -currentRenderLayer`;
+    for ($l in $layers) {
+        if (`referenceQuery -isNodeReferenced $l` && gmatch($l, "*defaultRenderLayer"))
+            continue;
+        print ("LAYER: " + $l + "\n");
+        string $conns[] = `listConnections -d 0 -c 1 -p 1 ($l + ".outAdjustments")`;
+
+        for ($i=0; $i<size($conns); $i+=2) {
+            $adjPlug = $conns[$i];
+            $scnPlug = $conns[$i+1];
+            $adjValue = substitute("outPlug", $conns[$i], "outValue");
+            string $dsgPlugs[] = `connectionInfo -dfs $adjValue`;
+            if(!size($dsgPlugs)) {
+                print ("OutAdjustment value missing is detected for " + $scnPlug + "\n");
+                $scnPlugParent = "";
+                string $scnParentDstPlug[] = {};
+                $scnPlug = `connectionInfo -ges $scnPlug`;
+                string $scnDstPlug[] = `connectionInfo -dfs $scnPlug`;
+                if(`gmatch $scnPlug "*objectGroups*"`) {
+                    $scnPlugParent = `match ".*instObjGroups\\[[0-9]+\\]" $scnPlug`;
+                    $scnParentDstPlug = `connectionInfo -dfs $scnPlugParent`;
+                }
+                $SG = "";
+                $defaultSG = "initialShadingGroup";
+                $parentSG = "";
+                $parentSGPlug = "";
+                // Try to find a suitable ShadingGroup which can be used as the outAdjustment
+                for($p = 0; $p < size($scnDstPlug); $p++) {
+                    $scnDstNode = plugNode($scnDstPlug[$p]);
+                    if(`nodeType $scnDstNode` == "shadingEngine") {
+                        $SG = $scnDstNode;
+                        break;
+                    }
+                    else if($scnDstNode == "defaultRenderLayer" && $l != "defaultRenderLayer") {
+                        $defaultAdjValue = substitute("outPlug", $scnDstPlug[$p], "outValue");
+                        string $defaultDsgPlugs[] = `connectionInfo -dfs $defaultAdjValue`;
+                        if(size($defaultDsgPlugs)) {
+                            $defaultSG = plugNode($defaultDsgPlugs[0]);
+                        }
+                    }
+                }
+                if($SG == "") {
+                    for($p =0; $p < size($scnParentDstPlug); $p++) {
+                        $scnParentDstNode = plugNode($scnParentDstPlug[$p]);
+                        if(`nodeType $scnParentDstNode` == "shadingEngine") {
+                            $parentSG = $scnParentDstNode;
+                            $parentSGPlug = $scnParentDstPlug[$p];
+                            break;
+                        }
+                    }
+                }
+                if($l == $currentLayer && $SG == "") {
+                    if($parentSG == "")
+                        connectAttr -na $scnPlug ($defaultSG + ".dagSetMembers");
+                    else {
+                        disconnectAttr $scnPlugParent $parentSGPlug;
+                        connectAttr -na $scnPlug ($parentSG + ".dagSetMembers");
+                    }
+                }
+                if($SG == "")
+                    if($parentSG == "")
+                        $SG = $defaultSG;
+                    else
+                        $SG = $parentSG;
+                print ("Use " + $SG + " as the outAdjustment for " + $scnPlug + "\n");
+                connectAttr -na $adjValue ($SG + ".dagSetMembers");
+            }
+        }
+    }
+}
+
+global proc cleanDuplicateAdjustments() {
+    print "------------------------------------------------\n";
+    print "\tClean duplicate render layer outAdjustments:\n";
+    print "------------------------------------------------\n";
+    string $layers[] = `ls -type renderLayer`;
+    for ($l in $layers) {
+        if (`referenceQuery -isNodeReferenced $l` && gmatch($l, "*defaultRenderLayer"))
+            continue;
+        print ("LAYER: " + $l + "\n");
+        string $conns[] = `listConnections -d 0 -c 1 -p 1 ($l + ".outAdjustments")`;
+
+        for ($i=0; $i<size($conns); $i+=2) {
+            for ($j=$i+2; $j<size($conns); $j+=2) {
+                if ($conns[$j+1] == $conns[$i+1]) {
+                    print ("Breaking duplicate outPlug connection between: " + $conns[$i] + " and " + $conns[$i+1] + "\n");
+                    disconnectAttr $conns[$i+1] $conns[$i];
+                    $plugName = substitute("outPlug", $conns[$i], "outValue");
+                    string $other[] = `connectionInfo -dfs $plugName`;
+                    print ("Breaking duplicate outValue connection between: " + $plugName + " and " + $other[0] + "\n");
+                    disconnectAttr $plugName $other[0];
+                    break;
+                }
+            }
+        }
+    }
+}
+
+global proc fixMismatchAdjustments() {
+    print "------------------------------------------------\n";
+    print "\tFix mismatch render layer outAdjustments:\n";
+    print "------------------------------------------------\n";
+    $currentLayer = `editRenderLayerGlobals -q -currentRenderLayer`;
+    string $layers[] = `ls -type renderLayer`;
+    for ($l in $layers) {
+        if (`referenceQuery -isNodeReferenced $l` && gmatch($l, "*defaultRenderLayer"))
+            continue;
+        editRenderLayerGlobals -currentRenderLayer $l;
+        print ("LAYER: " + $l + "\n");
+        string $conns[] = `listConnections -d 0 -c 1 -p 1 ($l + ".outAdjustments")`;
+        for ($i=0; $i<size($conns); $i+=2) {
+            $adjPlug = $conns[$i];
+            $scnPlug = $conns[$i+1];
+            $adjValue = substitute("outPlug", $conns[$i], "outValue");
+            string $dsgPlugs[] = `connectionInfo -dfs $adjValue`;
+            $SG = plugNode($dsgPlugs[0]);
+            $nodeType = `nodeType $SG`;
+            if($nodeType != "shadingEngine")
+                continue;
+            $scnPlugParent = "";
+            string $scnParentDstPlug[] = {};
+            $scnPlug = `connectionInfo -ges $scnPlug`;
+            string $scnDstPlug[] = `connectionInfo -dfs $scnPlug`;
+            if(`gmatch $scnPlug "*objectGroups*"`) {
+                $scnPlugParent = `match ".*instObjGroups\\[[0-9]+\\]" $scnPlug`;
+                $scnParentDstPlug = `connectionInfo -dfs $scnPlugParent`;
+            }
+            $done = false;
+            for($p = 0; $p < size($scnDstPlug); $p++) {
+                $scnDstNode = plugNode($scnDstPlug[$p]);
+                if(`nodeType $scnDstNode` == "shadingEngine") {
+                    if($SG != $scnDstNode) {
+                        print ("Breaking incorrect outAdjustment connection between: " + $adjValue + " and " + $dsgPlugs[0] + "\n");
+                        disconnectAttr $adjValue $dsgPlugs[0];
+                        print ("Making new correct outAdjustment connection between: " + $adjValue + " and " + $scnDstNode + ".dagSetMembers\n");
+                        connectAttr -na $adjValue ($scnDstNode + ".dagSetMembers");
+                    }
+                    $done = true;
+                    break;
+                }
+            }
+            if(!$done) {
+                for($p =0; $p < size($scnParentDstPlug); $p++) {
+                    $scnParentDstNode = plugNode($scnParentDstPlug[$p]);
+                    if(`nodeType $scnParentDstNode` == "shadingEngine") {
+                        if($SG != $scnParentDstNode) {
+                            print ("Breaking incorrect outAdjustment connection between: " + $adjValue + " and " + $dsgPlugs[0] + "\n");
+                            disconnectAttr $adjValue $dsgPlugs[0];
+                            print ("Making new correct outAdjustment connection between: " + $adjValue + " and " + $scnParentDstNode + ".dagSetMembers\n");
+                            connectAttr -na $adjValue ($scnParentDstNode + ".dagSetMembers");
+                        }
+                        disconnectAttr $scnPlugParent $scnParentDstPlug[$p];
+                        connectAttr -na $scnPlug ($scnParentDstNode + ".dagSetMembers");
+                    }
+                }
+            }
+        }
+    }
+    editRenderLayerGlobals -currentRenderLayer $currentLayer;
+}
+
+global proc fixRenderLayerOutAdjustmentErrors()
+{
+    print "------------------------------------------------\n";
+    print "\tClean up reference:\n";
+    print "------------------------------------------------\n";
+    string $referenceNodes[] = `ls -type reference`;
+    for($i = 0; $i < size($referenceNodes); $i++) {
+        if(gmatch($referenceNodes[$i], "*sharedReferenceNode"))
+            continue;
+        print ("Cleaning " + $referenceNodes[$i] +  "\n");
+        file -cleanReference $referenceNodes[$i];
+    }
+    fixMissingAdjustments;
+    cleanDuplicateAdjustments;
+    fixMismatchAdjustments;
+    print "\nDone!\n";
+}
+

@@ -1,0 +1,13 @@
+//===========================================================================
+//===	calculates maya FOV to inferno FOV
+//===========================================================================
+global proc float calculateInfernoFOV( string $camName, float $frame)
+{
+	float $focal = `getAttr -t $frame ($camName+".focalLength")`;
+	float $aperture = `getAttr -t $frame ($camName+".horizontalFilmAperture")`;
+	float $fov = (0.5 * $aperture) / ($focal * 0.0393700787); // 1 millimeter = 0.0393700787 in
+	$fov = 2.0 * atan ($fov);
+	$fov = rad_to_deg($fov) / 1.32575; //--- Inferno factor 
+    return $fov;
+}
+

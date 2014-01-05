@@ -1,0 +1,993 @@
+// Copyright (C) 1997-2004 Alias Systems Corp.
+// 
+// The information in this file is provided for the exclusive use of the
+// licensees of Alias.  Such users have the right to use, modify,
+// and incorporate this code into other products for purposes authorized
+// by the Alias license agreement, without fee.
+// 
+// ALIAS DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
+// INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO
+// EVENT SHALL ALIAS BE LIABLE FOR ANY SPECIAL, INDIRECT OR
+// CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
+// DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+// TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+// PERFORMANCE OF THIS SOFTWARE.
+
+//
+// This is the solidShatter effect script.  
+//
+
+//
+// This allows me to use some convenience procedures that
+// have been predefined.
+//
+includeEffectsGlobals();
+includeShatterEffectsGlobals();
+
+// Store the result name global so we can use it 
+// in case an error has occured and we have to process
+// it after the catch.
+//
+global string $gResultantObject;
+
+// Default Interior Color
+//
+global float  $gRGB[3] = { 1.0, 1.0, 0.0 };
+
+
+global proc repositionBooleanTool( string $booleanTool, string $shard )
+//
+// This procedure positions the boolean tool within the bounding box
+// of the shard. It gives the tool a random rotation so that shards will
+// be created with some randomness.
+{
+	if ( objectExists( $shard ) )
+	{
+		$bbAttr  = $shard + ".boundingBoxCenterX";
+		float $bbx = `getAttr $bbAttr`;
+		$bbAttr  = $shard + ".boundingBoxCenterY";
+		float $bby = `getAttr $bbAttr`;
+		$bbAttr  = $shard + ".boundingBoxCenterZ";
+		float $bbz = `getAttr $bbAttr`;
+		$bbAttr  = $shard + ".boundingBoxMin";
+		$minBB = `getAttr $bbAttr`;
+		$bbAttr  = $shard + ".boundingBoxMax";
+		$maxBB = `getAttr $bbAttr`;
+
+		float $x = (($maxBB[0]-$minBB[0])*0.25) + $bbx;
+		float $y = (($maxBB[1]-$minBB[1])*0.25) + $bby;
+		float $z = (($maxBB[2]-$minBB[2])*0.25) + $bbz;
+
+		vector $t = rand( <<$x, $y, $z>>, <<$bbx, $bby, $bbz>> );
+		$x = $t.x;
+		$y = $t.y;
+		$z = $t.z;
+		move $x $y $z $booleanTool;
+	
+		// Randomly rotate the boolean tool.
+		//
+		$x = rand( 0, 360.0 );
+		$y = rand( 0, 360.0 );
+		$z = rand( 0, 360.0 );
+		rotate $x $y $z $booleanTool;
+	}
+}
+
+
+proc string[] createBooleanToolShader( string $booleanTool, float $rgb[], int $verbose )
+//
+// This procedure creates a simple lambert material and adds 
+// it to the given shape.
+//
+{
+	string $shader[];
+	string $shaderName   = "shatterInteriorS#";
+	string $shadingGroup = "shatterInteriorSG#";
+
+	// Create the shader and shading group.
+	//
+	$shaderName   = `shadingNode -asShader lambert -name $shaderName`;
+	$shadingGroup = `sets -renderable true -noSurfaceShader true -empty -name $shadingGroup`;
+
+	$shader[0] = $shaderName;
+	$shader[1] = $shadingGroup;
+
+	// Connect the shader color to the shading group.
+	//
+	string $color         = $shaderName + ".color";
+	string $surfaceShader = $shadingGroup + ".surfaceShader";
+
+	connectAttr -f $color $surfaceShader;
+
+	// Set the color of the shader.
+	//
+	setAttr $color -type double3 $rgb[0] $rgb[1] $rgb[2];
+	string  $instGroup = $booleanTool + ".instObjGroups[0]";
+
+	// Connect the shader to the boolean tool.
+	//
+	defaultNavigation -source $shaderName -destination $instGroup -connectToExisting;
+
+	if ( $verbose )
+	{
+		print( "// Applying material \"" + $shaderName + "\" to interior polygons.\n" );
+	}
+
+	return $shader;
+}
+
+
+proc string[] createBooleanTool( float $dimension[], int $subDiv[], float $perturbation, 
+								 int $verbose )
+//
+// This method creates the boolean shape used to create the solid shards.
+//
+{
+	// Determine the size of the plane using the largest dimension of the 
+	// boolean objects bounding box.
+	//
+	float $planeSize = $dimension[0];
+
+	for ( $i = 1; $i < 3; $i++ )
+	{
+		if ( $planeSize < $dimension[$i] )
+		{
+			$planeSize = $dimension[$i];
+		}
+	}
+
+	// Create the plane and triangulate the surface.
+	//
+	string $plane[] =`polyPlane -ch 0 -sx $subDiv[0] -sy $subDiv[1]`;
+
+	int $faceCount[] = `polyEvaluate -face $plane[0]`;
+	polyTriangulate -ch 0 ($plane[0]+".f[0:"+($faceCount[0]-1)+"]");
+
+	string $planeShape[];
+
+	// Get the shape below the planes transform (i.e. plane[0]).
+	//
+	$planeShape = `listRelatives -shapes $plane[0]`;
+
+	// Delete the construction history of the plane.
+	//
+	delete -ch $plane[0] $planeShape[0];
+
+	// Perturb the surface of the plane by apply a creation and runtime expression
+	// to the plane after it has been made a soft body.  Deleting the soft body
+	// bakes the pertibation into the surface.
+	//
+	if ( $perturbation > 0.0 )
+	{
+		$perturbation /= 70;
+		string $softBody[] =`soft -c $planeShape[0]`;
+		string $expression = "position = position + sphrand(" + $perturbation + ");";
+
+		dynExpression -s $expression -c $softBody[0];
+		dynExpression -s $expression -r $softBody[0];
+
+		delete -ch $planeShape[0];
+		delete $softBody[0];
+	}
+
+	// Scale the plane to be a bit larger then the maximum dimension 
+	// of the bounding box.  We do this to make sure the object is total
+	// contained within the boolean tool.
+	//
+	float $scaleValue = $planeSize * 4;
+	scale -r $scaleValue $scaleValue $scaleValue $plane[0];
+
+	// Return the plane transform and plane shape names.
+	//
+	$plane[1] = $planeShape[0];
+
+	return $plane;
+}
+
+
+proc removeInteriorPolygons( string $shader[], int $verbose )
+// 
+// This procedure removes the interior polygons of the shards associated
+// with the given material.
+//
+{
+	if ( $verbose )
+	{
+		print( "// Removing interior polygons.\n" );
+	}
+
+	// Make sure we have a valid shader.
+	//
+	if ( size( $shader ) == 2 )
+	{
+		if ( size( $shader[1] ) > 0 )
+		{
+			string $baseName;
+			string $faceList[];
+			string $deleteList[];
+			int    $baseCount[];
+			int    $faceCount;
+			int    $count = 0;
+
+			// Get the faces associated with the shader.
+			//
+			string $interiorFaces[] = `sets -q $shader[1]`;
+			int    $faceListCount   = size( $interiorFaces );
+
+			// Check to see if we are deleting all the polygons of a 
+			// particular shard.  If we are, make sure we delete the
+			// transform associated with the shard.
+			//
+			for ( $i = 0; $i < $faceListCount; $i++ )
+			{
+				clear( $faceList );
+				$faceList[0] = $interiorFaces[$i];
+				$baseName    = getBaseName( $faceList[0] ); 
+				$faceList    = expandList( $faceList );
+				$faceCount   = size( $faceList );
+				$baseCount   = `polyEvaluate -face $baseName`;
+
+				// If the faceCount of the shard and the number of faces
+				// we are deleting are the same then add the shard to the
+				// delete list.  
+				//
+				if ( $faceCount == $baseCount[0] )
+				{
+					$deleteList[ $count ] = $baseName;
+					$count++;
+				}
+			}
+
+			// Remove the interior faces.
+			//
+			delete $interiorFaces;
+
+			// Delete the shards with no facets.
+			//
+			if ( $count > 0 )
+			{
+				if ( $verbose )
+				{
+					print( "// " + $count + " interior shard(s) deleted.\n" );
+				}
+
+				delete $deleteList;
+			}
+
+			// Remove the interior shader.
+			//
+			delete $shader[0];
+			delete $shader[1];
+		}
+	}
+}
+
+
+proc scaleUpObject( string $object )
+//
+// This procedure scales the given object down to compenstate
+// for the previous scaling up.
+//
+{
+	// Make sure the object exists.
+	//
+	if ( objectExists( $object ) )
+	{
+		scale -r 10 10 10 $object;
+	}
+}
+
+
+proc scaleDownObject( string $object )
+//
+// This procedure scales the given object down to compenstate
+// for the previous scaling up.
+//
+{
+	// Make sure the object exists.
+	//
+	if ( objectExists( $object ) )
+	{
+		scale -r 0.1 0.1 0.1 $object;
+
+		if ( catch( `makeIdentity -apply true $object` ) )
+		{
+			warning( "Cannot make identity" );
+		}
+	}
+}
+
+
+global proc int splitShard( string $shard, string $booleanTool[], 
+							float $extrudeValue, string $extrusion[],
+							string $pieceName1[], string $pieceName2[], 
+							int $debugId )
+//
+// Description:
+//   Break $shard into two pieces. Pass back the names of the new transform node
+// and corresponding poly boolean node in positions 0 and 1 of the $pieceName arrays,
+// and return 1.  If the operation fails, clean up and return 0.
+// In the case of failure, the contents of the return arrays is not reliable.
+// A plane and extrusion for the boolean are passed in for efficiency.
+{
+	int $result = false;
+
+	// Reposition the boolean tool within the bounding body if the
+	// shard we are performing the boolean on. This includes
+	// a random rotation.
+	//
+	repositionBooleanTool( $booleanTool[0], $shard );
+
+	// Cut the shard into two pieces by extruding the boolean plane and doing
+	// a boolean operation on the shard.  There is some code repetition here
+	// now, but this structure makes the code easier to understand and
+	// makes it easier to back out in case of error.
+
+	// Make the first piece:
+	// First extrude the boolean tool in the positive y direction and 
+	// do a boolean difference (-op 2).  Then extrude the boolean tool in the
+	// negative y direction and do a boolean intersection (-op 3).  This will
+	// give us two boolean shards which fit together.
+	//
+	polyExtrudeFacet -edit -ty $extrudeValue $extrusion[0];
+
+	// A boolean operation leaves the involved objects
+	// as "intermediate," and they can't be used for another
+	// boolean.  So mark them not intermediate.
+	//
+	setNotIntermediate( $booleanTool[1] );
+	setNotIntermediate( $shard );
+
+	//
+	// The polyCleanupArgList (could use a better name) script is being used here to clean up
+	// any of the following:
+	//
+	// -  faces with holes
+	// -  non-planar faces
+	// -  non-manifold vertices
+	// -  edges with zero length, within a  tolerance
+	// -  faces with zero area, within a tolerance
+	//
+	// This is to provide the boolean operation with clean geometry to work with.
+	//
+	select $shard;
+	polyCleanupArgList 2 {"0","1","0","0","0",
+						  "0","1","1","1","1e-005",
+                          "1","1e-005","0","1",
+						  "0","0"};
+	$pieceName1 = `polyBoolOp -op 2 -ch 1 $shard $booleanTool[1]`;
+
+	// If the boolean operation resulted in a shard with no polygons
+	// then undo the previous boolean and try again.
+	//
+	if (objectIsEmpty( $pieceName1[0] ))
+	{
+		// Undo the operation.
+		undo;
+	}
+	else
+	{
+		// Proceed to making second piece
+		//
+		polyExtrudeFacet -edit -ty (-$extrudeValue) $extrusion[0];
+
+		setNotIntermediate( $booleanTool[1] );
+		setNotIntermediate( $shard );
+
+		$pieceName2 = `polyBoolOp -op 3 -ch 1 $shard $booleanTool[1]`;
+
+		setNotIntermediate( $booleanTool[1] );
+		setNotIntermediate( $shard );
+
+		if (objectIsEmpty( $pieceName2[0] ))
+		{
+
+			// Undo the operation.
+			//
+			undo;
+
+			// Delete first piece also.
+			//
+			delete $pieceName1[0];
+		}
+		else
+		{
+			// Succeeded, return true.
+			//
+			$result = true;
+		}
+	}
+
+	return $result;
+}
+
+
+proc string[] createSolidShards( string $object, int $shardsNeeded, int $subDiv[], 
+								 int $applyMaterial, int $removeInterior, 
+								 float $perturbation, int $verbose )
+// 
+// Breaks $object into up to $shardsNeeded shards (or the maximum possible) and returns an
+// array containing the names.  The routine creates solid shards by doing a boolean operation 
+// on $object using an extruded plane.  $subDiv and $perturbation are passed on to the boolean
+// operation.  
+{
+	string $shardList[];
+	string $badShardList[];
+	string $shader[];
+
+	if ( $verbose == true )
+	{
+		print( "// Creating " + $shardsNeeded + " shards.\n" );
+	}
+
+	// Get the min and max bounding box for the object we wish to 
+	// shatter.
+	//
+	string $bbAttr  = $object + ".boundingBoxMin";
+	float  $minBB[] = `getAttr $bbAttr`;
+	$bbAttr = $object + ".boundingBoxMax";
+	float  $maxBB[] = `getAttr $bbAttr`;
+
+	// Determine the dimensions of the bounding box.
+	//
+	float $dimension[3];
+
+	$dimension[0] = $maxBB[0] - $minBB[0];
+	$dimension[1] = $maxBB[1] - $minBB[1];
+	$dimension[2] = $maxBB[2] - $minBB[2];
+
+	// Check to see if the object has a volume.  If not, we cannot
+	// do the effect.
+	//
+	if ( equiv( boundingBoxVolume( $object ), 0.0, 0.0001 ) )
+	{
+		warning( "The selected object is not a closed surface.  Cannot perform solid shatter." );
+		return $shardList;
+	}
+
+	// Create a tool to take boolean shards out of the original surface.  
+	// This procedure returns the boolean tools transform in index 0 and the
+	// name of the boolean tool shape in index 2.
+	//
+	string $booleanTool[] = createBooleanTool( $dimension, $subDiv, $perturbation, $verbose );
+
+	// Add a shader to the boolean tool so the interior has a different
+	// material then the exterior.  We need to do this if the removeInterior
+	// flag is set so we can determine the interior polygons via the shader.
+	//
+	if ( $applyMaterial || $removeInterior )
+	{
+//		float $rgb[3] = { 1.0, 1.0, 0.0 };
+		global float $gRGB[3];
+		$shader = createBooleanToolShader( $booleanTool[1], $gRGB, $verbose );
+	}
+
+	// Extrude the boolean tool by determining the maximum dimension of the 
+	// objects bounding box and then doubling the dimension (just in case).
+	//
+	float $extrudeValue = $dimension[0];
+
+	for ( $i = 1; $i < 3; $i++ )
+	{
+		$extrudeValue = max( $extrudeValue, $dimension[$i] );
+	}
+
+	// Extrude operation.
+	//
+	string $extrusion[] = `polyExtrudeFacet -kft 1 -ch 1 -ty $extrudeValue $booleanTool[1]`;
+
+
+	// Now make the shards.  This is a process of subdivision.
+	// We begin with one 'shard' which is just the entire object.
+	// Each pass through the loop, we select the biggest remaining shard,
+	// and split it.  This is done with two boolean operations:
+	//	  1) One with the boolean tool extruded in +Z.
+	//	  2) One with the boolean tool extruded in -Z.
+	//
+	// At the end of each time through the loop, the following are true:
+	// - $shardsCreated is the number of shards we have made so far
+	// - $indexOfNextShardToSplit is the next shard to split, or -1 if none exists
+	// - $badShardList is the list of shards on which booleans have failed
+	// - $shardList is the list of valid shards
+	// - the length of one of those two lists increases each time through
+
+	// Loop initializations.  Begin with just the one item in the list,
+	// the whole object. The next shard to split is that item.
+	//
+	$shardList[0] = $object;
+	int    $indexOfNextShardToSplit = 0;
+	int    $failureCount = 0;
+	int    $shardsCreated = 0;
+
+	int    $debugId = 0;
+
+	while( ($shardsCreated < $shardsNeeded - 1) && 
+		   ($indexOfNextShardToSplit >= 0) )
+	{
+		string $shardToSplit =  $shardList[ $indexOfNextShardToSplit ];
+
+		// The shard will be split into these two pieces.
+		//
+		string $pieceName1[];
+		string $pieceName2[];
+
+		if (splitShard( $shardToSplit, $booleanTool, $extrudeValue, $extrusion, 
+						$pieceName1, $pieceName2, $debugId ))
+		{	
+			// We succeeded in splitting the object.
+			// Put the first piece in the list in place of the split one.
+			//
+			int $index = indexInList( $shardToSplit, $shardList );
+			$shardList[ $index ] = $pieceName1[0];
+
+			// Add other piece at the end of the list.
+			//
+			$shardList[ size($shardList) ] = $pieceName2[0];
+
+			// Delete construction history of the two shards we just split.
+			// We no longer want them to be the output of the boolean.
+			//
+			delete -ch `listRelatives -c -s $pieceName1[0]`;
+			delete -ch `listRelatives -c -s $pieceName2[0]`;
+
+			// Now delete the piece that was split, since we no longer need it.
+			// EXCEPTION: don't delete the original object.
+			// 
+			if ($shardsCreated > 0)
+				delete $shardToSplit;
+
+			// We have created a net of one new shard (one piece is destroyed,
+			// replaced by two new ones).
+			//
+			$shardsCreated++;
+		}
+		else
+		{
+			// Splitting failed.  Add this shard to the list of shards 
+			// we will not try to split further.
+			//
+			$badShardList[ size($badShardList) ] = $shardToSplit;
+		}
+
+		if ($shardsCreated < $shardsNeeded - 1)
+		{
+			// Need to make another shard.
+			// Select the next list item to break into two pieces.
+			// If there isn't one, we will fall out of the loop.
+			// This will occur if all remaining shards are now on bad shard list.
+			//
+			$indexOfNextShardToSplit = 
+				getIndexOfLargestEligibleShard( $shardList, $badShardList );
+		}
+		$debugId++;
+	}
+
+	// Delete the boolean tool.
+	//
+	delete $booleanTool[0]; 
+
+	// If the remove interior polygons flag is set then do it now.  Otherwise,
+	// make sure the extrude value is zero so we do not try to do an extrude
+	// on a solid shard.
+	//
+	if ( $removeInterior )
+	{
+		removeInteriorPolygons( $shader, $verbose );
+	}
+
+	// Remove any empty shards from the list
+	//
+	string $finalShardList[];
+	$finalShardList = purgeShardList( $shardList );
+
+	// Rename the shards to have "shard" prefixing the name.
+	//
+	renameShards( $finalShardList );
+
+	return $finalShardList;
+}
+
+
+proc string solidShatterObject( string $object, int $shardCount, int $resolution[], 
+								int $triangulate, int $applyMaterial, int $removeInterior,
+								float $extrude, float $perturbFactor, int $seedValue, 
+								int $original, string $postOp, int $makeRigid, int $verbose  )
+//
+// This procedure actually does the shattering of the given
+// object.  We can assume that the object is either of
+// nurbsSurface shape or a polygonal mesh shape, because the
+// procedure that calls it will only do so for those types
+// of objects.
+//
+{
+	global string $gResultantObject;
+    string $newObject = "";
+
+	if ( $seedValue > 0 )
+	{
+		seed( $seedValue );
+	}		
+
+	string $shapeList[] = `ls -type shape`;
+
+    // I want to know that parent transform of this
+    // shape, so that I can use its name when I name
+    // my new objects.
+    //
+    string $parent[] = `listRelatives -parent $object`;
+
+    // First, get a polygonal version of this shape.
+    //
+    string $type = `nodeType $object`;
+
+    if( $type == "nurbsSurface" )
+    {
+		// Check for history:  does listHistory return anything 
+		// other than the node itself and its 'make' node?
+		//
+		string $hist[] = `listHistory $object`;
+		if (size($hist) > 2)
+		{	
+			string $errString = "If you want to shatter " + $object + ", please first do Edit | Delete By Type -> History.";
+			error( $errString );
+			return $newObject;
+		}
+
+        // If this shape is a nurbsSurface shape, then I
+        // need to convert it into a polygonal mesh.
+        //
+        nurbsToPoly -ch 0 $object;
+        $newObject = getSelectedObject( 0 );
+    }
+    else
+    {
+		// Check for history:
+		// does listHistory return anything other than
+		// the node itself?
+		//
+		string $hist[] = `listHistory $object`;
+		if (1 == 2)
+//		if (size($hist) > 1)
+		{	
+			string $errString = "If you want to shatter " + $object + ", please first do Edit | Delete By Type -> History.";
+			error( $errString );
+			return $newObject;
+		}
+
+        // If this shape is a polygonal mesh shape, then
+        // I just duplicate it to get a version that I
+        // will shatter, since I do not want to change
+        // the original object.
+        //
+        string $duplicate[] = `duplicate $object`;
+        select $duplicate[0];
+
+	  // If this object/hierarchy contained a rigid body or bodies, 
+	  // the rigid body nodes have also bee duplicated. We do not want those
+	  // copies.  Delete them now.  The ls command used here returns all
+	  // rigidBody nodes at or below this level in the hierarchy.
+	  //
+	  delete `ls -objectsOnly -dag -allPaths -type rigidBody $duplicate[0]`;
+
+        $newObject = getSelectedObject( 0 );    }
+
+	// Set the display status for the original object.
+	//
+	processOriginalObject( $object, $newObject, $original, $postOp, $makeRigid );
+
+	// Center the pivots of the new object.
+	//
+	xform -cp $newObject;
+	$gResultantObject = $newObject;
+
+    // Triangulate the mesh.
+    //
+	if ( $triangulate == true )
+	{
+		int $faceCount[] = `polyEvaluate -face $newObject`;
+    	polyTriangulate -ch 0 ($newObject+".f[0:"+($faceCount[0]-1)+"]");
+	}
+
+	// Booleans tend to work much better with large objects.  Scale the
+	// object we are going to cut up to insure the boolean operations
+	// will not fail (as much).  We will remove this scale later.
+	//
+	scaleUpObject( $newObject );
+
+	string $shardList[] = 
+		createSolidShards( $newObject, $shardCount, $resolution, $applyMaterial,
+						   $removeInterior, $perturbFactor, $verbose );
+
+	// If the remove interior polygon flag is not set then make sure
+	// the exturd value is 0.0 so we do not do an extrusion on a solid shard.
+	//
+	if ( ! $removeInterior )
+	{
+		$extrude = 0.0;
+	}
+
+	int $shardCount = size( $shardList );
+
+	if ( $verbose == true )
+	{
+		print( "// " + $shardCount + " shards created.\n" );
+	}
+
+	// Group all the shards under one transform.
+	//
+	string $groupName;
+
+	if ( $shardCount > 0 )
+	{
+		int $index[];
+
+		for ( $i = 0; $i < $shardCount; $i++ )
+		{
+			if ( objectExists( $shardList[$i] ) )
+			{
+				parent $shardList[$i] $newObject;
+			}
+		}
+
+		$shardList = deleteNonShards( $newObject, "shard" );
+
+		// Delete this object.  It was the original duplicated object.
+		//
+    	delete -ch $newObject;
+
+		$shardCount = size( $shardList );
+		int $actualShardCount = $shardCount;
+
+		if ( $verbose == true )
+		{
+			print( "// Checking for shards with multiple pieces.\n" );
+		}
+
+		// For each shard determine if it needs to be separated.
+		//
+		for( $i = 0; $i < $shardCount; $i++ )
+		{
+			if ( objectExists( $shardList[$i] ) )
+			{
+				// Separate the shards in case they are not solid pieces.
+				//
+				int $shells[] = `polyEvaluate -shell $shardList[$i]`;
+				if ($shells[0] > 1)
+				{
+
+					string $resultArray[] = separateShards( $shardList[$i], true, false );
+					int    $count = size( $resultArray );
+					if ( $count > 0 )
+					{
+						// If we have separated a shard then determine the new shards
+						// and parent them to the shard parent transform.
+						// We don't actually use the return value.
+						//
+						string $separatedShards[] = `listRelatives -children $shardList[$i]`;
+
+						for ( $j = 0; $j < $count; $j++ )
+						{
+							//
+							// Only re-parent the object if it is a transform.
+							//
+							if( `nodeType $separatedShards[$j]` == "transform" )
+							{
+								parent $separatedShards[$j] $newObject;
+							}
+						}
+
+						// Delete the transform of the shard we just separated.
+						//
+						delete $shardList[$i];
+
+						// Rename the new shards.
+						//
+						rename $separatedShards[$count-1] $shardList[$i];
+
+						for ( $j = 0; $j < $count-1; $j++ )
+						{
+							$shardList[ $actualShardCount ] =  $separatedShards[$j];
+							$actualShardCount++;
+						}
+					}
+				}
+			}
+		}
+
+		// Remove the scale we applied earlier and do a
+		// freeze transform so there is no evidence that
+		// we scaled the object to begin with.
+		//
+		scaleDownObject( $newObject );
+
+		int $makeConnections = false;
+
+		if ( $original == 4 )
+		{
+			$makeConnections = true;
+		}
+		postProcessShards( $newObject, $shardList, $index, $extrude, $triangulate, 
+						   $postOp, $shapeList, $object, $makeConnections, $verbose );
+
+		print("// Shatter succeeded\n");
+	}
+	else
+	{
+		// Remove the scale we applied earlier and do a
+		// freeze transform so there is no evidence that
+		// we scaled the object to begin with.
+		//
+		scaleDownObject( $newObject );
+
+		warning( "No shards created." );
+
+		// Delete the newly created object.
+		//
+		delete $newObject;
+
+		$newObject = "";
+	}
+
+    return $newObject;
+}
+
+
+proc string[] _solidShatter( string $name, int $shardCount, int $resolution[], 
+							 int $triangulate, int $applyMaterial, int $removeInterior,
+							 float $extrude, float $perturbFactor, int $seedValue, 
+							 int $original, string $postOp, int $makeRigid, int $verbose )
+//
+// This procedure looks through the selection list and calls
+// surfaceShatterObject() on only the nurbsSurface or
+// polygonal mesh shapes.  
+//
+{
+    // The return value.
+    //
+    string $result[];
+    clear( $result );
+
+    // This array is used to avoid shattering the same object twice
+    // during the running of this script.  This might happen if both
+    // the transform and the shape of an object are selected.
+    //
+    string $objectsDone[];
+    clear( $objectsDone );
+
+    // Store a list of all of the nodes in the scene before any
+    // work is done.
+    //
+    string $allNodesBefore[]   = `ls`;
+    string $selectedShapes[]   = getSelectedList( "allGeometry" );
+	int    $selectedShapeCount = size( $selectedShapes );
+
+    for ( $i = 0; $i < $selectedShapeCount; $i ++ )
+    {
+        // If this shape has already been shattered, then skip over
+        // it.
+        //
+        if( findInStringArray( $selectedShapes[$i], $objectsDone ) == -1 )
+        {
+            // If this shape is not nurbsSurface or polygonal mesh shape,
+            // then display a warning and continue.
+            //
+            string $type = `nodeType $selectedShapes[$i]`;
+
+            if( ( $type == "nurbsSurface" ) || ( $type == "mesh" ) )
+            {
+                // If for some reason the surfaceShatterObject() procedure
+                // returns a blank string, then display a warning and
+                // continue.  This could have returned an error, but I
+                // decided that I do not want to exit the script for this
+                // reason.
+                //
+                string $newObject = solidShatterObject( $selectedShapes[$i], $shardCount, 
+												$resolution, $triangulate, $applyMaterial,
+												$removeInterior, $extrude,
+												$perturbFactor, $seedValue, $original, 
+												$postOp, $makeRigid, $verbose );
+
+                if ( size( $newObject ) > 0 )
+                {
+					if ( size( $name ) > 0 )
+					{
+						$name += "#";
+						$newObject = `rename $newObject $name`;
+					}
+
+                    $result = appendSingleToStringArray( $result, $newObject );
+                }
+                else
+                {
+                    warning("Could not shatter " + $selectedShapes[$i] + ".");
+                }
+            }
+            else
+            {
+                warning( $selectedShapes[$i] + " can not be shattered.");
+            }
+
+			$gResultantObject = $result[0];
+
+            // Note that this shape has been shattered so that we do not do it again
+            // during this execution of the script.
+            //
+            $objectsDone = appendSingleToStringArray( $objectsDone, $selectedShapes[$i] );
+        }
+    }
+
+	if ( $original == 4 )
+	{
+    	string $parent[] = `listRelatives -parent $selectedShapes`;
+		select $parent;
+	}
+	else
+	{
+		select $result;
+	}
+
+    // Get a list of all existing nodes after we have shattered the objects.
+    //
+    string $allNodesAfter[] = `ls`;
+
+    return $result;
+}
+
+
+global proc string[] solidShatter( string $name, int $shardCount, int $triangulate, 
+						           int $applyMaterial, int $removeInterior, float $extrude,
+								   float $perturbFactor, int $seedValue, 
+								   int $original, string $postOp, int $makeRigid, int $verbose )
+//
+// This is the global procedure that the user actually calls.  It manages the
+// wiat cursor and traps any errors or failures that might happen during the
+// execution of this script.
+//
+{
+	global string $gResultantObject;
+    string $result[];
+    clear( $result );
+
+	if( `licenseCheck -type complete` == 0 )
+	{
+		warning("You are not licensed to use the Shatter Effect.");
+		return $result;
+	}
+
+	int $resolution[3] = { 40, 40, 50 };
+
+    // Store the currently slected objects so that we can
+    // restore them if we detect some error.
+    //
+    string $lastSelectionList[] = `ls -sl`;
+
+    waitCursor -state on;
+
+	// If a seed is supplied then set it.
+	//
+	if ( $seedValue > 0 )
+	{
+		seed( $seedValue );
+	}
+
+    if ( catch( $result = _solidShatter( $name, $shardCount, $resolution, $triangulate, 
+										 $applyMaterial, $removeInterior, $extrude, 
+										 $perturbFactor, $seedValue, $original, 
+										 $postOp, $makeRigid, $verbose ) ) )
+    {
+        // If an error is detected, call our error-handling
+        // procedure, restore the selection list, and clear
+        // whatever might be in the result array.  We do not
+        // exit the script here, because we want the waitCursor
+        // command to turn off the wait cursor.
+        //
+		scaleDownObject( $gResultantObject );
+        shatterErrorHandler( "Solid Shatter" );
+        select $lastSelectionList;
+        clear( $result );
+    }
+
+    waitCursor -state off;
+
+    return $result;
+}

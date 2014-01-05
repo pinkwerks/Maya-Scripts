@@ -1,0 +1,436 @@
+
+/*
+
+Title: importInfernoTimewarp.mel
+		
+Author: Erick Miller
+
+Version: 1.0
+
+Use With: 
+		
+		1) 	A baked out (keyframe at every frame) .timewarp file exported from Inferno
+		
+		2) 	Animated maya objects that need to be timewarped in 
+			order to match w/ a sequence of frames timewarped in the Inferno,
+			
+			For example an animated camera that was tracked to non-timewarped plates
+			or animated maya objects or geometry that need to be timewarped in some
+			manner before they are re-rendered.
+			
+Script Description:
+	
+	importInfernoTimwarpBrowser() ;
+	
+	This is a UI-menu wrapper script that will launch a fileBrowser and allow you to choose
+	an Inferno *.timewarp file.  Once selected, it will apply the inferno timewarp file onto
+	any animated keyframed objects or rigcached geometry that you have selected while the script is being run.
+	
+	The browser script is a wrapper for the function:  importInfernoTimewarp( string $filePath, string $animateObjects[] );
+	
+	Overall, this script does a couple of things:
+	
+	1) Reads and converts the Inferno timewarp file into 2 animCurve nodes in Maya 
+		and hooks them up in order to warp the output of Maya's time node.
+	
+	2) Creates 2 utility nodes for blending between the timwarps:
+		
+		A) TimingToSpeedBlend blends between timing timewarp curve and the speed
+		timewarp curve that the Inferno data file represents. 
+		This blend node defaults to using a blend of 0, which 
+		is a full blend to the timwarp using the timing curve.
+		Setting the TimingToSpeedBlend.blend attribute to 1 will use the 
+		speed timewarp curve, which in our testing seemed to not line up
+		properly with the timewarped plates (where as the timing curve did line up).
+		
+		B) InfernoTimewarpBlend blends the full effect of the warped time with
+		on/off normal time - a blend of 1 is fully timewarped, and a blend of 0 is
+		blended back to normal time.  This attribute can be animated in order to 
+		ramp on and off the effect of the imported timewarp.
+		
+Usage:
+		Interactive Use:
+			
+			1) Select all animated objects that you want to apply the timewarp curve onto.
+			2) Run the command (from the menu) to browse for the .timewarp file: 
+				importInfernoTimwarpBrowser() ;
+				
+			Once you select the timewarp file, and hit the Import button, the script will
+			convert and apply the timewarp curve onto any animated objects in your 
+			current selection list.
+		
+		Scripted Use:
+		
+			You can also use this script via the maya command line by suppling 
+			the arguments:
+			
+			importInfernoTimewarp( string $timewarpFile , string $mayaObjs[] ); 
+			
+			// Example:
+			
+			string $timewarpFile = "/hdx/projects/FF2/discreet/timewarp/bp_0550/bp_0550_test_curve_02_bake.timewarp" ;
+			string $mayaObjs[] = `ls -l -o -fl -sl` ;
+			string $timewarpNodes[] = importInfernoTimewarp( $timewarpFile , $mayaObjs ) ;
+			
+			
+Returns:  string[] (string array), returns the newly created timwarp animation curves 
+					and the blend nodes to blend beween timewarps
+
+
+*/
+
+
+
+global proc importInfernoTimwarpBrowser()
+{
+	if( size(`ls -sl -l -fl -o`) )
+	{
+		string $wrkspc = `workspace -q -fn`;
+		string $dir = $wrkspc;
+		if(`filetest -d ($wrkspc+"/discreet/")`){
+			$dir = ($wrkspc+"/discreet/") ;
+			if(`filetest -d ($dir+"timewarp/")`){			
+				$dir = ($dir+"timewarp/") ;
+			}
+		}
+
+		if(`filetest -d $dir`) {
+			workspace -dir $dir $wrkspc;
+		}
+		optionVar -iv fileBrowserDisplayHiddenMode 1;
+		$gv_displayHiddenMode = 1;
+		fileBrowser "importInfernoTimewarpFileBrowserCallback " "Import Inferno Timewarp" "*.timewarp" 1;
+	}else{
+		catch( `error "Select the animated objects you want to apply the timewarp onto (such as the camera or your character's animated controls)."`);
+		confirmDialog -title "Nothing Selected." -message "First select the animated objects to apply the timewarp onto."  -button "OK";
+	}
+}
+
+
+global proc int importInfernoTimewarpFileBrowserCallback( string $path, string $fileType )
+{
+	$path = `substitute "\\.*$" $path ""`;
+	string $base = basename( $path,"") ;
+	string $ext = fileExtension($base);
+	if( tolower($ext) != "timewarp" )
+	{ 
+		catch( `error "Please choose an Inferno \".timewarp\" file."`);
+		confirmDialog -title "Wrong File Type" -message "Please pick a \"*.timewarp\" file."  -button "OK";
+		return 0 ;
+	}
+	
+	importInfernoTimewarp( $path , `ls -sl -l -fl -o` );
+	
+	return 1 ;
+}
+
+
+proc string returnTimeNode()
+{
+	string $time = "time1";
+	if(!`objExists $time`){
+		string $times[] = `ls -type time`;
+		$time = $times[0] ;
+	}
+	return $time ;
+}
+
+
+/*
+	// Example usage:
+
+	string $timewarpFile = "/hdx/projects/FF2/discreet/timewarp/bp_0550/bp_0550_test_curve_02_bake.timewarp" ;
+	string $mayaObjs[] = `ls -l -o -fl -sl` ;
+
+	importInfernoTimewarp( $timewarpFile , $mayaObjs ) ;
+
+*/
+
+global proc string[] importInfernoTimewarp( string $timewarpFile , string $mayaObjs[] )
+{
+
+	if(`size $mayaObjs`<1)
+	{
+		$mayaObjs = evalEcho("ls -l -fl -sl -o"); 
+		if(`size $mayaObjs`<1){ 
+			error "You must supply the objects to apply the timewarp onto.  Do this by selecting the animated object to be timewarped." ;
+		}
+	}
+	
+	string $warpNodes[];
+	string $selected[] = `ls -l -fl -sl`;
+	
+	if(!`filetest -r $timewarpFile`){
+		error ("The path to the inferno timewarp file: \""+$timewarpFile+"\" can not be found on disk.");
+	}
+ 	$fileId=`fopen $timewarpFile "r"`;
+	
+	float $Frame[];
+	float $Value[];
+	
+	float $TimingFrame[];
+	float $TimingValue[];
+	
+	int $foundEnd=0, $foundSpeed, $foundTiming;
+	
+	string $line=" ", $frame, $value ;
+ 	while ( !`feof $fileId` )
+	{
+		$line = substituteAllString( ((string)`fgetline $fileId`), "\n", "");
+ 		if( size( $line ) > 0 )
+		{
+ 			if( `gmatch $line "*Uncollapsed*"` ){
+				$line = substituteAllString( ((string)`fgetline $fileId`), "\n", "");
+				$line = substituteAllString( $line, "\t", "");
+				$line = substituteAllString( $line, " ", "");
+	 			if( `gmatch $line "*End*"` ){
+					$foundEnd++ ;
+					if( $foundEnd >= 2 ){
+						break ;
+					}
+				}
+			}
+			
+			if( `gmatch $line "*Channel Speed*"` ){
+				$foundSpeed=true;
+				$foundTiming=false;
+			}
+			if( `gmatch $line "*Channel Timing*"` ){
+				$foundSpeed=false;
+				$foundTiming=true;
+			}
+			
+			if( `gmatch $line "*Key *"` ){
+				$line = substituteAllString( ((string)`fgetline $fileId`), "\n", "");
+				if( `gmatch $line "*Frame *"` ){
+					$line = substitute( "Frame ", $line, "");
+					$line = substituteAllString( $line, "\t", "");
+					$line = substituteAllString( $line, " ", "");
+					$frame = $line;
+					$line = substituteAllString( ((string)`fgetline $fileId`), "\n", "");
+					if( `gmatch $line "*Value *"` ){
+						$line = substitute( "Value ", $line, "");
+						$line = substituteAllString( $line, "\t", "");
+						$line = substituteAllString( $line, " ", "");
+						$value = $line;
+						if( size($frame) && size($value) ){
+							if($foundSpeed ){
+								$Frame[`size $Frame`] = ((float) $frame );
+								$Value[`size $Value`] = ((float) $value );
+							}
+							if($foundTiming){
+								$TimingFrame[`size $TimingFrame`] = ((float) $frame );
+								$TimingValue[`size $TimingValue`] = ((float) $value );
+							}
+						}
+					}
+				}
+			}
+ 		}
+ 	}
+ 	fclose $fileId; 
+	
+	if( (size($Frame) && size($Value) && size($Frame) == size($Value) )  &&
+		(size($TimingFrame) && size($TimingValue) && size($TimingFrame) == size($TimingValue) ) && 
+		size($Frame) == size($TimingFrame) && size($Frame) > 1 
+		)
+	{
+		string $loc[]=`spaceLocator`;
+		int $i=0;
+		
+		for($i=0; $i<size($Frame); $i++){
+			setKeyframe -time $Frame[$i] -value $Value[$i] ($loc[0]+".tx") ;
+		}
+		string $keyframeNode[] = `listConnections -s 1 -d 0 -type animCurve ($loc[0]+".tx")`;
+		
+		string $time = returnTimeNode();
+		string $multiply;
+		if( `size $keyframeNode` )
+		{
+			keyTangent -itt linear -ott linear $keyframeNode[0];
+			disconnectAttr ($keyframeNode[0]+".o") ($loc[0]+".tx") ;
+			
+			string $basename = basename( $timewarpFile, "" );
+ 			string $name[];
+			tokenize $basename "." $name ; 
+			$keyframeNode[0] = `rename $keyframeNode[0] ($name[0]+"_SpeedCurve")` ;
+			
+			string $multDiv = `createNode -name ($name[0]+"_SpeedDivide") multiplyDivide`;
+			setAttr .operation 2;
+			setAttr -keyable false ".i1y";
+			setAttr -keyable false ".i1z";
+			setAttr -keyable false ".i2y";
+			setAttr -keyable false ".i2z";
+			
+			connectAttr -f ($keyframeNode[0]+".output") ($multDiv+".input1X");
+			setAttr ($multDiv+".input2X") 100.0;
+			
+			$multiply = `createNode -name ($name[0]+"_SpeedMult") multDoubleLinear`;
+			connectAttr -f ($multDiv+".outputX") ($multiply+".input1");
+			connectAttr -f ($time+".outTime") ($multiply+".input2") ;
+			
+			setAttr ($keyframeNode[0]+".useCurveColor") 1;
+			setAttr ($keyframeNode[0]+".curveColor") -type double3 0.5 0 1 ;
+			
+			$warpNodes[`size $warpNodes`] = $keyframeNode[0] ;
+		}
+		
+		for($i=0; $i<size($TimingFrame); $i++){
+			setKeyframe -time $TimingFrame[$i] -value $TimingValue[$i]  ($loc[0]+".ty") ;
+		}
+		string $timingKeyframeNode[] = `listConnections -s 1 -d 0 -type animCurve ($loc[0]+".ty")`;
+		
+		if(`size $timingKeyframeNode`)
+		{
+			keyTangent -itt linear -ott linear $timingKeyframeNode[0];
+			disconnectAttr ($timingKeyframeNode[0]+".o") ($loc[0]+".ty") ;
+			
+			if(`objExists $loc[0]`){ delete $loc ; }
+			
+			string $basename = basename( $timewarpFile, "" );
+ 			string $name[];
+			tokenize $basename "." $name ; 
+			$timingKeyframeNode[0] = `rename $timingKeyframeNode[0] ($name[0]+"_TimingCurve")` ;
+			
+			string $multDiv = `createNode -name ($name[0]+"_TimingDivide") multiplyDivide`;
+			setAttr .operation 2;
+			setAttr -keyable false ".i1y";
+			setAttr -keyable false ".i1z";
+			setAttr -keyable false ".i2y";
+			setAttr -keyable false ".i2z";
+			
+			connectAttr -f ($timingKeyframeNode[0]+".output") ($multDiv+".input1X");
+			connectAttr -f ($time+".outTime") ($multDiv+".input2X");
+			string $timingMultOutput = `createNode -name ($name[0]+"_TimingMult") multDoubleLinear`;
+			connectAttr -f ($multDiv+".outputX") ($timingMultOutput+".input1");
+			connectAttr -f ($time+".outTime") ($timingMultOutput+".input2");
+			
+			string $blendColors = `createNode -name "TimingToSpeedBlend" blendColors`;
+			setAttr -keyable false ".c1r";
+			setAttr -keyable false ".c1g";
+			setAttr -keyable false ".c1b";
+			setAttr -keyable false ".c2r";
+			setAttr -keyable false ".c2g";
+			setAttr -keyable false ".c2b";
+			
+			connectAttr -f ($multiply+".output") ($blendColors+".color1R") ;
+			connectAttr -f ($timingMultOutput+".output") ($blendColors+".color2R") ;
+			
+			setAttr ($blendColors+".blender") 0;
+			
+			string $blendColorsFinalBlend = `createNode -name "InfernoTimewarpBlend" blendColors`;
+			setAttr -keyable false ".c1r";
+			setAttr -keyable false ".c1g";
+			setAttr -keyable false ".c1b";
+			setAttr -keyable false ".c2r";
+			setAttr -keyable false ".c2g";
+			setAttr -keyable false ".c2b";
+			
+			connectAttr -f ($blendColors+".outputR") ($blendColorsFinalBlend+".color1R") ;			
+			connectAttr -f ($time+".outTime") ($blendColorsFinalBlend+".color2R") ;
+			setAttr ($blendColorsFinalBlend+".blender") 1;
+			
+			for($obj in $mayaObjs)
+			{
+				string $keyableAttrs[] = `listAttr -k -s $obj`;
+				for( $attr in $keyableAttrs )
+				{
+					if(`objExists ($obj+"."+$attr)`)
+					{
+						string $keyframeNode[] = `listConnections -s 1 -d 0 -type animCurve ($obj+"."+$attr)`;
+						if(`size $keyframeNode`)
+						{
+							string $conn[] = `listConnections -p 1 -c 1 -s 1 -d 0 ($keyframeNode[0]+".input")`;
+							if(`size $conn` >= 2){  disconnectAttr $conn[1] $conn[0] ;  } 
+							connectAttr -f ($blendColorsFinalBlend+".outputR")  ($keyframeNode[0]+".input") ;
+						}
+					}
+				}
+			}
+			
+			if( `pluginInfo -q -l rigCache` )
+			{
+				string $applyToRigCaches[];
+				for( $obj in $mayaObjs)
+				{
+					string $rigCaches[] = ls( "-type","rigCache", `listHistory $obj` ); 				
+					for($rigCache in $rigCaches){
+						$applyToRigCaches[`size $applyToRigCaches`] = $rigCache ;
+					}
+				}
+				
+				$applyToRigCaches = stringArrayRemoveDuplicates( $applyToRigCaches ); 
+				
+				for($rigCache in $applyToRigCaches)
+				{
+					string $conn[] = `listConnections -p 1 -c 1 -s 1 -d 0 ($rigCache+".currentTime")`;
+					if(`size $conn` >= 2){  disconnectAttr $conn[1] $conn[0] ;  } 
+
+					connectAttr -f ($blendColorsFinalBlend+".outputR") ($rigCache+".currentTime");
+
+				}
+			}
+			
+			setAttr ($timingKeyframeNode[0]+".useCurveColor") 1;
+			setAttr ($timingKeyframeNode[0]+".curveColor") -type double3 1 0.667 0 ;
+			
+			$warpNodes[`size $warpNodes`] = $timingKeyframeNode[0] ;
+			$warpNodes[`size $warpNodes`] = $blendColors ;
+			$warpNodes[`size $warpNodes`] = $blendColorsFinalBlend ;
+		}
+		
+	}
+	else
+	{
+		error ("Error: Data not in synch while reading Inferno Timewarp file: \""+$timewarpFile+"\"") ;
+	}
+	
+	if(`size $selected`){
+		select -cl ;
+		for($sel in $selected){
+			if(`objExists $sel` && size(`ls $sel`) ){
+				select -add $sel ;
+			}
+		}
+	}
+	
+	return( $warpNodes );
+	
+}
+
+
+
+/////////
+//
+// Example shake retime expression:
+//
+// string $shakeExpression = "JSpline(1,1@-7,267.985@259.985,275.915@267.915,293.387@286.68,355@338.7)" ;
+//
+// This script converts the above expression into a set of maya 
+// keyframes, but - it is inaccurate due to the JSpline 
+// interpolation scheme not being avialable in Maya...
+//
+
+global proc shakeExpressionToKeyframes( string $shakeExpression )
+{
+	$shakeExpression = substituteAllString( $shakeExpression, ")", "" );
+	$shakeExpression = substituteAllString( $shakeExpression, "(", "" );
+	string $loc[] = `spaceLocator`;
+	string $keyValues[];
+	tokenize $shakeExpression "," $keyValues ;
+	print "Key Values:\n" ;
+	print $keyValues ;
+	string $k_v[];
+	int $i=1;
+	for( ; $i<size($keyValues); $i++)
+	{
+		clear($k_v);
+		tokenize $keyValues[$i] "@" $k_v ;
+		float $warpKeyValue = ((float)$k_v[0]) / ((float)$k_v[1]) ;
+		setKeyframe -time $k_v[0] -value $warpKeyValue ($loc[0]+".tx");
+	}
+}
+
+
+
+

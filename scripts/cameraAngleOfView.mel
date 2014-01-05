@@ -1,0 +1,1 @@
+ad_to_deg(2.0*atan((0.5 * perspShape.horizontalFilmAperture)/(perspShape.focalLength*0.039370078401)));

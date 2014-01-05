@@ -1,0 +1,96 @@
+//
+// v20040420 pinkelton wicham
+//
+
+global proc
+noah()
+{
+    string $procName = "noah";
+    string $propsL;
+    string $props[];
+
+    string $apps = `slimcmd slim GetAppearances -selected 1`;
+    string $selectedAppearances[];
+    string $app;
+    string $appLabel;
+    string $selObjs[];
+    string $appID;
+    string $arc;
+    string $arcLabel;
+
+    if ( $apps == "" )
+    	error($procName + " : No Appearances selected in any palette!");
+
+    tokenize $apps $selectedAppearances;
+
+    $noahPalette = `slimcmd slim CreatePalette -new -edit`;
+
+    for ( $app in $selectedAppearances )
+    {
+	$appLabel = `slimcmd $app GetLabel`;
+	$appID = `slimcmd $app GetID`;
+
+	// make an archiver and label it
+	$arc = `slimcmd $noahPalette CreateInstance -template "pixar,Archiver"`;
+	$arcLabel = ($appLabel + "_arc");
+	$arcLabel = fixWhiteSpace($arcLabel);
+	slimcmd $arc SetLabel $arcLabel;
+	$arcID = `slimcmd $arc GetID`;
+
+	// go through an apperances properties and find/act on the
+	// one we're looking for
+	string $propslist = `slimcmd $arc GetProperties`;
+	string $props[];
+	tokenize $propslist $props;
+	for( $prop in $props ) 
+	{
+		if ( $prop == "" )
+		    continue;
+
+		string $propLabel = `slimcmd $prop GetLabel`;
+
+		if ( $propLabel == "Archive Contents" )
+		    slimcmd $prop SetValue "geometry";
+
+		if ( $propLabel == "Frequency" )
+		    slimcmd $prop SetValue "job";
+	}
+
+	// pick objects with the suface shader attached
+	mtor control pickobjects $appID;
+
+	// delete old surface shader the archived objects
+	string $objShapes[] = `ls -sl -fl -l`;
+	string $shape;
+	for ( $shape in $objShapes )
+	{
+	    if (`attributeQuery -ex -n $shape "slimSurf"` == 1)
+		deleteAttr ($shape + ".slimSurf");
+	    else
+	    	warning($shape + " : No Surface found!  Is this a instance?");
+
+	    if (`attributeQuery -ex -n $shape "slimDispl"` == 1)
+	    	warning($shape + " : has a Displacement Shader.");
+	}
+
+	// assign the archiver to the transform node
+	select `listRelatives -p`;
+	mtor control attach archiver $arcID;
+
+	// assign the surface to the transform node
+	mtor control attach surface $appID;
+
+	// delete the surface from the shape node
+
+	// template the archived objects
+	/*
+	string $objs[] = `ls -sl -fl -l`;
+	string $obj;
+	for ( $obj in $objs )
+	{
+	    setAttr ($obj + ".template") 1;
+	}
+	*/
+
+    }
+}

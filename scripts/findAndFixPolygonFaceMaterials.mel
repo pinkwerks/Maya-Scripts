@@ -1,0 +1,31 @@
+// pinkwerks
+// Find Polygons that have materials assigned to faces.
+// attempt to correct this situation by assigning to shape node.
+// this will not do the right thing if one shape has more than 
+// one material on it's faces.
+global proc
+findAndFixPolygonFaceMaterials()
+{
+  string $shadingGroups[] = `ls -type shadingEngine`;
+  string $shadingGroup;
+  string $objs[];
+  string $obj;
+  string $foo[];
+  int $found = 0;
+  for ( $shadingGroup in $shadingGroups ) {
+    $objs = `sets -q $shadingGroup`;
+    for ( $obj in $objs ) {
+      if ( `gmatch $obj "*\.f\\[*]"` ) {
+	print("// Found a face assignment! : "+ $obj +", assigning "+ $shadingGroup +"\n");
+	//select -r $obj;
+	tokenize $obj "." $foo;
+	select -r $foo[0];
+	sets -e -forceElement $shadingGroup;
+	$found++;
+      }
+    }
+  }
+  if ($found == 0)
+    print("// No face assignments found. Move along.");
+}
+

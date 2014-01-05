@@ -1,0 +1,11 @@
+// v20070201 pinkwerks
+// launch an external xconfirm window
+// return the pid of the window (so you can kill it if need be)
+//
+
+global proc
+breakFileConfirmKill(int $pid)
+{
+	system("kill "+ $pid);
+}
+

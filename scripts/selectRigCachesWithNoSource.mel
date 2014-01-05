@@ -1,0 +1,25 @@
+// v20061208 pinkwerks
+global proc
+selectRigCachesWithNoSource()
+{
+	string $rcs[] = `ls -type rigCache`;
+	string $rc;
+	string $source;
+	string $dest[];
+	string $bads[];
+	int $i = 0;
+	for ( $rc in $rcs )
+	{
+		$source = `getAttr ($rc+".Source")`;	
+		if ( $source == "NOT AVAILABLE" )
+		{
+			$dest = `connectionInfo -dfs ($rc+".outputGeometry[0]")`;
+			if ( `size $dest` != 1 )
+				error("rigCache node "+ $rc +" has too many destinations!");
+			$dest[0] = `basenameEx $dest[0]`;
+			$bads[$i] = $dest[0];
+			$i++;
+		}
+	}
+	select $bads;
+}

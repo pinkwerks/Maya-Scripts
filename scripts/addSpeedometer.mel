@@ -1,0 +1,59 @@
+global proc
+addSpeedometer()
+{
+	string $expr = "";
+	string $objects[] = `ls -sl -fl`;
+
+	for ($object in $objects ) {
+		// Figure out how much time elapses in a single frame.
+		//
+		float $fps;
+		switch((string)`currentUnit -q -t`) {
+			case "film":
+				$fps = 24;
+				break;
+			case "pal":
+				$fps = 25;
+				break;
+			case "ntsc":
+				$fps = 30;
+				break;
+			default:
+				warning("Couldn't determin fps, using 24.");
+				$fps = 24;
+				break;
+		}
+
+		// Add the speedometer attributes and make them keyable so that they are
+		// visible in the Channel Box.
+		//
+		$attr = "speed";
+		if (!`attributeExists $attr $object`)
+			addAttr -ln $attr -at double -k yes $object;
+		$attr = "kph";
+		if (!`attributeExists $attr $object`)
+			addAttr -ln $attr -at double -k yes $object;
+		$attr = "mph";
+		if (!`attributeExists $attr $object`)
+			addAttr -ln $attr -at double -k yes $object;
+
+		// Define the expression to update the lastTranslate attributes.
+		//
+		$expr = (
+			"// Added by addSpeedometer.mel\n" +
+			"float $t = `currentTime -q`;\n" +
+			"float $fps = "+$fps+"; // seconds-per-frame\n" +
+			"float $last[] = `getAttr -time ($t-1) "+$object+".translate`;\n" +
+			"float $dx = tx - $last[0];\n" +
+			"float $dy = ty - $last[1];\n" +
+			"float $dz = tz - $last[2];\n" +
+			"float $dist = sqrt($dx*$dx+$dy*$dy+$dz*$dz);\n" +
+			"speed = $dist;\n" +
+			"kph = $dist * $fps * 3600 / 1e5;\n" +
+			"mph = kph / 1.609344\n" +
+			"\n");
+	}
+
+	expression -s $expr -o $object -name "speedExpression" -ae 0 -uc all;   
+}
+

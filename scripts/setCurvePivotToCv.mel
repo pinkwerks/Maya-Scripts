@@ -1,0 +1,19 @@
+global proc
+setCurvePivotToCv(string $position)
+{
+  string $sl[] = `ls -sl -l`;
+  if ( `size $sl` < 1 )
+    error("setCurvePivotToCv : select more than one curve!");
+  string $crv;
+  float $wsp[];
+  for ( $crv in $sl )
+  {
+    if ( `nodeType $crv` != "transform" )
+      {
+	warning("setCurvePivotToCv : "+$crv+" is not of type 'transform', skipping.");
+	continue;
+      }
+    $wsp = `pointPosition ($crv + ".cv["+$position+"]")`;
+    xform -ws -piv $wsp[0] $wsp[1] $wsp[2] $crv;
+  }
+}

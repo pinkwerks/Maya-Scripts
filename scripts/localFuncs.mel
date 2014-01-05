@@ -1,0 +1,189 @@
+global proc cart ()
+{
+    $verts = `ls "spine|group25|group*"`;
+    select -cl;
+    for ($v in $verts) {
+	$kids	= `listRelatives -c $v`;
+	$cart	= $kids[size($kids)-1];
+	select -add $cart;
+    }
+}
+
+global proc links ()
+{
+    select "bond|*|*|*|link*";
+    select -add "bond|*|*|*|outer_cell*";
+}
+
+global proc pods ()
+{
+    select "bond|*|*|*|inner_cell*";
+}
+
+global proc linkTex ()
+{
+	$emits = `ls -sl`;
+	for ($emit in $emits) {
+		connectAttr -f file5.outColor ($emit+".particleColor");
+	}
+}
+
+
+// For emitting color-textured particles from a surface.
+// Does convertSolidTx on projected texture, then hooks new u-v texture up
+// to emitter.  To use, select patch(es) which are emitting, then pass in
+// name of projection node to convert.
+//
+global proc colorEmit (string $proj)
+{
+    $surfs = `ls -sl`;
+    for ($surf in $surfs) {
+	string $children[] = `listRelatives $surf`;
+	string $emit;
+	if (size($children) > 1) {
+	    $emit = $children[1];
+	    if (nodeType($emit) != "pointEmitter") {
+		print("Skipping "+$surf+"\n");
+		continue;
+	    }
+	    $newFile = $surf+"_PTEX";
+	    print ($newFile+" --> "+$emit+"\n");
+	    if (size(`ls $newFile`) == 1) {
+		delete $newFile;
+	    }
+	    convertSolidTx -aa 0 -f 1 -n $newFile $proj $surf;
+	    string $fileName = `getAttr ($newFile+".fileTextureName")`;
+	    if (substring($fileName,1,1) == "/") {
+		$fileName = substring($fileName, 2, 1000);
+		setAttr -type "string" ($newFile+".fileTextureName") $fileName;
+	    }
+	    if (isConnected(($newFile+".outColor"),($emit+".particleColor")) == 0) {
+		connectAttr -f ($newFile+".outColor") ($emit+".particleColor");
+	    }
+	}
+    }
+}
+
+// Lists emitters and name of connected texture file.
+//    
+global proc listEmit ()
+{
+    $surfs = `ls -sl`;
+    for ($surf in $surfs) {
+	string $children[] = `listRelatives $surf`;
+	string $emit;
+	if (size($children) > 1) {
+	    $emit = $children[1];
+	    if (nodeType($emit) != "pointEmitter") {
+		print("Skipping "+$surf+"\n");
+		continue;
+	    }
+	    $newFile = `listConnections -d false -t file $emit`;
+	    string $fileName = `getAttr ($newFile[0]+".fileTextureName")`;
+	    print ($surf+" --> "+$emit+" --> "+$fileName+"\n");
+	}
+    }
+}
+
+// Connects emitters to appropriate texture file.  Naming is from
+// colorEmit() above.
+//
+global proc connectEmit ()
+{
+    $surfs = `ls -sl`;
+    for ($surf in $surfs) {
+	string $children[] = `listRelatives $surf`;
+	string $emit;
+	if (size($children) > 1) {
+	    $emit = $children[1];
+	    if (nodeType($emit) != "pointEmitter") {
+		print("Skipping "+$surf+"\n");
+		continue;
+	    }
+	    $newFile = $surf+"_PTEX";
+	    print ($newFile+" --> "+$emit+"\n");
+	    if (isConnected(($newFile+".outColor"),($emit+".particleColor")) == 0) {
+		connectAttr -f ($newFile+".outColor") ($emit+".particleColor");
+	    }
+	}
+    }
+}
+
+// Creates a particle object for each selected surface, and parents
+// them appropriately.  For "man made of particles" technique.
+//
+global proc makeParts()
+{
+    $surfs = `ls -sl`;
+    string $surf;
+    for ($surf in $surfs) {
+	string $children[] = `listRelatives $surf`;
+	string $emit;
+	if (size($children) > 1) {
+	    $emit = $children[1];
+	    if (nodeType($emit) != "pointEmitter") {
+		print("Skipping "+$surf+"\n");
+		continue;
+	    }
+	    string $base[];
+	    tokenize($surf, "|", $base);
+	    $newPart = $base[0]+"PART";
+	    $newShape = $newPart+"Shape";
+	    particle -n $newPart;
+	    setAttr ($newPart+".startFrame") 0;
+	    addAttr -ln "rgbPP" -dt vectorArray $newShape;
+	    addAttr -ln "rgbPP0" -dt vectorArray $newShape;
+	    addAttr -ln "opacityPP" -dt doubleArray $newShape;
+	    addAttr -ln "opacityPP0" -dt doubleArray $newShape;
+	    $parent = `listRelatives -p $surf`;
+	    parent -r $newPart $parent;
+	    connectDynamic -em $emit $newPart;
+	}
+    }
+}
+
+// Copies particle rules from selected particleShape to all shapes named
+// *PARTShape.  For use with multiple particle objects created by
+// makeParts() above.
+//
+global proc copyRules(string $suffix)
+{
+    $sel = `ls -sl`;
+    string $genPart = $sel[0];
+    string $genCRule = `dynExpression -q -c $genPart`;
+    string $genRRule = `dynExpression -q -r $genPart`;
+    $parts = `ls ("*PART"+$suffix+"Shape")`;
+    for ($part in $parts) {
+	string $cRule = gsub($genPart, $genCRule, $part);
+	string $rRule = gsub($genPart, $genRRule, $part);
+	dynExpression -r -s $rRule $part;
+	dynExpression -c -s $cRule $part;
+    }
+}
+
+global proc makeShit()
+{
+    $sel = `ls -sl`;
+    for ($node in $sel) {
+	$p = `listRelatives -p $node`;
+	print("parent -r "+$node+" "+$p[0]+";\n");
+    }
+}
+
+// Runs convertSolidTx over a framerange.  To use, select texture, then
+// surface (just like convertSolidTx()).
+//
+global proc freezeTex (int $fs, int $fe)
+{
+    $sel = `ls -sl`;
+    $tex = $sel[0];
+    $surf = $sel[1];
+    $f = $fs;
+    while ($f <= $fe) {
+	currentTime $f;
+	$newFile = $tex+"_"+$surf+"."+$f+".iff";
+	print($newFile+"\n");
+	convertSolidTx -aa 0 -f 1 -fin $newFile -rx 512 -ry 512 $tex $surf;
+	$f = $f + 1;
+    }
+}

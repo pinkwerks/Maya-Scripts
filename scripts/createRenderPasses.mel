@@ -1,0 +1,97 @@
+global proc createRenderPasses()
+{
+	float $version = `getApplicationVersionAsFloat`;
+	string $pass;
+	string $ml = `getenv MAYA_LOCATION`;
+	string $presets = ($ml+"/presets/attrPresets/renderPass");
+
+	$name = "MotionVector2D";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass ($presets+"/2DMotionVector.mel") 1;
+		if ( $version >= 2011 )
+			setAttr ($pass+".colorProfile") 2;
+		rename $pass $name;
+	}
+
+	$name = "Depth";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass ($presets+"/cameraDepth.mel") 1;
+		if ( $version >= 2011 )
+			setAttr ($pass+".colorProfile") 2;
+		rename $pass $name;
+	}
+
+	$name = "Diffuse";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass ($presets+"/diffuse.mel") 1;
+		if ( $version >= 2011 )
+			setAttr ($pass+".colorProfile") 2;
+		rename $pass $name;
+	}
+
+	$name = "Incandescence";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass ($presets+"/incandescence.mel") 1;
+		if ( $version >= 2011 )
+			setAttr ($pass+".colorProfile") 2;
+		rename $pass $name;
+	}
+	$name = "Indirect";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass ($presets+"/indirect.mel") 1;
+		if ( $version >= 2011 )
+			setAttr ($pass+".colorProfile") 2;
+		rename $pass $name;
+	}
+
+	$name = "Reflection";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass ($presets+"/reflection.mel") 1;
+		if ( $version >= 2011 )
+			setAttr ($pass+".colorProfile") 2;
+		rename $pass $name;
+	}
+
+	$name = "Refraction";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass ($presets+"/refraction.mel") 1;
+		if ( $version >= 2011 )
+			setAttr ($pass+".colorProfile") 2;
+		rename $pass $name;
+	}
+
+	$name = "Specular";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass ($presets+"/specular.mel") 1;
+		if ( $version >= 2011 )
+			setAttr ($pass+".colorProfile") 2;
+		rename $pass $name;
+	}
+
+	$name = "Translucence";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass ($presets+"/translucence.mel") 1;
+		if ( $version >= 2011 )
+			setAttr ($pass+".colorProfile") 2;
+		rename $pass $name;
+	}
+
+	$name = "IncidenceNM";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass ($presets+"/incidenceCamNormMaterial.mel") 1;
+		if ( $version >= 2011 )
+			setAttr ($pass+".colorProfile") 2;
+		rename $pass $name;
+	}
+}
+

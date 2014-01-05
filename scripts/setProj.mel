@@ -1,0 +1,5 @@
+//This script will set the project to the same directory that it is currently residing.  Good to read if there is a workspace.mel file there.
+
+global proc setProj() 
+{ 
+string $filePath;$filePath = `file -q -sn`;string $rootDir = dirname($filePath);setProject $rootDir;}

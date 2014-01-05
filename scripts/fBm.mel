@@ -1,0 +1,25 @@
+// fBm [0:1], v20070420 pink
+
+global proc float
+fBm(vector $p, float $oct, float $lac, float $gain)
+{
+	float $amp = 1.0;
+	float $sum = 0.0;
+	float $max = 0.0;
+	int $i;
+	for ( $i = 0; $i < $oct; $i++ )
+	{
+		$sum += $amp * noise($p);
+		$max += $amp; 
+		$amp *= $gain;
+		$p = <<
+			$p.x * $lac + 1,
+			$p.y * $lac + 1,
+			$p.z * $lac + 1
+			>>;
+	}
+	if ( $sum != 0.0 )
+		return $sum/$max;
+	else
+		return 0.0;
+}

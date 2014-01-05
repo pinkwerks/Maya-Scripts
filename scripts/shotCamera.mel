@@ -1,0 +1,12 @@
+global proc shotCamera()
+{
+	string $cams[] = `camera -focalLength 50 -lensSqueezeRatio 1 -cameraScale 1 
+		-horizontalFilmAperture .980 -verticalFilmAperture 0.744
+		-filmFit "Vertical" -shutterAngle 180 -nearClipPlane 0.1 
+		-farClipPlane 10000 -name shotCam`;
+	string $cam = `rename $cams[0] shotCam`;
+	setAttr ($cam +".renderable") 1;
+	setAttr ($cam +".displayFilmGate") 1;
+	setAttr ($cam +".displayResolution") 1;
+}
+

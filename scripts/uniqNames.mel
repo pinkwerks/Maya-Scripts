@@ -1,0 +1,46 @@
+// v20061208 pinkwerks
+// ensure all transform nodes have a uniq name.
+global proc
+uniqNames()
+{
+	string $geos[] = `ls -tr`;
+	string $geo;
+	string $clashes[];
+	string $clash;
+	string $buffer[];
+	string $names[];
+	string $name;
+	int $i = 0;
+	int $j = 0;
+	int $k = 0;
+	int $bsize = 0;
+	string $fucks[];
+	print("// Searching for name clashes...");
+	for ( $geo in $geos )
+	{
+		tokenize $geo "|" $buffer;
+		$bsize = `size $buffer`;
+		$geo = $buffer[$bsize-1];
+		if ( catchQuiet(`select $geo`) )
+		{
+			$clashes[$i] = $geo;	
+			$i++;
+		}
+	}
+	print("// Removing duplicates...");
+	$clashes = stringArrayRemoveDuplicates($clashes);
+	for ( $clash in $clashes )
+	{
+		$fucks = `ls ("*"+ $clash)`;	
+		$j = 0;
+		for ( $fuck in $fucks )
+		{
+			select $fuck;
+			rename ($clash+"_"+$j);
+			$j++;
+			$k++;
+		}
+	}
+	warning("Renamed "+ $k +" nodes");
+}
+

@@ -1,0 +1,44 @@
+//========================================================
+//
+// url.mel
+// 
+// author : pink
+// notes : requires `wget`
+//
+//========================================================
+global proc string[]
+url(string $mode, string $url)
+{
+  // Configure 'wget' and ensure the url is quoted.
+  string $wget = ("wget -q -O - '" + $url + "'");
+  string $contents[];
+  int $pipe;
+  if ( $mode == "read" )
+      $pipe = popen($wget, "r");
+  else if ( $mode == "write" )
+      $pipe = popen($wget, "w");
+  else if ( $mode != "swrite" )
+      error("url : Bade mode '" + $mode + "'.");
+
+  if ( $pipe == 0 && $mode != "swrite" )
+      error("readURL : Failed to open " + $wget + " for " + $mode + ".");
+
+  if ( $mode == "read" )
+    {
+      while ( feof($pipe) == 0 )
+	  $contents[size($contents)] = fgetline($pipe);
+    }
+  else if ( $mode == "write" )
+    {
+      fprint $pipe $wget;
+    }
+  else if ( $mode == "swrite" )
+    {
+      print("// Simulated write.\n");
+      print ("// url : " + $wget + "\n");
+    }
+
+  if ( $mode == "read" || $mode == "write" )
+    pclose($pipe);
+  return $contents;
+}

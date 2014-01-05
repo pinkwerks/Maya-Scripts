@@ -1,0 +1,57 @@
+global proc displaceDControlsColor( string $nodeName )
+{
+	string	$attr = $nodeName + ".colorAs";
+	int	$rebuildTypeValue = `getAttr $attr`;
+	print $nodeName;
+	if($rebuildTypeValue == 0) { 
+		editorTemplate -dimControl $nodeName "colorOffset" true;
+		editorTemplate -dimControl $nodeName "colorMultiply" true;
+		editorTemplate -dimControl $nodeName "rgbOrder" true;
+	}else if($rebuildTypeValue == 1) { 
+		editorTemplate -dimControl $nodeName "colorOffset" false;
+		editorTemplate -dimControl $nodeName "colorMultiply" false;
+		editorTemplate -dimControl $nodeName "rgbOrder" false;
+	}
+}
+
+global proc AEdisplaceDTemplate ( string $nodeName )
+{
+	editorTemplate -beginScrollLayout;
+		editorTemplate -label "Strength" -addControl "strength";
+		
+		/* Color */
+		editorTemplate -beginLayout "Color" -collapse 0;
+		
+		editorTemplate -label "Color1" -addControl "color1";
+		editorTemplate -label "Color As" -addControl "colorAs" displaceDControlsColor;
+		editorTemplate -label "Color Offset" -addControl "colorOffset";
+		editorTemplate -label "Color Multiply" -addControl "colorMultiply";
+		editorTemplate -label "RGB Order" -addControl "rgbOrder";
+			
+		editorTemplate -endLayout;
+		
+		/* Direction */
+		editorTemplate -beginLayout "Direction" -collapse 0;
+		
+		editorTemplate -label "displace Direction" -addControl "displaceDirection";
+		editorTemplate -label "Use Normal" -addControl "useNormal";
+		
+		
+		editorTemplate -endLayout;
+		
+		/* Coordinate */
+		editorTemplate -beginLayout "Coordinate" -collapse 0;
+		
+		editorTemplate -label "point Space" -addControl "pointSpace";
+		editorTemplate -label "Use UV" -addControl "useUV";
+		
+		// suppress these attributes
+		editorTemplate -suppress "input";
+		
+	editorTemplate -endLayout;
+	
+	AEgeometryFilterCommon $nodeName;
+	
+	editorTemplate -addExtraControls;
+	editorTemplate -endScrollLayout;
+}

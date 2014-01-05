@@ -1,0 +1,58 @@
+//
+// nodeName.mel v20070110 pink
+// 
+// usage: nodeName [base name]
+//
+// notes:
+//	if [base name] is '_GUI' the gui is brought up.
+//
+//	`nodeName shit` on seven selected nodes would 
+//	name those nodes: shit1, shit2, ..., shit7.
+
+proc 
+nodeNameEngine(string $nameBase)
+{
+	//waitCursor -state on;
+//	int $i = 1;
+	string $objs[] = `ls -sl -l -fl`;
+	string $nodeType;
+	string $kids[];
+	string $kid;
+	string $kidNodeType;
+	for ($obj in $objs) {
+		$nodeType = `nodeType $obj`;
+		$kids = `listRelatives -f $obj`;
+
+/*
+		for ($kid in $kids) {
+			$kidNodeType = `nodeType $kid`;
+			catch(`rename $kid ($nameBase+"_"+$kidNodeType)`);
+		}
+*/
+
+		if ($nodeType == "shadingEngine")
+			$nodeType = "SG";
+
+		catch(`rename $obj ($nameBase+"_"+$nodeType)`);
+	}
+	//waitCursor -state off;
+}
+
+proc string
+createUI()
+{
+    $x = `promptDialog -message "Enter base name:" -button "OK" -button "Cancel"
+        -defaultButton "OK" -cancelButton "Cancel" -dismissString "Cancel"`;
+
+    if ($x == "Cancel") return "_CANCEL";
+
+    return `promptDialog -q -tx`;
+}
+
+global proc 
+nodeName(string $nameBase)
+{
+    if ($nameBase == "_GUI") $nameBase = createUI();
+    if ($nameBase != "_CANCEL") nodeNameEngine $nameBase;
+}
+

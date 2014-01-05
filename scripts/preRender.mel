@@ -1,0 +1,52 @@
+// vim:ts=4:sw=4
+proc string[]
+lsMelScripts(string $dir)
+{
+	string $result = system("cd "+$dir+"; ls -1 *.mel");
+	string $return[];
+	tokenizeList $result $return;
+	return $return;
+}
+
+proc sourcePipelineMelScripts()
+{
+	string $hookDir = "//cg/maya/scripts/Pipeline";
+	string $melScripts[] = lsMelScripts($hookDir);
+	string $script;
+	for ( $script in $melScripts ) {
+		print("// INFO : preRender() : sourcing "+$hookDir+"/"+$script);
+//		source ($hookDir+"/"+$script);
+	}
+}
+
+proc gamma1()
+{
+	warning("PINKWERKS : preRender::gamma1 : Setting all mia_exposure_simple nodes to gamma 1");
+	warning("PINKWERKS : preRender::gamma1 : Setting all mia_exposure_simple nodes to compression 0");
+	string $mes[] = `ls -typ mia_exposure_simple`;
+	string $m;
+	for ( $m in $mes ) {
+		setAttr ($m+".gamma") 1;
+		setAttr ($m+".compression") 0;
+	}
+
+	warning("PINKWERKS : preRender::gamma1 : Setting all LB_lensGamma nodes to gamma 1");
+	$mes = `ls -typ LB_lensGamma`;
+	for ( $m in $mes ) {
+		setAttr ($m+".enable") 0;
+	}
+}
+
+global proc
+preRender()
+{
+	warning("PINKWERKS : executing preRender.mel");
+	gamma1;
+	prepRender;
+// this caused problems, and fixed others...
+//	dgdirty -a;
+
+// XXX : causes - Error: Unable to modify overrides to the default layer.
+	python("execfile('/pinkwerks/cg/maya/scripts/hideImagePlanes.py')");
+}
+

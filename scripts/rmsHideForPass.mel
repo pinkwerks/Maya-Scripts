@@ -1,0 +1,12 @@
+// example : rmsHideForPass({"Final"});
+global proc
+rmsHideForPass(string $passes[])
+{
+	string $out;
+	string $pass;
+	for ($pass in $passes) {
+		$out += ("RiIfBegin \"$Option:user:pass_class == '"+$pass+"'\"; RiAttribute \"visibility\" \"int camera\" 0; RiIfEnd;");
+	}
+	eval($out);
+}
+

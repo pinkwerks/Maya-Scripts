@@ -1,0 +1,47 @@
+// v20060627 pinkwerks
+//
+// Copies particle rules from last selected particleShape to all others
+//
+
+global proc
+copyParticleRules()
+{
+    string $selected[] = `ls -sl -l`;
+    string $fromParts = $selected[`size $selected` - 1]; // last thing in array
+	string $fromPartShapes[] = `ls -sl`;
+	string $fromPartShape = $fromPartShapes[0]; // MEL is lamerz
+	if ( `nodeType $fromPartShape` != "particle" )
+		error($fromPartShape + " is not of type particle!  Maybe you need to `pickWalk -d down`?");
+    string $fromCreateRule = `dynExpression -q -c $fromPartShape`;
+    string $fromRunRuleBD = `dynExpression -q -rbd $fromPartShape`;
+    string $fromRunRuleAD = `dynExpression -q -rad $fromPartShape`;
+
+//	print ("// Creation : \n"+ $fromCreateRule +"\n");
+//	print ("// Runtime : \n"+ $fromRunRuleBD +"\n");
+//	print ("// Runtime : \n"+ $fromRunRuleAD +"\n");
+
+	int $i = 1;
+	while ( $i < `size $selected` )
+	{
+		string $toPartShape = $selected[$i];
+		if ( `nodeType $fromPartShape` != "particle" )
+			warning($toPartShape + " is not of type particle!  Skipping.");
+
+//		print ("// FromShape = "+ $fromPartShape+"\n");
+//		print ("// ToShape = "+ $toPartShape+"\n");
+
+        string $createRule = substitute($fromCreateRule,
+								("s/"+$fromPartShape+"/"+$toPartShape+"/g"));
+        string $runBDRule = substitute($fromRunRuleBD,
+								("s/"+$fromPartShape+"/"+$toPartShape+"/g"));
+        string $runADRule = substitute($fromRunRuleAD,
+								("s/"+$fromPartShape+"/"+$toPartShape+"/g"));
+		print ("// New Creation Rule :\n"+ $createRule +"\n");
+		print ("// New RuntimeBD Rule :\n"+ $runBDRule +"\n");
+		print ("// New RuntimeAD Rule :\n"+ $runADRule +"\n");
+		dynExpression -c -s $createRule $toPartShape;
+		dynExpression -c -s $createRule $toPartShape;
+		$i++;
+	}
+    print "Particle Rules copied.\n";
+}

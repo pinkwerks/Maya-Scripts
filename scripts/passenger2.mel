@@ -1,0 +1,284 @@
+global proc passenger2Engine(
+    string $leader,
+    string $srcA,
+    string $srcD,
+    float $delay,
+    float $amt,
+    float $offset,
+    float $xoff,
+    float $yoff,
+    float $zoff,
+    float $freq,
+    float $namp,
+    float $ramp,
+    float $xmask,
+    float $ymask,
+    float $zmask,
+    string $extraMath,
+    int $addSeed
+) {
+    string $unit = `currentUnit -q`;
+    string $exp = "";
+    string $obj;
+
+    string $objs[] = `ls -sl -fl -l`;
+
+    int $sobjs = `size $objs`;
+
+    int $i = 0;
+
+    if ( $unit != "cm" ) {
+	currentUnit -l cm;
+	warning("Changing units to centimeters.");
+    }
+
+    if ( !`attributeExists "passenger_delay" $leader` ) {
+	addAttr -ln passenger_delay -at double $leader;
+	setAttr -e -keyable true ($leader + ".passenger_delay");
+    }
+    setAttr ($leader + ".passenger_delay") $delay;
+
+    if ( !`attributeExists "passenger_offset" $leader` ) {
+	addAttr -ln passenger_offset -at double $leader;
+	setAttr -e -keyable true ($leader + ".passenger_offset");
+    }
+    setAttr ($leader + ".passenger_offset") $offset;
+
+    if ( !`attributeExists "passenger_amp" $leader` ) {
+	addAttr -ln passenger_amp -at double $leader;
+	setAttr -e -keyable true ($leader + ".passenger_amp");
+    }
+    setAttr ($leader + ".passenger_amp") $amt;
+
+    if ( !`attributeExists "passenger_xoff" $leader` ) {
+	addAttr -ln passenger_xoff -at double $leader;
+	setAttr -e -keyable true ($leader + ".passenger_xoff");
+    }
+    setAttr ($leader + ".passenger_xoff") $xoff;
+
+    if ( !`attributeExists "passenger_yoff" $leader` ) {
+	addAttr -ln passenger_yoff -at double $leader;
+	setAttr -e -keyable true ($leader + ".passenger_yoff");
+    }
+    setAttr ($leader + ".passenger_yoff") $yoff;
+
+    if ( !`attributeExists "passenger_zoff" $leader` ) {
+	addAttr -ln passenger_zoff -at double $leader;
+	setAttr -e -keyable true ($leader + ".passenger_zoff");
+    }
+    setAttr ($leader + ".passenger_zoff") $zoff;
+
+    if ( !`attributeExists "passenger_freq" $leader` ) {
+	addAttr -ln passenger_freq -at double $leader;
+	setAttr -e -keyable true ($leader + ".passenger_freq");
+    }
+    setAttr ($leader + ".passenger_freq") $freq;
+
+    if ( !`attributeExists "passenger_noise_amp" $leader` ) {
+	addAttr -ln passenger_noise_amp -at double $leader;
+	setAttr -e -keyable true ($leader + ".passenger_noise_amp");
+    }
+    setAttr ($leader + ".passenger_noise_amp") $namp;
+
+    if ( !`attributeExists "passenger_rand_amp" $leader` ) {
+	addAttr -ln passenger_rand_amp -at double $leader;
+	setAttr -e -keyable true ($leader + ".passenger_rand_amp");
+    }
+    setAttr ($leader + ".passenger_rand_amp") $ramp;
+
+    if ( !`attributeExists "passenger_xmask" $leader` ) {
+	addAttr -ln passenger_xmask -at double $leader;
+	setAttr -e -keyable true ($leader + ".passenger_xmask");
+    }
+    setAttr ($leader + ".passenger_xmask") $xmask;
+
+    if ( !`attributeExists "passenger_ymask" $leader` ) {
+	addAttr -ln passenger_ymask -at double $leader;
+	setAttr -e -keyable true ($leader + ".passenger_ymask");
+    }
+    setAttr ($leader + ".passenger_ymask") $ymask;
+
+    if ( !`attributeExists "passenger_zmask" $leader` ) {
+	addAttr -ln passenger_zmask -at double $leader;
+	setAttr -e -keyable true ($leader + ".passenger_zmask");
+    }
+    setAttr ($leader + ".passenger_zmask") $zmask;
+
+    // check leader
+    string $type = "";
+    string $connections[] = `listConnections -d off ($leader+"."+$srcA)`;
+
+    if ( `size $connections` == 1 )
+    	$type = `nodeType $connections[0]`;
+
+    if ( $type == "" )
+    	error("passenger : driver has no keyframes/expression!");
+
+    if ( $type == "expression" )
+	$isexp = 1;
+
+    // do the work
+    for ( $obj in $objs ) {
+		// reach end of loop, don't act on the last selected object
+		if ( $i == $sobjs - 1 )
+			break;
+
+		// initialize this bitch.
+			$exp = "";
+		/*
+		$exp += ("vector $p = <<\n\t");
+		$exp += ($obj+".tx * "+$leader+".passenger_xmask + "+$leader+".passenger_xoff, \n\t");
+		$exp += ($obj+".ty * "+$leader+".passenger_ymask + "+$leader+".passenger_yoff, \n\t");
+		$exp += ($obj+".tz * "+$leader+".passenger_zmask + "+$leader+".passenger_zoff \n");
+		$exp += (">>;\n");
+		*/
+		$exp += ("vector $p = <<\n\t");
+		$exp += ("1,1,1>>;\n");
+
+		// noise
+		$exp += ("float $n = noise(vMult($p, vector("+$leader+".passenger_freq)));\n");
+
+		// source attribute is controlled by expression
+		if ( $isexp )
+			$exp += ("float $val = `getAttr "+$leader+"."+$srcA+"`;\n");
+		else {
+			$exp += ("float $f = frame - ("+$leader+".passenger_delay * "+ ($i+1/* index */) +") - "+$leader+".passenger_offset;\n");
+			$exp += ("float $v[] = `keyframe -at "+$srcA+" -t $f -q -eval "+$leader+"`;\n");
+			$exp += ("float $val = $v[0];\n");
+		}
+
+		if ( $addSeed ) {
+	/*	    $exp += ("seed("+ ($i+1) +"*987654321);\n");*/
+			$exp += ("seed("+$i+");\n");
+			$exp += ("float $r = rand(-1, 1) * .5;\n");
+		} else {
+			float $R = rand(-0.5, 0.5);
+			$exp += ("float $r = rand(-0.5, 0.5);\n");
+		}
+
+		$exp += ("$r *= "+$leader+".passenger_rand_amp;\n");
+
+		if ( $extraMath == "" )
+			$extraMath = "* 1";
+
+		$exp += ($srcD + " = ($val + $val * (($r * "+$leader+".passenger_rand_amp) + ($n * "+$leader+".passenger_noise_amp)) "+$extraMath+") * "+$leader+".passenger_amp;\n");
+
+		expression -n ($leader + "_passenger") -s $exp -o $obj -ae 1 -uc all;
+
+		$i++;
+    }
+
+    if ( $unit != "cm" )
+		currentUnit -l $unit;
+}
+
+global proc
+passenger2Prep()
+{
+    /* grab the values from the UI and call the engine */
+    string $sel[] = `ls -sl -fl -l`;
+    string $leader;
+    if ( `size $sel` != 0 ) {
+	$leader = $sel[`size $sel` - 1];
+    } else {
+    	error("passenger2 : Select one or more objects to be affected, then select a driver.");
+    }
+
+    // see if we need to add some seed() code for calling random, etc.
+    int $addSeed = `checkBox -q -v seed`;
+
+    string $srcA = `textFieldGrp -q -tx srcA`; 
+    string $srcD = `textFieldGrp -q -tx srcD`; 
+    float $amt = `floatFieldGrp -q -v1 amt`;
+    float $offset = `floatFieldGrp -q -v1 offset`;
+    float $delay = `floatFieldGrp -q -v1 delay`;
+    float $xoff = `floatFieldGrp -q -v1 xoff`;
+    float $yoff = `floatFieldGrp -q -v1 yoff`;
+    float $zoff = `floatFieldGrp -q -v1 zoff`;
+    float $freq = `floatFieldGrp -q -v1 freq`;
+    float $namp = `floatFieldGrp -q -v1 amp`;
+    float $ramp = `floatFieldGrp -q -v1 ramp`;
+    float $xmask = `floatFieldGrp -q -v1 xmask`;
+    float $ymask = `floatFieldGrp -q -v1 ymask`;
+    float $zmask = `floatFieldGrp -q -v1 zmask`;
+    string $extraMath = `textFieldGrp -q -tx extraMath`; 
+
+    if ( $srcA == "" )
+    	error("Please specify a source attribute!");
+
+    if ( $srcD == "" )
+    	error("Please specify a destination attribute!");
+
+    print(
+	"passenger2Engine "
+	+"\""+$leader+"\" "
+	+"\""+$srcA+"\" "
+	+"\""+$srcD+"\" "
+	+"\""+$delay+"\" "
+	+"\""+$amt+"\" "
+	+"\""+$offset+"\" "
+	+"\""+$xoff+"\" "
+	+"\""+$yoff+"\" "
+	+"\""+$zoff+"\" "
+	+"\""+$freq+"\" "
+	+"\""+$namp+"\" "
+	+"\""+$ramp+"\" "
+	+"\""+$xmask+"\" "
+	+"\""+$ymask+"\" "
+	+"\""+$zmask+"\" "
+	+"\""+$extraMath+"\" "
+	+"\""+$addSeed+"\" "
+	+"\n"
+    );
+
+    passenger2Engine($leader, $srcA, $srcD, $delay, $amt, $offset, $xoff, $yoff, $zoff, $freq, $namp, $ramp, $xmask, $ymask, $zmask, $extraMath, $addSeed);
+}
+
+global proc passenger2 () {
+    string $procName = "passenger2";
+
+    if ( `window -exists $procName` ) {
+        showWindow $procName;
+        return;
+    }
+
+    window -rtf on -ret -t $procName $procName;
+
+    columnLayout ;
+
+    textFieldGrp -label "Source Attribute" srcA;
+
+    textFieldGrp -label "Destination Attribute" srcD;
+
+    floatFieldGrp -v1 2 -label "Delay Spacing" delay;
+    floatFieldGrp -v1 1 -label "Total Amount" amt;
+    floatFieldGrp -v1 0 -label "Timing Offset" offset;
+    floatFieldGrp -v1 0 -label "X Offset" xoff;
+    floatFieldGrp -v1 0 -label "Y Offset" yoff;
+    floatFieldGrp -v1 0 -label "Z Offset" zoff;
+    floatFieldGrp -v1 1 -label "Freq Variance" freq;
+    floatFieldGrp -v1 0 -label "Amplitude" amp;
+    floatFieldGrp -v1 0 -label "Rand Amplitude" ramp;
+    floatFieldGrp -v1 1 -label "X Mask" xmask;
+    floatFieldGrp -v1 1 -label "Y Mask" ymask;
+    floatFieldGrp -v1 1 -label "Z Mask" zmask;
+
+    textFieldGrp -label "Extra math" extraMath;
+
+    checkBox -al "right" -l "Add seed()" seed;
+
+    rowLayout -numberOfColumns 3
+    	-columnAlign  1 "center"
+    	-columnAlign  2 "center"
+    	-columnAlign  3 "center"
+    	-columnAttach 1 "both" 	0
+    	-columnAttach 2 "both"  0
+    	-columnAttach 3 "both"  0
+    ;
+
+    button -label "Apply" -c passenger2Prep;
+    button -label "Hide" -c ("window -e -vis 0 " + $procName);
+    button -label "Close" -c ("deleteUI -wnd " + $procName);
+
+    showWindow $procName;
+}

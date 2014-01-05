@@ -1,0 +1,25 @@
+global proc
+selectSpherical(float $radius, vector $center)
+{
+    float $wsp[];
+    float $px = 0;
+    float $py = 0;
+    float $pz = 0;
+
+    string $obj;
+    string $objs[] = `ls -sl -fl -l`;
+    float $sobjs = `size $objs`;
+
+    select -cl;
+
+    for ($obj in $objs)
+    {
+	$wsp = `xform -q -ws -t $obj`;
+	$px = $wsp[0];
+	$py = $wsp[1];
+	$pz = $wsp[2];
+
+	if ( length($center, <<$px, $py, $pz>>) <= $radius )
+		select -add $obj;
+    }
+}	

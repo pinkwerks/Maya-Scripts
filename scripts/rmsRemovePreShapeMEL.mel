@@ -1,0 +1,12 @@
+// v20080505 pink
+global proc
+rmsRemovePreShapeMEL()
+{
+	string $objs[] = `ls -l -sl`;
+	string $obj;
+	for ($obj in $objs) {
+		catch(`deleteAttr ($obj+".rman__torattr___preShapeScript")`);
+	}
+	rmanUpdateAE;
+}
+

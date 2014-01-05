@@ -1,0 +1,83 @@
+global proc
+applyAttributes()
+{
+    string $dataType = `optionMenuGrp -q -v dataType`;
+    string $name = `textFieldGrp -q -tx attrName`;
+
+    print("addAttributesEngine"+" "+$name+" "+$dataType+";\n");
+    addAttributesEngine $name $dataType;
+}
+
+global proc
+addAttributes()
+{
+    string $procName = "addAttributes";
+    if ( `window -exists $procName` ) {
+        showWindow $procName;
+        return;
+    }
+
+    window -rtf on -ret -t "Attributes" $procName;
+
+    columnLayout;
+
+    optionMenuGrp -label "Data Type" dataType;
+	menuItem -label "Integer";
+	menuItem -label "Float";
+	menuItem -label "Vector";
+	menuItem -label "String";
+
+    textFieldGrp -label "Attribute Name" -text "rmanF" attrName;
+
+    button -label "Apply Attributes" -c "applyAttributes";
+    button -label "Undo" -c "undo";
+    button -label "Close" -c ("window -e -vis 0 "+$procName);
+
+    showWindow $procName;
+}
+
+global proc addAttributesEngine(string $name, string $type)
+{
+    $surfs = `ls -sl`;
+    string $surf;
+    string $Type;
+    int $i = 1;
+
+    if ( $type == "Integer" ) {
+      $Type = "long";
+    } else if ( $type == "Float" ) {
+      $Type = "double";
+    } else if ( $type == "Vector" ) {
+      $Type = "double3";
+    } else if ( $type == "String" ) {
+      $Type = "string";
+    }
+
+    for ($surf in $surfs) {
+		//print("addAttr -ln "+$name+" -at "+$Type+" "+$surf+";\n");
+		catch(`addAttr -ln $name -at $Type $surf`);
+		if ( $type == "Vector" ) {
+			//print("addAttr -ln "+$name+"X -at double -p "+$name+" "+$surf+";\n");
+			catch(`addAttr -ln ($name+"X") -at double -p $name $surf`);
+			catch(`addAttr -ln ($name+"Y") -at double -p $name $surf`);
+			catch(`addAttr -ln ($name+"Z") -at double -p $name $surf`);
+		}
+		setAttr -e -keyable true ($surf+"."+$name);
+		if ( $type == "Vector" ) {
+			setAttr -e -keyable true ($surf+"."+$name+"X");
+			setAttr -e -keyable true ($surf+"."+$name+"Y");
+			setAttr -e -keyable true ($surf+"."+$name+"Z");
+		}
+		if ( $type == "Vector" ) {
+			setAttr ($surf+"."+$name+"X") $i;
+			$i++;
+			setAttr ($surf+"."+$name+"Y") $i;
+			$i++;
+			setAttr ($surf+"."+$name+"Z") $i;
+			$i++;
+		} else {
+			setAttr ($surf+"."+$name) $i;
+			$i++;
+		}
+    }
+}

@@ -1,0 +1,31 @@
+global proc 
+multiPoly2Subd()
+{
+    select -hi;
+
+    int $count = 1;
+    string $polyShapePath[];
+    string $parentShape[] = `ls -sl -l -type mesh`;
+    
+	for ($polyShape in $parentShape) {
+
+	    string	$polyTransTemp[] = `listRelatives -p -f $polyShape`;
+	    string $polyTrans = $polyTransTemp[0];
+
+ 	    string $subdShapeReturn[] = `polyToSubdiv -ap 0 -ch off -aut on  -maxPolyCount 10000  -maxEdgesPerVert 32 $polyShape`;
+	    string $subdShape = $subdShapeReturn[0];
+
+	    delete $polyShape;
+	    $numTokens = `tokenize ($polyShape) "|" $polyShapePath`;
+	    //print $polyShapePath[$numTokens - 1];
+	    rename $subdShape $polyShapePath[$numTokens - 1];
+	    print ($count + " : " + $subdShape + " -> " + $polyShapePath[$numTokens -1] + "\n");
+
+	    //string	$subdTransTemp[] = `listRelatives -p -f $subdShape`;
+	    //string $subdTrans = $subdTransTemp[0];
+	    //rename $subdTrans $polyTrans;
+	    //print ($polyTrans + " -> " + $subdTrans + "\n");
+	    //print ($subdShape + "\n");
+	    $count ++;
+	}
+}

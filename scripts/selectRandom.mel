@@ -1,0 +1,31 @@
+global proc selectRandom(float $threshold)
+{
+  string $sel[] = `ls -sl -l -fl`;
+  float $ssel = `size $sel`;
+  string $newSel[];
+  int $i = 0;
+  int $j = 0;
+  while ($i < $ssel) {
+    if ( rand(1) >= (1 - $threshold) ) {
+      $newSel[$j] = $sel[$i];
+      $j++;
+    }
+    $i++;
+  }
+  select $newSel;
+}
+
+global proc selectRandomUpdate(string $control)
+{
+  float $v = `floatSliderGrp -q -v $control`;
+  selectRandom($v/100);
+}
+
+global proc selectRandomUI()
+{
+  string $window = `window -title "Select Random"`;
+  columnLayout;
+  string $fsg = `floatSliderGrp -label "Percentage to keep" -field true -v 100`;
+  floatSliderGrp -e -cc ("selectRandomUpdate "+ $fsg) $fsg;
+  showWindow $window;
+}

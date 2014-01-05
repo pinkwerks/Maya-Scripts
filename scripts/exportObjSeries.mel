@@ -1,0 +1,59 @@
+// exportObjSeries - export a series of OBJ files
+// Author:  pink
+// Name:	exportSeries.mel
+// Usage:	exportSeries <name> <fs> <fe> 
+// will write out name.1, name.2, ...., name.10
+
+proc
+exportObjSeriesEngine(string $name, int $start, int $end)
+{
+	int $loaded = `pluginInfo -q -l objExport`;
+	if (!$loaded) {
+		loadPlugin objExport;
+	}
+	int $i;
+	float $ct = `currentTime -q`;
+	string $dir = `workspace -q -act`;
+	string $dest;
+	for ($i = $start; $i <= $end; $i++) {
+			currentTime $i;
+			$dest = $dir+"/data/"+$name+"."+$i+".obj";
+			$d = $dir+"/data/";
+			if (`filetest -e $dest` != 1) {
+				file -es -type "OBJexport" $dest;
+				print("// wrote : "+$dest+"\n");
+			} else {
+				error("OBJ "+$dest+" already exists, please remove.");
+			}
+	}
+	currentTime $ct;
+}
+
+global proc
+exportObjSeries()
+{
+	if (size(`ls -sl`) < 1)
+		error("nothing selected to export");
+	string $root = `workspace -q -act`;
+	string $scenefile = `file -q -sn -shn`;
+	$scenefile = `basenameEx $scenefile`;
+	float $fs = `playbackOptions -q -min`;
+	float $fe = `playbackOptions -q -max`;
+
+	string $prompt = `promptDialog
+		-title "Export OBJs"
+		-tx ($scenefile+"_")
+		-message ("Export frames "+$fs+"-"+$fe+" to "+$root+"/data/")
+		-button "Export OBJs"
+		-button "Cancel"
+		-defaultButton "Export OBJs"
+		-cancelButton "Cancel"
+		-dismissString "Cancel"`;
+	
+	if ($prompt == "Export OBJs") {
+		$name = `promptDialog -q -tx`;
+		exportObjSeriesEngine($name, $fs, $fe);
+	}
+
+}
+

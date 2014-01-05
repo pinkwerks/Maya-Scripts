@@ -1,0 +1,11 @@
+global proc int
+toggleDisplayLocalAxis() {
+	string $objs[] = `ls -sl -l -fl -tr`;
+	for ($obj in $objs) {
+		if (`nodeType $obj` == "transform") {
+			$state = `getAttr ($obj + ".displayLocalAxis")`;
+			setAttr ($obj + ".displayLocalAxis") (1 - $state);
+		}
+	}
+	return(0);
+}

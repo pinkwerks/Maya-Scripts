@@ -1,0 +1,346 @@
+// passMan v20070121 pinkwerks
+//
+// splice in a bunch of nodes in an attempt to quickly setup render passes.
+// makes a global control that does all the swtiching.  good luck sucka!
+//
+
+proc string
+makeColorRamp(string $plug)
+{
+	string $ramp = `shadingNode -asTexture ramp`;
+	removeMultiInstance -break true ($ramp+".colorEntryList[2]");
+	removeMultiInstance -break true ($ramp+".colorEntryList[1]");
+	setAttr ($ramp+".interpolation") 0;
+	float $r = getAttr ($plug+"R");
+	float $g = getAttr ($plug+"G");
+	float $b = getAttr ($plug+"B");
+	setAttr ($ramp+".colorEntryList[0].color") -type double3 $r $g $b;
+	return $ramp;
+}
+
+proc string
+getMtlColorInputSrc(string $mtlInput)
+{
+	string $src[];
+	$src = `listConnections -s 1 -d 0 -p 1 $mtlInput`;
+	if ( $src[0] == "" )
+	{
+		// no connection, build a ramp with current color and rig it up.
+		$src[0] = makeColorRamp($mtlInput);
+		$src[0] = ($src[0]+".outColor");
+	}
+	return $src[0];
+}
+
+global proc
+passManRestore()
+{
+	string $mtls[] = `ls -sl -type blinn -type phong -type phongE -type lambert`;
+	if (`size $mtls` == 0)
+		error("No valid materials selected.");
+	string $mtl = "";
+	string $src;
+	for ( $mtl in $mtls )
+	{
+		if ( $mtl == "lambert1" )
+			continue;
+		$src = getAttr ($mtl+".ambientColorOriginal");
+		connectAttr -f $src ($mtl+".ambientColor");
+		$src = getAttr ($mtl+".colorOriginal");
+		connectAttr -f $src ($mtl+".color");
+		$src = getAttr ($mtl+".incandescenceOriginal");
+		connectAttr -f $src ($mtl+".incandescence");
+		$src = getAttr ($mtl+".reflectedColorOriginal");
+		connectAttr -f $src ($mtl+".reflectedColor");
+		$src = getAttr ($mtl+".specularColorOriginal");
+		connectAttr -f $src ($mtl+".specularColor");
+	}
+}
+
+global proc
+passMan()
+{
+	string $geo[] = `ls -sl -type geometry`;
+	string $lights[] = `ls -sl -type light`;
+	string $mtls[] = `ls -sl -type blinn -type phong -type phongE -type lambert`;
+	if (`size $mtls` == 0)
+		error("No valid materials selected.");
+	string $mtl = "";
+	string $input = "";
+	string $mtlInput = "";
+	string $mtlInputSrc = "";
+	string $ctrl = `createNode locator`;
+	string $tmpSA[] = `pickWalk -d up`;
+	string $short;
+	string $short2;
+	int $initVal = 1;
+	// make a global controller
+	$ctrl = $tmpSA[0];
+	$ctrl = `rename $ctrl "Renderpass_Controller"`;
+	addAttr -ln renderPass -at "enum" -k 1
+		-en "Default:Ambient:Color:Diffuse:Incandescence:Reflection:Specular:AO_RO_Z"
+		$ctrl;
+	// surgery time!
+	for ( $mtl in $mtls )
+	{
+		// skip over certain situations
+		if ( $mtl == "lambert1" )
+			continue;
+		//
+		// make our switches and rig them up
+		//
+
+		// AMBIENT 
+		//
+		// check for input values
+		$mtlInput = ($mtl+".ambientColor");
+		$mtlInputSrc = getMtlColorInputSrc($mtl+".ambientColor");
+		if (!`attributeExists "ambientColorOriginal" $mtl`)
+		{
+			// store the original selector!
+			addAttr -dt "string" -ln ambientColorOriginal $mtl;
+			setAttr -type "string" ($mtl+".ambientColorOriginal") $mtlInputSrc;
+		}
+		// default condition
+		$sAmbD = `createNode -name ("PM_Switch_Default") condition`;
+		connectAttr -f ($ctrl+".renderPass") ($sAmbD+".firstTerm");
+		setAttr ($sAmbD +".secondTerm") 0;
+		connectAttr -f $mtlInputSrc ($sAmbD+".colorIfTrue");
+		setAttr ($sAmbD+".colorIfFalse") -type double3 0 0 0;
+		connectAttr -f ($sAmbD+".outColor") $mtlInput;
+		// explicit condition
+		$sAmbE = `createNode -name ("PM_Switch_Explicit") condition`;
+		connectAttr -f ($ctrl+".renderPass") ($sAmbE+".firstTerm");
+		setAttr ($sAmbE +".secondTerm") 1; // SWITCH!!!
+		connectAttr -f $mtlInputSrc ($sAmbE+".colorIfTrue");
+		setAttr ($sAmbE+".colorIfFalse") -type double3 0 0 0;
+		connectAttr -f ($sAmbE+".outColor") ($sAmbD+".colorIfFalse");
+		// AO_RO_Z pass
+		/* TODO
+		$sAmbAO = `createNode -name ("PM_Switch_AO") condition`;
+		connectAttr -f ($ctrl+".renderPass") ($sAmbE+".firstTerm");
+		setAttr ($sAmbE +".secondTerm") 6; // SWITCH!!!
+		$AO = `createNode -name ("PM_AO") mib_ambient_occlusion`;
+		*/
+
+
+		// COLOR
+		//
+		$mtlInput = ($mtl+".color");
+		$mtlInputSrc = getMtlColorInputSrc($mtlInput);
+		if (!`attributeExists "colorOriginal" $mtl`)
+		{
+			// store the original selector!
+			addAttr -dt "string" -ln colorOriginal $mtl;
+			setAttr -type "string" ($mtl+".colorOriginal") $mtlInputSrc;
+		}
+		// default condition
+		$sColD = `createNode -name ("PM_Switch_Default") condition`;
+		connectAttr -f ($ctrl+".renderPass") ($sColD+".firstTerm");
+		setAttr ($sColD +".secondTerm") 0;
+		connectAttr -f $mtlInputSrc ($sColD+".colorIfTrue");
+		setAttr ($sColD+".colorIfFalse") -type double3 0 0 0;
+		connectAttr -f ($sColD+".outColor") $mtlInput;
+		// explicit condition
+		$sColE = `createNode -name ("PM_Switch_Explicit") condition`;
+		connectAttr -f ($ctrl+".renderPass") ($sColE+".firstTerm");
+		setAttr ($sColE +".secondTerm") 2; // SWITCH!!!
+		connectAttr -f $mtlInputSrc ($sColE+".colorIfTrue");
+		setAttr ($sColE+".colorIfFalse") -type double3 0 0 0;
+		connectAttr -f ($sColE+".outColor") ($sColD+".colorIfFalse");
+		// ambient condition
+		$sColA = `createNode -name ("PM_Switch_Ambient") condition`;
+		connectAttr -f ($ctrl+".renderPass") ($sColA+".firstTerm");
+		setAttr ($sColA +".secondTerm") 1; // SWITCH!!!
+		setAttr ($sColA+".colorIfTrue") -type double3 1 1 1;
+		setAttr ($sColA+".colorIfFalse") -type double3 0 0 0;
+		connectAttr -f ($sColA+".outColor") ($sColE+".colorIfFalse");
+		// diffuse condition
+		$sDifC = `createNode -name ("PM_Switch_Diffuse") condition`;
+		connectAttr -f ($ctrl+".renderPass") ($sDifC+".firstTerm");
+		setAttr ($sDifC +".secondTerm") 3; // SWITCH!!!
+		setAttr ($sDifC+".colorIfTrue") -type double3 1 1 1;
+		setAttr ($sDifC+".colorIfFalse") -type double3 0 0 0;
+		connectAttr -f ($sDifC+".outColor") ($sColA+".colorIfFalse");
+
+		// add color condition to ambient tree
+		$sAmbC = `createNode -name ("PM_Switch_Color") condition`;
+		connectAttr -f ($ctrl+".renderPass") ($sAmbC+".firstTerm");
+		setAttr ($sAmbC +".secondTerm") 2; // SWITCH!!!
+		setAttr ($sAmbC+".colorIfTrue") -type double3 1 1 1;
+		setAttr ($sAmbC+".colorIfFalse") -type double3 0 0 0;
+		connectAttr -f ($sAmbC+".outColor") ($sAmbE+".colorIfFalse");
+
+
+		// INCANDESCENCE
+		//
+		// check for input values
+		$mtlInput = ($mtl+".incandescence");
+		$mtlInputSrc = getMtlColorInputSrc($mtlInput);
+		if (!`attributeExists "incandescenceOriginal" $mtl`)
+		{
+			// store the original selector!
+			addAttr -dt "string" -ln incandescenceOriginal $mtl;
+			setAttr -type "string" ($mtl+".incandescenceOriginal") $mtlInputSrc;
+		}
+		// default condition
+		$sIncanD = `createNode -name ("PM_Switch_Incan_Default") condition`;
+		connectAttr -f ($ctrl+".renderPass") ($sIncanD+".firstTerm");
+		setAttr ($sIncanD +".secondTerm") 0;
+		connectAttr -f $mtlInputSrc ($sIncanD+".colorIfTrue");
+		setAttr ($sIncanD+".colorIfFalse") -type double3 0 0 0;
+		connectAttr -f ($sIncanD+".outColor") $mtlInput;
+		// explicit condition
+		$sIncanE = `createNode -name ("PM_Switch_Incan_Explicit") condition`;
+		connectAttr -f ($ctrl+".renderPass") ($sIncanE+".firstTerm");
+		setAttr ($sIncanE +".secondTerm") 4; // SWITCH!!!
+		connectAttr -f $mtlInputSrc ($sIncanE+".colorIfTrue");
+		setAttr ($sIncanE+".colorIfFalse") -type double3 0 0 0;
+		connectAttr -f ($sIncanE+".outColor") ($sIncanD+".colorIfFalse");
+
+
+		// REFLECTION
+		//
+		if ( `nodeType $mtl` != "lambert" )
+		{
+			// check for input values
+			$mtlInput = ($mtl+".reflectedColor");
+			$mtlInputSrc = getMtlColorInputSrc($mtlInput);
+			if (!`attributeExists "reflectedColorOriginal" $mtl`)
+			{
+				// store the original selector!
+				addAttr -dt "string" -ln reflectedColorOriginal $mtl;
+				setAttr -type "string" ($mtl+".reflectedColorOriginal") $mtlInputSrc;
+			}
+			// default condition
+			$sReflD = `createNode -name ("PM_Switch_Default") condition`;
+			connectAttr -f ($ctrl+".renderPass") ($sReflD+".firstTerm");
+			setAttr ($sReflD +".secondTerm") 0;
+			connectAttr -f $mtlInputSrc ($sReflD+".colorIfTrue");
+			setAttr ($sReflD+".colorIfFalse") -type double3 0 0 0;
+			connectAttr -f ($sReflD+".outColor") $mtlInput;
+			// explicit condition
+			$sReflE = `createNode -name ("PM_Switch_Explicit") condition`;
+			connectAttr -f ($ctrl+".renderPass") ($sReflE+".firstTerm");
+			setAttr ($sReflE +".secondTerm") 5; // SWITCH!!!
+			connectAttr -f $mtlInputSrc ($sReflE+".colorIfTrue");
+			setAttr ($sReflE+".colorIfFalse") -type double3 0 0 0;
+			connectAttr -f ($sReflE+".outColor") ($sReflD+".colorIfFalse");
+		}
+
+
+		// SPECULAR
+		//
+		if ( `nodeType $mtl` != "lambert" )
+		{
+			// check for input values
+			$mtlInput = ($mtl+".specularColor");
+			$mtlInputSrc = getMtlColorInputSrc($mtlInput);
+			if (!`attributeExists "specularColorOriginal" $mtl`)
+			{
+				// store the original selector!
+				addAttr -dt "string" -ln specularColorOriginal $mtl;
+				setAttr -type "string" ($mtl+".specularColorOriginal") $mtlInputSrc;
+			}
+			// default condition
+			$sSpecD = `createNode -name ("PM_S_Switch_Default") condition`;
+			connectAttr -f ($ctrl+".renderPass") ($sSpecD+".firstTerm");
+			setAttr ($sSpecD +".secondTerm") 0;
+			connectAttr -f $mtlInputSrc ($sSpecD+".colorIfTrue");
+			setAttr ($sSpecD+".colorIfFalse") -type double3 0 0 0;
+			connectAttr -f ($sSpecD+".outColor") $mtlInput;
+			// explicit condition
+			$sSpecE = `createNode -name ("PM_S_Switch_Explicit") condition`;
+			connectAttr -f ($ctrl+".renderPass") ($sSpecE+".firstTerm");
+			setAttr ($sSpecE +".secondTerm") 6; // SWITCH!!!
+			connectAttr -f $mtlInputSrc ($sSpecE+".colorIfTrue");
+			setAttr ($sSpecE+".colorIfFalse") -type double3 0 0 0;
+			connectAttr -f ($sSpecE+".outColor") ($sSpecD+".colorIfFalse");
+			// reflectedColor condition
+			$sSpecR = `createNode -name ("PM_S_Switch_Refl") condition`;
+			connectAttr -f ($ctrl+".renderPass") ($sSpecR+".firstTerm");
+			setAttr ($sSpecR +".secondTerm") 5; // SWITCH!!!
+			setAttr ($sSpecR+".colorIfTrue") -type double3 1 1 1;
+			setAttr ($sSpecR+".colorIfFalse") -type double3 0 0 0;
+			connectAttr -f ($sSpecR+".outColor") ($sSpecE+".colorIfFalse");
+		}
+	}
+
+	//
+	// create the render layers
+	//
+
+	// Ambient
+	//
+	createRenderLayer -name "Ambient" -number 1 -noRecurse -makeCurrent;
+	editRenderLayerAdjustment ($ctrl+".renderPass");
+	setAttr ($ctrl+".renderPass") 1;
+	print $geo;
+	editRenderLayerAdjustment "miDefaultFramebuffer.premultiply";
+	setAttr "miDefaultFramebuffer.premultiply" 0;
+	editRenderLayerMembers -noRecurse "Ambient" $geo;
+
+	// Color
+	//
+	createRenderLayer -name "Color" -number 1 -noRecurse -makeCurrent;
+	editRenderLayerAdjustment ($ctrl+".renderPass");
+	setAttr ($ctrl+".renderPass") 2;
+	editRenderLayerAdjustment "miDefaultFramebuffer.premultiply";
+	setAttr "miDefaultFramebuffer.premultiply" 0;
+	editRenderLayerMembers -noRecurse "Color" $geo;
+
+	// Diffuse
+	//
+	createRenderLayer -name "Diffuse" -number 1 -noRecurse -makeCurrent;
+	editRenderLayerAdjustment ($ctrl+".renderPass");
+	setAttr ($ctrl+".renderPass") 3;
+	setAttr "Diffuse.beauty" 0;
+	setAttr "Diffuse.diffuse" 1;
+	editRenderLayerAdjustment "miDefaultFramebuffer.premultiply";
+	setAttr "miDefaultFramebuffer.premultiply" 0;
+	editRenderLayerMembers -noRecurse "Diffuse" $geo;
+	editRenderLayerMembers -noRecurse "Color" $lights;
+
+	// Shadow
+	//
+	createRenderLayer -name "Shadow" -number 1 -noRecurse -makeCurrent;
+	editRenderLayerAdjustment ($ctrl+".renderPass");
+	setAttr ($ctrl+".renderPass") 3;
+	setAttr "Shadow.beauty" 0;
+	setAttr "Shadow.shadow" 1;
+	editRenderLayerAdjustment "miDefaultFramebuffer.premultiply";
+	setAttr "miDefaultFramebuffer.premultiply" 0;
+	editRenderLayerMembers -noRecurse "Diffuse" $geo;
+	editRenderLayerMembers -noRecurse "Color" $lights;
+
+	// Incandescence
+	//
+	createRenderLayer -name "Incandescence" -number 1 -noRecurse -makeCurrent;
+	editRenderLayerAdjustment ($ctrl+".renderPass");
+	setAttr ($ctrl+".renderPass") 4;
+	editRenderLayerAdjustment "miDefaultFramebuffer.premultiply";
+	setAttr "miDefaultFramebuffer.premultiply" 0;
+	editRenderLayerMembers -noRecurse "Diffuse" $geo;
+
+	// Reflection
+	//
+	createRenderLayer -name "Reflection" -number 1 -noRecurse -makeCurrent;
+	editRenderLayerAdjustment ($ctrl+".renderPass");
+	setAttr ($ctrl+".renderPass") 5;
+	editRenderLayerAdjustment "miDefaultFramebuffer.premultiply";
+	setAttr "miDefaultFramebuffer.premultiply" 0;
+	editRenderLayerMembers -noRecurse "Diffuse" $geo;
+
+	// Specular
+	//
+	createRenderLayer -name "Specular" -number 1 -noRecurse -makeCurrent;
+	editRenderLayerAdjustment ($ctrl+".renderPass");
+	setAttr ($ctrl+".renderPass") 6;
+	editRenderLayerAdjustment "miDefaultFramebuffer.premultiply";
+	setAttr "miDefaultFramebuffer.premultiply" 0;
+	editRenderLayerMembers -noRecurse "Diffuse" $geo;
+	editRenderLayerMembers -noRecurse "Color" $lights;
+
+	warning("Don't forget to add geometry to all render layers. Also, add lights to the Diffuse, Specular & Shadow passes!");
+}
+

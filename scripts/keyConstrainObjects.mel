@@ -1,0 +1,126 @@
+// keyConstrainObjects();
+// 20041025 pinkelton wicham
+//
+// USAGE:
+// parent-constrain selected things, to the last selected thing.
+//
+// NOTES:
+// things are assumed to be transform nodes.
+//
+// you'll get cyclecheck errors if the thing your constraining to
+//   is above the heirarchy - you the object you constrain
+//   to needs to be outside it.
+
+/*
+global proc
+keyConstrainObjectsPrep()
+{
+    // grab the values from the UI and call the engine
+    string $context = `optionMenuGrp -q -v context`;
+    if ( $context == "" ) {
+    	error("mtorSetValue : Strange, no context!");
+    }
+    print(
+	"keyConstrainObjects "
+	+"\""+$context+"\";"
+	+"\n"
+    );
+    keyConstrainObjectsEngine($context);
+}
+*/
+
+global proc
+keyConstrainObjects()
+{
+    /*
+    string $procName = "keyConstrainObjects";
+
+    if ( `window -exists $procName` ) {
+        showWindow $procName;
+        return;
+    }
+
+    window -rtf 1 -t $procName $procName;
+
+    columnLayout ;
+
+    optionMenuGrp -label "Select Constraint Type" context;
+	menuItem -label "Parent";
+	menuItem -label "Point";
+
+    rowLayout -numberOfColumns 2
+    	-columnAlign  1 "center"
+    	-columnAlign  2 "center"
+    	-columnAttach 1 "both" 	0
+    	-columnAttach 2 "both"  0
+    ;
+
+    button -label "Apply" -c keyConstrainObjectsPrep;
+    button -label "Close" -c ("deleteUI -wnd " + $procName);
+
+    showWindow $procName;
+    */
+    keyConstrainObjectsEngine();
+    print("\n// Done Keyframing!\n");
+}
+
+global proc
+keyConstrainObjectsEngine()
+{
+    float $OF = `currentTime -q`;
+    float $F = $OF;
+    string $InitialSelection[] = `ls -sl -l`;
+    int $sizeSel = size($InitialSelection);
+    string $obj;
+    for ( $obj in $InitialSelection ) {
+	select $obj;
+	setAttr -k 1 ($obj + ".rptx");
+	setAttr -k 1 ($obj + ".rpty");
+	setAttr -k 1 ($obj + ".rptz");
+	setAttr -k 1 ($obj + ".it");
+	setKeyframe -ott step ($obj + ".rptx");
+	setKeyframe -ott step ($obj + ".rpty");
+	setKeyframe -ott step ($obj + ".rptz");
+	// current frame
+	setKeyframe -ott step ($obj + ".constraintWeight");
+	setKeyframe -v 0 -ott step ($obj + ".tx");
+	setKeyframe -v 1 -ott step ($obj + ".constraintWeight");
+	setKeyframe -v 0 -ott step ($obj + ".tx");
+	setKeyframe -v 0 -ott step ($obj + ".ty");
+	setKeyframe -v 0 -ott step ($obj + ".tz");
+	setKeyframe -v 0 -ott step ($obj + ".rx");
+	setKeyframe -v 0 -ott step ($obj + ".ry");
+	setKeyframe -v 0 -ott step ($obj + ".rz");
+	setKeyframe -v 1 -ott step ($obj + ".sx");
+	setKeyframe -v 1 -ott step ($obj + ".sy");
+	setKeyframe -v 1 -ott step ($obj + ".sz");
+	setKeyframe -v 1 -ott step ($obj + ".it");
+	// current frame - 1
+	currentTime -e ($OF - 1);
+	$F = `currentTime -q`;
+	float $wsp[] = `xform -q -ws -matrix`;
+	setKeyframe -v 0 -t $F -itt linear -ott step ($obj + ".constraintWeight");
+	xform -matrix
+	    $wsp[0] $wsp[1] $wsp[2] $wsp[3]
+	    $wsp[4] $wsp[5] $wsp[6] $wsp[7] 
+	    $wsp[8] $wsp[9] $wsp[10] $wsp[11] 
+	    $wsp[12] $wsp[13] $wsp[14] $wsp[15] 
+	;
+	setKeyframe -itt linear -ott step ($obj + ".tx");
+	setKeyframe -itt linear -ott step ($obj + ".ty");
+	setKeyframe -itt linear -ott step ($obj + ".tz");
+	setKeyframe -itt linear -ott step ($obj + ".rx");
+	setKeyframe -itt linear -ott step ($obj + ".ry");
+	setKeyframe -itt linear -ott step ($obj + ".rz");
+	setKeyframe -itt linear -ott step ($obj + ".sx");
+	setKeyframe -itt linear -ott step ($obj + ".sy");
+	setKeyframe -itt linear -ott step ($obj + ".sz");
+	CenterPivot;
+	setKeyframe -ott step ($obj + ".rptx");
+	setKeyframe -ott step ($obj + ".rpty");
+	setKeyframe -ott step ($obj + ".rptz");
+	setKeyframe -v 0 -ott step ($obj + ".it");
+	currentTime -e $OF;
+    }
+    select $InitialSelection;
+}

@@ -1,0 +1,41 @@
+global proc initParticle()
+{
+	string $objs[] = `ls -sl -l`;
+	string $obj;
+	for ( $obj in $objs )
+	{
+		if ( `nodeType $obj` != "particle" )
+		{
+			warning("skipping "+$obj+"not a particle");
+			continue;
+		}
+		addAttr -ln noiseScale -at double3 $obj;
+		addAttr -ln noiseScaleX -at double -p noiseScale $obj;
+		addAttr -ln noiseScaleY -at double -p noiseScale $obj;
+		addAttr -ln noiseScaleZ -at double -p noiseScale $obj;
+		setAttr -type double3 ($obj + ".noiseScale") 1 1 1;
+		setAttr -e -k 1 ($obj + ".noiseScale");
+		setAttr -e -k 1 ($obj + ".noiseScaleX");
+		setAttr -e -k 1 ($obj + ".noiseScaleY");
+		setAttr -e -k 1 ($obj + ".noiseScaleZ");
+
+		addAttr -ln noiseMin -at double3 $obj;
+		addAttr -ln noiseMinX -at double -p noiseMin $obj;
+		addAttr -ln noiseMinY -at double -p noiseMin $obj;
+		addAttr -ln noiseMinZ -at double -p noiseMin $obj;
+		setAttr -type double3 ($obj + ".noiseMin") 1 1 1;
+		setAttr -e -k 1 ($obj + ".noiseMin");
+		setAttr -e -k 1 ($obj + ".noiseMinX");
+		setAttr -e -k 1 ($obj + ".noiseMinY");
+		setAttr -e -k 1 ($obj + ".noiseMinZ");
+
+		addAttr -ln noiseMax -at double3 $obj;
+		addAttr -ln noiseMaxX -at double -p noiseMax $obj;
+		addAttr -ln noiseMaxY -at double -p noiseMax $obj;
+		addAttr -ln noiseMaxZ -at double -p noiseMax $obj;
+		setAttr -type double3 ($obj + ".noiseMax") 1 1 1;
+		setAttr -e -k 1 ($obj + ".noiseMax");
+		setAttr -e -k 1 ($obj + ".noiseMaxX");
+		setAttr -e -k 1 ($obj + ".noiseMaxZ");
+	}
+}

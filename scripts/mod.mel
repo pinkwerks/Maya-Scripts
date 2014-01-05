@@ -1,0 +1,12 @@
+global proc float
+mod(
+    float $a,
+    float $b
+) {
+    float $n = trunc($a/$b);
+    $a -= $n * $b;
+    if ( $a < 0 ) {
+    	$a += $b;
+    }
+    return($a);
+}

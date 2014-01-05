@@ -1,0 +1,63 @@
+//
+// uberName v20040624 pinkwerks
+// 
+// usage: uberName baseName mode group
+//
+// notes:
+//	`uberName shit 1 1` on the parent of nodes would name those
+//	nodes shit_A, shit_B, shit_C etc and the parent "shit".
+
+global proc 
+uberNameEngine(string $baseName, int $group, int $mode)
+{
+    int $i = 0;
+    string $me = "uberName";
+    string $affixChar;
+    string $letters[];
+    string $objs[];
+    string $obj;
+
+    if ( $mode == 0 )
+	$letters = {"a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"};
+    else if ( $mode == 1 )
+	$letters = {"A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"};
+
+    if ( $group )
+    {
+    	group -n ($baseName + "s");
+	// from selectKids.mel
+	selectKids;
+    }
+
+    $objs = `ls -sl -l`;
+
+    for ($obj in $objs)
+    {
+	if ( $mode == 0 || $mode == 1 )
+	{
+	    if ( $i < 26)
+		$affixChar = $letters[$i];
+	    else
+		$affixChar = ($letters[$i%26] + $letters[int($i/26)]);
+	}
+	else if ( $mode == 2 )
+	    $affixChar = $i;
+	else
+	    error($me + " : Bad mode selector, " + $mode);
+
+       rename $obj ($baseName + "_" + $affixChar);
+       $i++;
+    }
+
+    if ( $group )
+	select ($baseName + "s");
+}
+
+global proc
+uberName()
+{
+	string $baseName;
+	int $useCaps;
+	int $group;
+	uberNameEngine($baseName, $useCaps, $group);
+}

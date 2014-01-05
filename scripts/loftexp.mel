@@ -1,0 +1,77 @@
+if (trailCurve.leaveTrail) {
+    $loftName = "theLoft";
+    $curveNodeName = "trailCurve"; // set this to the name of the curve node
+    $copyFlag = "_";
+    $shaderGroup = "trailsSG";
+
+    // save the user selection so we can recall the state later
+    $savedSelection = `ls -sl`;
+    select -cl;
+
+    //
+    // reset the setup if we rewind the animation.
+    //
+    if (frame <= trailCurve.trailStartFrame) {
+	// remove the old "spines"
+	if (!catch(`select ($curveNodeName + "*" + $copyFlag)`)) {
+	    delete;
+	}
+
+	if (!catch(`select $loftName`)) {
+	    select $loftName;
+	    delete;
+	}
+    } else {
+	// clear out the old loft skin.
+	if (!catch(`select $loftName`)) {
+	    select $loftName;
+	    delete;
+	}
+
+	// create a duplicate of the curve
+	// at the current frame
+	select trailCurve;
+	$curveName = `duplicate -un trailCurve`;
+	parent -w $curveName[0];
+	$curveNameNew = ($curveName[0] + $copyFlag);
+	rename $curveName $curveNameNew;
+
+	// get a listing of all the rib curves for the loft
+	select($curveNodeName + "*" + $copyFlag);
+	$selected = `ls -sl`;
+
+	// make sure we only have the last N ribs...
+	$numElements = `size $selected`;
+	$i = 0;
+	if ($numElements >= trailCurve.TrailLength) {
+	    while ($i <= $numElements - trailCurve.TrailLength) {
+		delete $selected[$i];
+		$i++;
+	    }
+	}
+	// okay reselect the remaining curves....
+	select($curveNodeName + "*" + $copyFlag);
+	$selected = `ls -sl`;
+
+	// make the loft
+	// XXX look into cordlength vs. uniform....
+	string $tmploftName[];
+	if (frame == trailCurve.trailStartFrame + 1) {
+	    $tmploftName = `loft -ch 1 -u 0 -c 0 -ar 1 -d 3 -rn 0 -po 0 trailCurve $selected`;
+	} else {
+	    $tmploftName = `loft -ch 1 -u 0 -c 0 -ar 1 -d 3 -rn 0 -po 0 $selected`;
+	}
+	rename $tmploftName[0] $loftName;
+	displaySmoothness -divisionsU 3 -divisionsV 3 -pointsWire 16 -pointsShaded 4 $loftName;
+	setAttr ($loftName + "Shape.curvatureTolerance") 0;
+	setAttr ($loftName + "Shape.explicitTessellationAttributes") 1;
+	setAttr ($loftName + "Shape.numberV") 1;
+	setAttr ($loftName + "Shape.numberU") 8;
+    	// assign the shader to the loft
+	sets -e -forceElement $shaderGroup;
+    }
+
+    // all done 8)
+    select $savedSelection;
+    select -cl;
+}

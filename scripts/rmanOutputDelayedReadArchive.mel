@@ -1,0 +1,65 @@
+proc string replaceFrameNumber(string $str, int $f)
+{
+		string $newStr;
+		string $buf[];
+		tokenize( $str, ".", $buf );
+		int $i, $j;
+		for ( $i=0; $i < size($buf); $i++ ) {
+			// find substring that's a number
+			if ( `match "[0-9]+" $buf[$i]` == $buf[$i] ) { 
+					string $fstr = $f;
+					string $pad = "";
+					// pad with zeros
+					for( $j=size($fstr); $j < size($buf[$i]); $j++ ) {
+						$pad += "0";
+					}
+					$fstr = $pad + $fstr;
+					$newStr += $fstr;
+			} else {
+					$newStr += $buf[$i];
+			}
+			if ( $i < size($buf)-1 ) {
+					$newStr += ".";
+			}
+		}
+		return $newStr;
+}
+
+global proc rmanOutputDelayedReadArchive()
+{
+		// Find the object context within which this script is being called.
+		string $object = `rman ctxGetObject`;
+
+		// Get the value of the draFile attr.
+		string $attr = `rmanGetAttrName "draFile"`;
+		string $drafile = `getAttr ($object + "." + $attr)`;
+
+		// Check whether the file should be treated as a sequence
+		$attr = `rmanGetAttrName "draUseSequenceNumber"`;
+		int $doSeq = `getAttr ($object + "." + $attr)`;
+
+		if( $doSeq ) {
+			// Replace the frame number in the file name with the current frame.
+			$attr = `rmanGetAttrName "draSequenceNumber"`;
+			int $seqNum = `getAttr ($object + "." + $attr)`;
+			$drafile = `replaceFrameNumber $drafile $seqNum`;
+		}
+	
+		// Get the bounding box from the maya shape node, which we'll assume 
+		// encompasses the RIB archive.  RenderMan wants the bbox to be in 
+		// centimeters in object space.
+		string $curUnit = `currentUnit -q -linear`;
+		currentUnit -linear "cm";  // temporarily change to centimeters
+		float $bbSize[3] = `getAttr ($object + ".boundingBoxSize")`;
+		float $bbMin[3], $bboxMax[3];
+		$bbMin[0] = -$bbSize[0]/2;
+		$bbMin[1] = -$bbSize[1]/2;
+		$bbMin[2] = -$bbSize[2]/2;
+		$bbMax[0] = $bbSize[0]/2;
+		$bbMax[1] = $bbSize[1]/2;
+		$bbMax[2] = $bbSize[2]/2;
+		currentUnit -linear $curUnit;
+
+		RiProcedural "DelayedReadArchive" $drafile $bbMin[0] $bbMax[0] $bbMin[1] $bbMax[1] $bbMin[2] $bbMax[2];
+}
+

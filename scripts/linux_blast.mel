@@ -1,0 +1,443 @@
+//------------------------------------------------------------------------------
+//
+//    Linux Blast v1.1 on March 15, 2004 by Eric Froemling
+//    Linux Blast v1.5 on April 19, 2004 by Pinkelton Wicham
+//
+//  Playblasts an animation to mpeg4/divx/etc format, allowing very long/large playblasts
+//  also includes the active audio track from the Maya timeline (woohoo!)
+//
+//  - good for lipsync tests or long/large previews
+//  that would otherwise run too slowly in fcheck
+//
+//  this script is targeted at linux where fcheck has been the only option for playblasting,
+//  though with some tweaking it could probably work on irix or macosx I would assume.
+//
+//  settings are available at the top of the linux_blast() function for bitrates, sizes, playback, etc.
+//
+//  this script requires the following programs:
+//  mencoder (a component of mplayer) for encoding, sox for audio manipulation,
+//  and some way to view mpeg4 avi files (mplayer, xine, etc)
+//  these are pretty standard fare on a linux install, but they're free/open source
+//  so grab them off the net if need be
+//
+//  USAGE:
+//  stick this file in any accessible script directory
+//  load the script by running the mel command "source linux_blast" or restarting maya
+//  to add a toolbar button, run "linux_blast_setup" or just use "linux_blast" to run it directly
+//
+//  TODO/WISHLIST:
+//  spiffy custom icon or other extraneous niceties
+//  a playback method that allows scrubbing or single framing (we need quicktime for linux!)
+//
+//  This script may be freely distributed.  Use/modify at your own risk.
+//  Feel free to contact me with any bug reports, patches, recommendations, etc.
+//
+//-----------------------------------------------------------------------------
+
+// the actual function
+global proc linux_blast()
+{
+    global string $procName = "linux_blast";
+
+    if ( `window -exists $procName` )
+    {
+	showWindow $procName;
+	return;
+    }
+
+    window -ret -rtf on -t $procName $procName;
+
+    columnLayout -adj on -cal "center";
+
+    separator -height 8 -style "none";
+
+    string $movieName = returnFileName("root");
+    textFieldGrp -text $movieName -label "Movie Name" movieName;
+
+    separator -height 8 -style "none";
+    string $shotPath = returnFileName("shotpath");
+    $shotPath = ($shotPath + "/images");
+    textFieldGrp
+	-label "Destination Directory"
+	-text ($shotPath )
+	movieDir;
+
+    separator -height 8 -style "none";
+    separator -height 8 -style "out";
+    separator -height 8 -style "none";
+
+    optionMenuGrp -label "Resolution" -cc resolutionTypeChange resolution;
+    	menuItem -label "Screen";
+    	menuItem -label "320 x 240";
+    	menuItem -label "320 x 243";
+    	menuItem -label "640 x 480";
+    	menuItem -label "640 x 486";
+    	menuItem -label "720 x 486";
+
+    intFieldGrp -v1 0 -label "Width" width;
+    intFieldGrp -v1 0 -label "Height" height;
+    intSliderGrp -field true -ss 1 -fmn 1 -min 1 -v 100 -label "Scale" scale;
+
+    separator -height 8 -style "none";
+    separator -height 8 -style "out";
+    separator -height 8 -style "none";
+
+    intFieldGrp -v1 5000 -label "Compression Bitrate" bitrate;
+
+    separator -height 8 -style "none";
+    separator -height 8 -style "out";
+    separator -height 8 -style "none";
+
+    optionMenuGrp -label "Player" player;
+    	menuItem -label "Mplayer";
+    	menuItem -label "GMplayer";
+    	menuItem -label "Totem";
+    	menuItem -label "Xine";
+
+    checkBox -enable on -label "Verbose Output" verbose;
+
+    separator -height 8 -style "none";
+    separator -height 8 -style "out";
+    separator -height 8 -style "none";
+
+    rowLayout
+	-nc 3
+	-columnAlign  1 "center"
+	-columnAttach 1 "both" 	0
+	-columnAlign  2 "center"
+	-columnAttach 2 "both"  0
+	-columnAlign  3 "center"
+	-columnAttach 3 "both"  0
+    ;
+
+    button -label "Playblast" -c linux_blast_engine;
+    button -label "Hide" -c ("window -e -vis 0 " + $procName);
+    button -label "Close" -c ("deleteUI -wnd " + $procName);
+    setParent "..";
+    separator -height 8 -style "none";
+
+    showWindow $procName;
+}
+
+global proc resolutionTypeChange()
+{
+    string $selected = `optionMenuGrp -q -v resolution`;
+
+    intSliderGrp -edit -v 100 scale;
+
+    if ( $selected == "320 x 240" )
+    {
+    	intFieldGrp -edit -v1 320 width;
+    	intFieldGrp -edit -v1 240 height;
+    }
+    else if ( $selected == "320 x 243" )
+    {
+    	intFieldGrp -edit -v1 320 width;
+    	intFieldGrp -edit -v1 243 height;
+    }
+    else if ( $selected == "640 x 480" )
+    {
+    	intFieldGrp -edit -v1 640 width;
+    	intFieldGrp -edit -v1 480 height;
+    }
+    else if ( $selected == "640 x 486" )
+    {
+    	intFieldGrp -edit -v1 640 width;
+    	intFieldGrp -edit -v1 486 height;
+    }
+    else if ( $selected == "720 x 486" )
+    {
+    	intFieldGrp -edit -v1 720 width;
+    	intFieldGrp -edit -v1 486 height;
+    }
+    else if ( $selected == "Screen" )
+    {
+    	intFieldGrp -edit -v1 0 width;
+    	intFieldGrp -edit -v1 0 height;
+    }
+}
+
+global proc linux_blast_engine()
+{
+	global string $procName;
+	// print complete output for encoding/viewing commands
+	// handy for troubleshooting
+	int $verbose = 1;
+	if ( `window -exists $procName` )
+	    $verbose = `checkBox -q -v verbose`;
+
+	// video bitrate for output movie
+	$video_bitrate = 5000;
+	if ( `window -exists $procName` )
+	    $video_bitrate = `intFieldGrp -q -v1 bitrate`;
+
+	// where to store temporary files
+	// all temporary files are deleted after the playblast is run
+	// except for "last_linux_playblast.avi" which is the final output
+	string $temp_file_location = "/usr/tmp/";
+
+	//image format the playblast renders to before converting to mpeg4
+	//3 = tif, 5 = sgi, 8 = jpeg
+	$playblast_image_format = 5;
+
+	// viewer size
+	// width and height are multiplied by size_percent for final output
+	// set width or height to 0 to use screen size
+	$viewer_width = 0;
+	$viewer_height = 0;
+	$viewer_size_percent = 50;
+	if ( `window -exists $procName` )
+	{
+	    int $tmp[];
+	    $tmp = `intFieldGrp -q -v width`;
+	    $viewer_width = $tmp[0];
+
+	    $tmp = `intFieldGrp -q -v height`;
+	    $viewer_height = $tmp[0];
+
+	    $viewer_size_percent = `intSliderGrp -q -v scale`;
+	}
+
+	// mencoder flags - adjust video codec, etc
+	string $encoder_flags = ("-ovc lavc -lavcopts vcodec=mpeg4:vbitrate=" + $video_bitrate);
+
+	// viewer command run on the output file
+	string $viewer_command = "mplayer -loop 0 ";
+	if ( `window -exists $procName` )
+	{
+	    string $player = `optionMenuGrp -q -v player`;
+	    if ( $player == "GMplayer" )
+		$viewer_command = "gmplayer ";
+	    else if ( $player == "Totem" )
+		$viewer_command = "totem ";
+	    else if ( $player == "Xine" )
+		$viewer_command = "xine ";
+	}
+
+	//
+	// movie dir
+	//
+	string $movie_dir = $temp_file_location;
+	if ( `window -exists $procName` )
+	    $movie_dir = `textFieldGrp -q -text movieDir`;
+
+	//
+	// movie name
+	//
+	string $movie_name = ( $movie_dir + "/last_linux_playblast.avi");
+	if ( `window -exists $procName` )
+	{
+	    string $tmp = `textFieldGrp -q -text movieName`;
+	    if ( $tmp != "" )
+	    $movie_name = ($movie_dir + "/" + $tmp + ".avi");
+	}
+
+	string $audio_trim_file = ( $temp_file_location + "ecf_audio_trim.wav");
+	string $audio_trim_raw_file = ( $temp_file_location + "ecf_audio_raw_1.raw");
+	string $audio_trim_raw_file_2 = ( $temp_file_location + "ecf_audio_raw_2.raw");
+	string $audio_trim_raw_file_3 = ( $temp_file_location + "ecf_audio_raw_3.raw");
+
+	// make sure they have mencoder and sox
+	if (`system ("which mencoder")` ==  "")
+	    error("Can't find mencoder - this script requires mencoder to function\n");
+	if (`system ("which sox")` ==  "")
+	    error("Can't find sox - this script requires sox to function\n");
+
+	// see if there's audio in the scene, and if so, grab its filename and start-offset
+	global string $gPlayBackSlider;
+	string $displayed_sound;
+	string $displayed_sound_file;
+	float $displayed_sound_offset = 0;
+	$displaying_sound = `timeControl -query -displaySound $gPlayBackSlider`;
+	if ($displaying_sound){
+		$displayed_sound = `timeControl -query -sound $gPlayBackSlider`;
+		$displayed_sound_file = `getAttr ($displayed_sound + ".f")`;
+		$displayed_sound_offset = `getAttr ($displayed_sound + ".offset")`;
+	}
+
+	//
+	// FPS
+	//
+	$time_unit = `currentUnit -query -time`;
+	int $playback_fps = 30;
+	if ($time_unit == "game"){
+		$playback_fps = 15;
+	}
+	else if ($time_unit == "film"){
+		$playback_fps = 24;
+	}
+	else if ($time_unit == "pal"){
+		$playback_fps = 25;
+	}
+	else if ($time_unit == "ntsc"){
+		$playback_fps = 30;
+	}
+	else if ($time_unit == "show"){
+		$playback_fps = 48;
+	}
+	else if ($time_unit == "palf"){
+		$playback_fps = 50;
+	}
+	else if ($time_unit == "ntscf"){
+		$playback_fps = 60;
+	}
+
+	// get playback_times in frames and convert that to seconds
+	float $min_time = `playbackOptions -query -minTime`;
+	$min_time = $min_time / $playback_fps;
+	float $max_time = `playbackOptions -query -maxTime`;
+	$max_time = $max_time / $playback_fps;
+
+	// convert the offset to seconds and calculate start and duration time in minutes:seconds
+	float $start_offset = $displayed_sound_offset / $playback_fps;
+	float $start_time = ($min_time - $start_offset);
+	float $start_seconds = ($start_time) % 60;
+	int $start_minutes = ($start_time) / 60;
+
+	float $duration_seconds = ($max_time - $min_time) % 60;
+	int  $duration_minutes = ($max_time - $min_time) / 60;
+
+	// store old image output settings and set them to what we're using
+	$old_output_format = `getAttr defaultRenderGlobals.outf`;
+	setAttr "defaultRenderGlobals.outf" $playblast_image_format;
+
+
+	// do the playblast and get the proper name for the frames it spits out
+	string $filename;
+	if (($viewer_width < 1) || ($viewer_height < 1)){
+		$filename =  `playblast -format image -clearCache true -viewer off -percent $viewer_size_percent`;
+	}
+	else{
+		$filename =  `playblast -format image -clearCache true -viewer off -width $viewer_width -height $viewer_height`;
+	}
+
+	// replace numerical placeholders (#) with wildcards (?) for shell completion
+	$filename  = substituteAllString($filename, "#", "?");
+
+	// if we have sound, crop or extend it if need be to line up with the video
+	string $sound_args = "";
+	if ($displaying_sound){
+		string $audio_source;
+
+		//the playblast starts before our audio does - add proper amount of silence at beginning
+		if (($start_minutes < 0) || ($start_seconds < 0)){
+
+			// argh - we have to convert what sound we need into a raw file, make our own silence raw file, concatenate the two,
+			// and convert back into a wav file
+
+			// subtract the silence from our duration and see whats left
+			$duration_minutes = $duration_minutes + $start_minutes;
+			$duration_seconds = $duration_seconds + $start_seconds;
+
+			// spit out what we need of our sound file as raw data
+			// spit out an extra second of audio because there seems to be an issue with it getting cut off early
+			$command_string = ("sox -V \"" + $displayed_sound_file + "\" -r 44100 -s -w -c 2 \""
+									 + $audio_trim_raw_file_2 + "\" trim 0:0 " + $duration_minutes
+									 + ":" + ($duration_seconds + 1) + "");
+			if ($verbose) print ($command_string + "\n");
+			$command_result = `system($command_string)`;
+			if ($verbose) print ($command_result + "\n");
+
+			// spit out needed silence (44100 hz * 2 bytes * 2 channels = 176400/second)
+			int $silence_length = 176400 * (-1 * $start_time);
+
+			// hmmm whats an efficient way to spit out a bunch of zeros to a file?
+			$command_string = ("head -c " + $silence_length + " /dev/zero > \"" + $audio_trim_raw_file + "\"");
+			if ($verbose) print ($command_string + "\n");
+			$command_result = `system($command_string)`;
+			if ($verbose) print ($command_result + "\n");
+
+			// combine the two
+			$command_string = ("cat \"" + $audio_trim_raw_file + "\" \"" + $audio_trim_raw_file_2
+									 + "\" > \"" + $audio_trim_raw_file_3 + "\"");
+			if ($verbose) print ($command_string + "\n");
+			$command_result = `system($command_string)`;
+			if ($verbose) print ($command_result + "\n");
+
+			//now convert back to a wav file
+			$command_string = ("sox -V  -r 44100 -s -w -c 2 \"" + $audio_trim_raw_file_3 + "\" \"" + $audio_trim_file + "\"");
+			if ($verbose) print ($command_string + "\n");
+			$command_result = `system($command_string)`;
+			if ($verbose) print ($command_result + "\n");
+
+			$audio_source = $audio_trim_file;
+
+		}
+
+		// audio lines up perfectly with the beginning of the playblast - just use the original file - woohoo!
+		else if (($start_minutes == 0) && ($start_seconds == 0)){
+		    $audio_source = $displayed_sound_file;
+		}
+
+		// playblast starts after the start of our audio - crop off the beginning
+		else
+		{
+		    $command_string = ("sox \"" + $displayed_sound_file + "\" \"" + $audio_trim_file + "\" trim "
+								     + $start_minutes + ":" + $start_seconds + " " + $duration_minutes + ":" + $duration_seconds);
+		    if ($verbose) print ($command_string + "\n");
+		    $command_result = `system($command_string)`;
+		    if ($verbose) print ($command_result + "\n");
+
+		    $audio_source = $audio_trim_file;
+		}
+
+		$sound_args = "-oac copy -audiofile \"" + $audio_source + "\"";
+	}
+
+	//
+	// encode movie
+	//
+	print($procName + " : encoding \"" + $movie_name + "\" at " + $playback_fps + "fps - please wait...");
+
+	$command_string = ("mencoder -mf fps=" + $playback_fps + " " + $sound_args + " " + $encoder_flags + " -o \"" + $movie_name + "\" mf://\"" + $filename + "\" >& /dev/null");
+	if ($verbose) print ($command_string + "\n");
+	$command_result = `system($command_string)`;
+	if ($verbose) print ($command_result + "\n");
+
+	//
+	// play movie
+	//
+	$command_string = ($viewer_command + " \"" + $movie_name + "\" >&/dev/null");
+	// spit out a command line
+	print("\n" + $command_string);
+	$command_result = `system($command_string)`;
+	if ($verbose) print ($command_result + "\n");
+
+	//
+	// remove all frames
+	//
+	$command_string =  ("sh -c \"rm \"" + $filename + "\"\"");
+	if ($verbose) print ($command_string + "\n");
+	$command_result = `system($command_string)`;
+	if ($verbose) print ($command_result + "\n");
+
+	// remove our temporary files
+	$command_string = ("rm -f \"" + $audio_trim_file + "\" \"" + $audio_trim_raw_file + "\" \""
+			 + $audio_trim_raw_file_2 + "\" \"" + $audio_trim_raw_file_3 + "\"");
+	if ($verbose) print ($command_string + "\n");
+	$command_result = `system($command_string)`;
+	if ($verbose) print ($command_result + "\n");
+
+	// restore old output settings
+	setAttr "defaultRenderGlobals.outf" $old_output_format;
+
+	if ( $verbose ) print("done.\n");
+}
+
+// utility function to add a button to the current shelf
+global proc linux_blast_setup()
+{
+	// create a shelf button on the currently active shelf
+	global string $gShelfTopLevel;
+	if( `tabLayout -exists $gShelfTopLevel` ){
+		string $selTab = ( $gShelfTopLevel + "|" + `tabLayout -q -selectTab $gShelfTopLevel` );
+		setParent $selTab;
+		shelfButton -annotation "Linux Movie Playblast"
+			-image1 "render.xpm"
+			-label "linux_blast"
+			-command ("source linux_blast; linux_blastEngine();");
+	}
+
+}
+
+

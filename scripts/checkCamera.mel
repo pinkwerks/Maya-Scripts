@@ -1,0 +1,31 @@
+global proc
+checkCamera()
+{
+    $sel = `ls -sl -showType`;
+    if (size($sel) != 2) {
+	print("ERROR:  pick exactly one camera\n");
+	return;
+    }
+
+    $selCam = $sel[0];
+    if ($sel[1] != "camera") {
+	$sel = `listRelatives -shapes`;
+	if (size($sel) != 1) {
+	    print("ERROR:  couldn't find camera shape node for "+$selCam+"\n");
+	    return;
+	}
+	$sel = `ls -showType $sel`;
+	print ($sel[0]+" "+$sel[1]+"\n");
+	if ($sel[1] != "camera") {
+	    print("ERROR:  couldn't find camera shape node for "+$selCam+"\n");
+	    return;
+	}
+	$selCam = $sel[0];
+    }
+
+    $cams = `ls -type camera`;
+    for ($cam in $cams) {
+	setAttr ($cam+".renderable") 0;
+    }
+    setAttr ($selCam+".renderable") 1;
+}

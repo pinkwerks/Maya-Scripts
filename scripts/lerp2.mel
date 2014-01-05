@@ -1,0 +1,14 @@
+global proc float
+lerp2(float $v0, float $v1, float $val0, float $val1, float $val)
+{
+    float $ival;
+    if ($val1 > $val0) {
+	$ival = linstep($val0, $val1, $val);
+    } else {
+	$ival = 1.0 - linstep($val1, $val0, $val);
+    }
+    if ($ival < 0) return $v0;
+    if ($ival > 1) return $v1;
+    return (1.0 - $ival) * $v0 + $ival * $v1;
+}
+

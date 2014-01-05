@@ -1,0 +1,14 @@
+global proc reverseSelectionOrder()
+{
+	string $objs[] = `ls -sl -fl`;
+	string $obj;
+	int $i = `size $objs`;
+	int $j;
+	string $r[];
+	for ($j = 0; $i >= 1; $i--) {
+		$r[$j] = $objs[$i - 1];
+		$j++;
+	}		
+	select $r;
+}
+

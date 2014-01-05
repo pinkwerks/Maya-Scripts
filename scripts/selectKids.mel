@@ -1,0 +1,7 @@
+global proc
+selectKids()
+{
+    $selected = `ls -sl -l -fl`;
+    $kids = `listRelatives -f -c $selected`;
+    select $kids;
+}

@@ -1,0 +1,48 @@
+{
+   int $DEBUG = 1;
+    int $size;
+    int $i;
+    float $position[];
+    float $rot[];
+    float $scale[];
+    string $things[] = `ls -sl -fl -l`;
+    string $thing;
+    string $copyThing;
+    string $originalSelection[] = $things;
+    string $copyCmd = "duplicate -rr -un"; // sane default
+
+string $copyCmd = "duplicate -rr -un"; // sane default
+
+string $things[] = `ls -sl`;
+   $size = size($things);
+    select -cl;
+    $copyThing = $things[$size - 1];
+
+    for ($i = 0; $i < $size - 1; $i++) {
+	$thing = $things[$i];
+	select $copyThing;
+
+	    $position = `xform -q -ws -t $thing`;
+	    $rot = `xform -q -ws -ro $thing`;
+	    $scale = `xform -q -s $thing`;
+
+
+	eval $copyCmd;
+	$myCopy = `ls -sl`;
+
+
+
+	move -rpr $position[0] $position[1] $position[2];
+	rotate -a -ws $rot[0] $rot[1] $rot[2];
+	setAttr ($thing + ".sx") $scale[0];
+	setAttr ($thing + ".sx") $scale[1];
+	setAttr ($thing + ".sx") $scale[2];
+
+select -r $thing;
+select -tgl $myCopy;
+parentConstraint -mo -weight 1;
+
+
+}
+
+}

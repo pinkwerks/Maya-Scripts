@@ -1,0 +1,8 @@
+global proc float
+lerp(float $v0, float $v1, float $val)
+{
+    if ($val < 0) return $v0;
+    if ($val > 1) return $v1;
+    return (1.0 - $val) * $v0 + $val * $v1;
+}
+

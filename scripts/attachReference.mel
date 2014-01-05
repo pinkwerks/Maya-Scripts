@@ -1,0 +1,19 @@
+// attach the first shape to the rest of the shapes as a reference object.
+// what can i say i'm lazy?!  this saves at least 2 key clicks...
+// v20061116 pink
+
+global proc attachReference()
+{
+	string $sel[] = `ls -sl -l`;
+	int $selSize = `size $sel`;
+	string $src = $sel[0];
+	string $dest;
+	int $i;
+	if ( $selSize < 2 )
+		error("Select at least 2 shapes!");
+	for ( $i = 1; $i < $selSize; $i++ )
+	{
+		$dest = $sel[$i];
+		connectAttr -f ($src+".message") ($dest+".referenceObject");
+	}
+}

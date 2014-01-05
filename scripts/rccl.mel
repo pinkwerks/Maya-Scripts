@@ -1,0 +1,61 @@
+//
+// rccl.mel v.1 pinkwerks
+// Recalculate Curve Chord Length
+// mrpink@digitalanvil.com
+// pick a curve, rebuild it chord length.  woo-hoo.
+//
+
+global proc rccl() {
+    // the selected object
+    string $obj[] = `ls -sl`;
+    if (size($obj) < 1)	 {
+	print("mccl: nothing selected.  select one curve to rebuild.");
+	return;
+    } else if (size($obj) > 1) {
+	print("mccl: select only one curve to rebuild!");
+	return;
+    } else {
+	// the command to be issued
+	string $cmd = "curve -d";
+
+	// number of cv's in selected curve
+	int $cvtotal = `getAttr -size $obj.controlPoints`;
+
+	// number of spans in selected curve
+	int $spans = `getAttr $obj.spans`;
+
+	// degree of selected curve
+	int $deg = `getAttr $obj.degree`;
+
+	float $cvx[];
+	float $cvy[];
+	float $cvz[];
+
+	int $cvi; // the cv index
+	for ($cvi = 0; $cvi < $cvtotal; $cvi++) {
+	    $cvx[$cvi] = `getAttr $obj.controlPoints[$cvi].xValue`;
+	    $cvy[$cvi] = `getAttr $obj.controlPoints[$cvi].yValue`;
+	    $cvz[$cvi] = `getAttr $obj.controlPoints[$cvi].zValue`;
+
+	    print($cvi + " : " +
+		$cvx[$cvi] + " " +
+		$cvy[$cvi] + " " +
+		$cvz[$cvi] + " " +
+		"\n"
+	    );
+
+	    // compute the chord length knot value
+	    if ($cvi == $deg) {
+		$nvx = $cvx[$cvi] - $cvx[0];
+		$nvy = $cvy[$cvi] - $cvy[0];
+		$nvz = $cvz[$cvi] - $cvz[0];
+		print("normalized vector : " + $nvx + " " + $nvy + " " + $nvz + "\n");
+		$xs = pow($nvx, 2);
+		$ys = pow($nvy, 2);
+		$zs = pow($nvz, 2);
+		print($
+		print("knot = " + sqrt($xs + $ys + $zs));
+	    }
+	}
+    }
+}

@@ -1,0 +1,19 @@
+//
+// v20070201 pinkwerks
+// note sister file makeBreakFile.mel
+//
+global proc int
+breakFileCheck(string $file)
+{
+	string $bf = ($file +".kill");
+	//system("touch "+ $bf);
+	if ( `filetest -f $bf` )
+	{
+		warning("Caught file-based interrupt!  Removing "+ $bf);
+		sysFile -del $bf;
+		return 1;
+	}
+	else
+		return 0;
+}
+

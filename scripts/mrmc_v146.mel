@@ -1,0 +1,5525 @@
+//
+//  Copyright (c) 2001 - 2009 Simon Wakley - Camera Control, Inc.
+//
+//  This MEL script is proprietary confidential information and is provided to
+//  customers on the basis that it will not be distributed or disseminated in any
+//  way and is soley for use in conjunction with Camera Control, Inc.
+//
+//  See the noted files for additional data.  Once this file has been run, you can
+//  run the import by typing "mrmcin" or the export by typing "mrmcout"
+//
+//	Revision History
+//	v1.01		Created 9 Oct 2001 import and export facilities
+//	V1.02		10 Oct 2001	Added simple help and about
+//				10 Oct 2001 Import 2 node move to series of NULLs added
+//				for reference move import
+//	v1.03		11 Oct 2001 Added scale, rotate and translate to the import facility
+//	v1.04		12 Oct 2001 Added Translate and Rotate to current camera feature
+//				plus the file_info button
+//	v1.05		12 Oct 2001 Added save last used import values facility
+//	v1.06		15 Oct 2001 Select frame of move to be matched.  Import to frame
+//				1 as a start.  This could be changed later...
+//	v1.07		29 Oct 2001 Added help file.
+//	v1.08		16 Sept 2002 Fixed bug with Match frame and added read granularity
+//	v1.09		9 Dec 2002 Correctly reads in MRMC Coord data as well as Maya Y Up
+//	v1.10		11 Feb 2003 Correctly reads in MRMC Coord data as well as Maya Y Up for ref points
+//
+//	v1.11		3 Mar 2003	mrmc2out() takes roll from camera.rz not camera_group.twist
+//				- you'll need to constrain the roll...
+//				changed header output to 24fps
+//				mrmcout() looks at maya range slider for fs/fe
+//				reports camera name, fs/fe, file name, and date on export
+//				to the file and the maya script editor
+//	v1.12		31 Oct 2003 Added export function print_MRMC_header to print header with correct
+//				units, should also add correct camera speed, but set to 24.00 FPS. The time
+//				entry is ignored...
+//
+//	v1.13		Also export the focal length of the selected camera.
+//	v1.14		Option to export focal Length
+//	v1.15		Added Correct File Picking Dialog
+//	v1.16		Separate File Dialogs for Import/Export
+//	v1.17		12 Feb 2004 Adding 3 node camera support
+//	v1.18		Disallow Export of wrongly nested 1 node camera
+//	v1.19		Fix to: Import scale units, Default file/scale settings, Import Dialog mode
+//	v1.20		Added progress slider and improved scaling handling of nulls and camera
+//				Also added last used trans and rots and clear/transfer import trans rots settings
+//	v1.21		Added creation of 1, 2 or 3 node camera to selected camera which is then exported
+//	v1.22		Fixes to import/export file selection & node camera creation.
+//	v1.23		Fixes to import/export scaling.
+//	v1.24		Setup to output a rotation as a separate - axis non-functional for most users
+//	v1.25		Bakes 2 and 3 Node camera fix target to be 2 metres regardless of units
+//	v1.26		Export additional axis as Rotator Column
+//	v1.27		Export 2 more additional axes as Tilter Roller Columns
+//	v1.28		Export 6 more additional axes - UI done not actual code!
+//	v1.29		Fix PTR Import bug!
+//	v1.30		Message if you try to import differing node data onto a noded camera!
+//  v1.31		Fix to Kuper Style import
+//  v1.32		Fix to additional exports and FOV export.
+//  v1.33		Option to export in local or world space.
+//  v1.34		Bug Fixes: filename on export and Linux file browser issues.
+//				Mods to settings files mrmout.set and mrmcin.set
+//  v1.35		Creating a camera for baking deletes previous ones.
+//  v1.36		Exports focal length of baked camera.
+//				Imported camera motion is assigned a spline tangent
+//	v1.37		Added film back (aperture) import and export
+//				Improved Locator import and added placement of locator parent on origin, camera or target			
+//	v1.38		Modification to Flair Format to include data about lens and aperture
+//	v1.39		Added Kuper format export
+//	v1.40		Minor Changes
+//	v1.41		Uniform CRLF on printing. Option for Relative Co-ordinate export
+//	v1.42			13 May 09  Added Upload Timeline button and removed frame -1.
+//	v1.43		Adding axis xport
+//	v1.44		Handle Maya Z Up mode.
+//  v1.45		Fix bug in using feet scale! Progress dialog added to export
+//				May 2010  Bug fix on setting system time units
+//      v1.46           Added focus distance import (note focus is in inches) --pink
+//
+// Fix the units if different on import
+// Maya Z up export warn is 2 node and notate the file correctly.
+
+
+
+//  Known Bugs
+//	1)	Baking a 2 node over a 2 node does not transfer over the twist.
+//	
+//
+//	MRMCIN
+//
+//
+//	Procedure for reading in a Mark Roberts Motion Control Ascii CGI data file
+//
+//	Intelligent version which reads the file and determines what to do with it
+// 	also has a GUI type interface with option to:
+//	1)	Choose the camera
+//	2)	Choose the import file
+//	3)	Import the data as a move or a series of locators
+//	4)	Scale, rotate and translate the data as it is imported
+//	5)	Select the frame of the move to be used to match the current
+//		camera position.
+//	Copyright (c) 2008 Simon Wakley - Camera Control, Inc.
+//
+//  This MEL script is proprietary confidential information and is provided to
+//  customers on the basis that it will not be distributed or disseminated in any
+//  way and is soley for use in conjunction with Camera Control, Inc.
+//
+
+//
+// Juggle the carts to match Maya/Mrmc space
+//
+
+global float $maya_units;
+global int $no_roll;
+
+global int $NUM_CARTS = 12;
+global int $XV = 0;
+global int $YV = 1;
+global int $ZV = 2;
+global int $XT = 3;
+global int $YT = 4;
+global int $ZT = 5;
+global int $PAN = 6;
+global int $TILT = 7;
+global int $ROLL = 8;
+global int $XH = 6;
+global int $YH = 7;
+global int $ZH = 8;
+
+
+proc juggle_carts(int $way, float $carts[])
+{
+	float $tcarts[];
+	int $i;
+	global int $XV;
+	global int $YV;
+	global int $ZV;
+	global int $XT;
+	global int $YT;
+	global int $ZT;
+	global int $PAN;
+	global int $TILT;
+	global int $ROLL;
+	global int $XH;
+	global int $YH;
+	global int $ZH;	
+	global int $NUM_CARTS;	
+
+
+
+	int $TO_SOFT     = 0;
+	int $FROM_SOFT   = 1;
+	int $TO_KUPER    = 2;
+	int $FROM_KUPER  = 3;
+	int $TO_MAYAZ    = 4;
+	int $FROM_MAYAZ  = 5;
+	int $TO_MAYAY    = 6;
+	int $FROM_MAYAY  = 7;
+	int $TO_LIGHTW   = 8;
+	int $FROM_LIGHTW = 9;
+
+	for ($i = 0; $i < $NUM_CARTS; $i++)
+		$tcarts[$i] = $carts[$i];
+
+	if ($way == $FROM_SOFT)
+	{   // MRMC         SOFT
+		$carts[$XV]  =  -$tcarts[$ZV] ;
+		$carts[$XT]  =  -$tcarts[$ZT] ;
+		$carts[$XH]  =  -$tcarts[$ZH] ;
+
+		$carts[$YV]  =  -$tcarts[$XV] ;
+		$carts[$YT]  =  -$tcarts[$XT] ;
+		$carts[$YH]  =  -$tcarts[$XH] ;
+
+		$carts[$ZV]  =  $tcarts[$YV] ;
+		$carts[$ZT]  =  $tcarts[$YT] ;
+		$carts[$ZH]  =  $tcarts[$YH] ;
+	}
+	else if ($way == $TO_SOFT)
+	{   // SOFT         MRMC
+		$carts[$XV]  =  -$tcarts[$YV];
+		$carts[$XT]  =  -$tcarts[$YT];
+		$carts[$XH]  =  -$tcarts[$YH];
+
+		$carts[$YV]  =  $tcarts[$ZV];
+		$carts[$XT]  =  -$tcarts[$YT];
+		$carts[$XH]  =  -$tcarts[$YH];
+
+		$carts[$ZV]  =  -$tcarts[$XV];
+		$carts[$ZT]  =  -$tcarts[$XT];
+		$carts[$ZH]  =  -$tcarts[$XH];
+	}
+	else if ($way == $TO_KUPER)
+	{
+		$carts[$XV] = -$tcarts[$XV];
+
+		$carts[$YV] = -$tcarts[$YV];
+
+		$carts[$PAN] = -$tcarts[$PAN];
+		$carts[$ROLL] = -$tcarts[$ROLL];
+	}
+	else if ($way == $FROM_KUPER)
+	{
+		$carts[$XV] = -$tcarts[$XV];
+
+		$carts[$YV] = -$tcarts[$YV];
+
+		$carts[$PAN] = -$tcarts[$PAN];
+		$carts[$ROLL] = -$tcarts[$ROLL];
+	}
+	else if ($way == $TO_MAYAZ)
+	{
+		$carts[$XV] = -$tcarts[$YV];
+		$carts[$XT] = -$tcarts[$YT];
+		$carts[$XH] = -$tcarts[$YH];
+
+		$carts[$YV] = $tcarts[$XV];
+		$carts[$YT] = $tcarts[$XT];
+		$carts[$YH] = $tcarts[$XH];
+
+		// Pan Tilt and Roll
+		$carts[$PAN]  =  $tcarts[$PAN];
+		$carts[$TILT] =  $tcarts[$TILT] + 90;
+		$carts[$ROLL] =  $tcarts[$ROLL];
+	}
+	else if ($way == $FROM_MAYAZ)
+	{
+		$carts[$YV] =  -$tcarts[$XV];
+		$carts[$YT] =  -$tcarts[$XT];
+		$carts[$YH] =  -$tcarts[$XH];
+
+		$carts[$XV] =  $tcarts[$YV];
+		$carts[$XT] =  $tcarts[$YT];
+		$carts[$XH] =  $tcarts[$YH];
+
+		// Pan Tilt and Roll
+		$carts[$PAN]  =  $tcarts[$PAN];
+		$carts[$TILT] =  $tcarts[$TILT] - 90;
+		$carts[$ROLL] =  $tcarts[$ROLL];
+	}
+	else if ($way == $TO_MAYAY)
+	{   //MAYA        // MRMC
+		$carts[$XV] = - $tcarts[$YV];
+		$carts[$XT] = - $tcarts[$YT];
+		$carts[$XH] = - $tcarts[$YH];
+
+		$carts[$YV] =   $tcarts[$ZV];
+		$carts[$YT] =   $tcarts[$ZT];
+		$carts[$YH] =   $tcarts[$ZH];
+
+		$carts[$ZV] = - $tcarts[$XV];
+		$carts[$ZT] = - $tcarts[$XT];
+		$carts[$ZH] = - $tcarts[$XH];
+		// Pan Tilt and Roll are OK as is
+	}
+	else if ($way == $FROM_MAYAY)
+	{   // MRMC        MAYA
+		$carts[$YV] = - $tcarts[$XV];
+		$carts[$YT] = - $tcarts[$XT];
+		$carts[$YH] = - $tcarts[$XH];
+
+		$carts[$ZV] =   $tcarts[$YV];
+		$carts[$ZT] =   $tcarts[$YT];
+		$carts[$ZH] =   $tcarts[$YH];
+
+		$carts[$XV] = - $tcarts[$ZV];
+		$carts[$XT] = - $tcarts[$ZT];
+		$carts[$XH] = - $tcarts[$ZH];
+		// Pan Tilt and Roll are OK as is
+	}
+}
+
+proc print_MRMC_header(int $fileId, int $frames, string $camera, int $type, int $exp_fov, string $exp_names[], int $exporttype)
+{
+	string $temp;
+	string $line;
+	int $i;
+	string $print_line;
+	string $camshape[] = `listRelatives $camera`;
+	float $ap_width, $ap_height;
+	string $up;
+	
+	$ap_width = $ap_height = 0.0;
+	
+	$up = `upAxis -q -axis`;
+
+	$temp = `currentUnit -q -l`;
+	int $ple = `about -ev`;
+
+	// We assume that the data comes in, in centimetres so scale it
+	// to match the currently selected units
+
+	$line = "# Data Export from Maya using Camera Control, Inc. MEL Script\n";
+	
+	if ($exporttype == 1)
+		$line += "# Data Export is a Single Node Camera\n";
+	else if ($exporttype == 2)
+		$line += "# Data Export is a 2 Node Camera\n";
+	else if ($exporttype == 3)
+		$line += ("# Data Export is a 3 Node Camera\n");
+	
+	if (!$ple)
+		fprint $fileId $line;
+	else
+		print $line;
+
+	// print some handy comments for later
+	string $sceneFileName = `file -q -sn`;
+
+			// Print camera info to the maya script editor
+			
+	
+	$line = ("# Camera "+$camera+" exported from "+$sceneFileName+"\n");
+
+	if (!$ple)
+	{	
+		string $today[];
+		string $sysDate = `system "date"`;
+		tokenize $sysDate $today;
+		string $nowTime[];
+		string $sysTime = `system "time"`;
+		tokenize $sysTime $nowTime;
+		$line += ("# at " + $nowTime[4] + " on " + $today[5] + "\n");
+	}
+	
+	if (!$ple)
+		fprint $fileId $line;
+	else
+		print $line;
+	
+	print("Up axis is " + $up + "\n");
+	
+	if ($exporttype == 2)
+	{
+		if ($up == "y")
+			$line = "DATA_TYPE CARTS_RAW MAYAY_COORDS";
+		else
+			$line = "DATA_TYPE CARTS_RAW MAYAZ_COORDS";
+	}
+	else if ($exporttype == 3)
+	{
+		if ($up == "y")
+			$line = "DATA_TYPE 3NODE_RAW MAYAY_COORDS";
+		else
+			$line = "DATA_TYPE 3NODE_RAW MAYAZ_COORDS";
+	}
+	else
+	{
+		if ($up == "y")
+			$line = "DATA_TYPE EULER_RAW MAYAY_COORDS";
+		else
+			$line = "DATA_TYPE EULER_RAW MAYAZ_COORDS";
+	}
+	
+	if ($temp == "mm")
+		$line += (" IN_MILLIMETRES");
+	else if ($temp == "cm")
+		$line += (" IN_CENTIMETRES");
+	else if ($temp == "m")
+		$line += (" IN_METRES");
+	else if ($temp == "km")
+		$line += (" IN_KILOMETRES");
+	else if ($temp == "in")
+		$line += (" IN_INCHES");
+	else	if ($temp == "ft")
+		$line += (" IN_FEET");
+	else if ($temp == "yd")
+		$line += (" IN_YARDS");
+	else
+		$line += (" IN_METRES");
+
+	if (size($camshape[0]))
+	{
+		float $cam_foclen[];
+		int $icam_foclen;
+
+		$cam_foclen[0] = `getAttr($camshape[0] + ".focalLength")`;
+		$icam_foclen = $cam_foclen[0];
+		
+		if ($exp_fov == 2)
+		{
+			// It is in FOCAL_LENGTH
+			$line += (" FOCAL_LENGTH\n");
+		}
+		else
+		{
+			// Print the lens to file
+			$line += (" LENS " + $icam_foclen + "mm\n");
+		}
+	}
+	else
+		$line += (" NOLENS?\n");
+
+	if (!$ple)
+		fprint $fileId $line;
+	else
+		print $line;
+	
+	
+	if (size($camshape[0]))
+	{
+		$ap_width = `camera -q -hfa $camshape[0]`;
+		$ap_height = `camera -q -vfa $camshape[0]`;
+	}
+	
+	$line = "POINTS " + $frames + " SPEED 24.00  TIME 1.0 APERTURE " + $ap_width + " " + $ap_height + "\n";
+	
+	if (!$ple)
+		fprint $fileId $line;
+	else
+		print $line;
+
+	if ($exporttype == 2)
+		$line  =  "Frame       XV          YV          ZV          XT          YT          ZT          Roll ";
+	else if ($exporttype == 1)
+		$line  =   "Frame      XV          YV          ZV          PAN         TILT        Roll ";
+	else if ($exporttype == 3)
+		$line  =   "Frame      XV          YV          ZV          XT          YT          ZT          XH          YH          ZH ";
+
+	if ($exp_fov != 1)
+		$line += "      LENS ";
+		
+	for($i = 0; $i < 6; $i++)
+	{
+		if(size($exp_names[$i]))
+			$line += ("\t " + $exp_names[$i]);
+	}
+
+	$line += " \n";
+	
+	if (!$ple)
+		fprint $fileId $line;
+	else
+		print $line;
+}
+
+//
+// Create Locators/Nulls for every frame of camera and target.
+//
+global proc mrmcnullin()
+{
+	// Read in data file and store vars into arrays
+	float $frameA[];
+	float $temp[];
+	float $txA[];
+	float $tyA[];
+	float $tzA[];
+	float $rxA[];
+	float $ryA[];
+	float $rzA[];
+	float $roA[];
+	int $i = 0;
+	global int $debug;
+	string $annotationShape;
+	string $annotation;
+	global string $reflocator[];
+
+	int $counter = 0;
+	int $data_type;
+	int $gran;
+	int $coords;
+	float $scale;
+	float $units;
+	float $rotate;
+	float $tx;
+	float $ty;
+	float $tz;
+	float $temp[];
+	float $cosrot;
+	float $sinrot;
+	string $cmd1;
+	string $camshape[];
+	string $targshape[];
+
+
+	global int $XV;
+	global int $YV;
+	global int $ZV;
+	global int $XT;
+	global int $YT;
+	global int $ZT;
+	global int $PAN;
+	global int $TILT;
+	global int $ROLL;
+	global int $XH;
+	global int $YH;
+	global int $ZH;	
+	global int $NUM_CARTS;	
+	
+	global float $maya_units;
+
+	global float $refx, $refy, $refz;
+
+	$temp = `floatFieldGrp -q -v imc_flt_scale`;
+	$scale = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_rotate`;
+	$rotate = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_tx`;
+	$tx = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_ty`;
+	$ty = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_tz`;
+	$tz = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_granularity`;
+	$gran = $temp[0];
+
+
+	// Tels us where to place the parent locator 
+	// BEFORE we do the parenting!
+
+	int $radio_parentloc = `radioButtonGrp -query -select imc_radio_refparent`;
+
+	$annotate = `checkBox -query -value emc_annotate`;
+
+	$debug = `checkBox -query -value emc_debugimport`;
+
+	if ($gran == 0)
+		$gran = 1;
+
+	string $attName;
+
+	waitCursor -state on;
+
+	// Recover the selected file name
+	string $filepick = `textField -q -fi imc_textField_filename`;
+	int $fileId = `fopen $filepick "r"`;
+
+	$temp = strip_header($fileId);
+
+	$data_type = $temp[0];
+	$units = $temp[1];
+	$coords = $temp[3];
+
+	$scale *= $units;
+	//	$scale /= $units;
+
+	if ($data_type != 2 && $data_type != 3)  // Only CARTS_RAW works here
+	{
+		fclose ($fileId);
+		error "Invalid data form for Locator import";
+		return;
+	}
+
+	$nextLine = `fgetline $fileId`;  // First useful line
+
+	// Read all the data into a large buffer
+	while ( size( $nextLine ) > 0 )
+	{
+		string $buffer[];
+
+		$numTokens = tokenize($nextLine, $buffer);
+		$frameA[$counter] = $buffer[0];
+
+		// juggle the carts if needed
+		$temp[$XV] = $buffer[1];
+		$temp[1] = $buffer[2];
+		$temp[2] = $buffer[3];
+		$temp[3] = $buffer[4];
+		$temp[4] = $buffer[5];
+		$temp[5] = $buffer[6];
+		// Read the 7th column if there is one - not with Euler data!
+		if ($data_type == 2)
+			$temp[6] = $buffer[7];
+
+		if ($coords)
+			juggle_carts(6, $temp);
+
+		// And store...
+		$txA[$counter] = $temp[0];
+		$tyA[$counter] = $temp[1];
+		$tzA[$counter] = $temp[2];
+		$rxA[$counter] = $temp[3];
+		$ryA[$counter] = $temp[4];
+		$rzA[$counter] = $temp[5];
+		if ($data_type == 2)
+			$roA[$counter] = $temp[6];
+
+		// Now apply the scaling factors, rotations and translations
+		// First Scaling
+		$txA[$counter] *= $scale;
+		$tyA[$counter] *= $scale;
+		$tzA[$counter] *= $scale;
+		$rxA[$counter] = $rxA[$counter] * $scale;
+		$ryA[$counter] = $ryA[$counter] * $scale;
+		$rzA[$counter] = $rzA[$counter] * $scale;
+
+		// Now rotation about the y axis.
+		if ($rotate != 0.0)
+		{
+			float $hx, $hz;
+			$hx = $txA[$counter];
+			$hz = $tzA[$counter];
+			$txA[$counter] = $hx * $cosrot + $hz * $sinrot;
+			$tzA[$counter] = $hz * $cosrot - $hx * $sinrot;
+
+			$hx = $rxA[$counter];
+			$hz = $rzA[$counter];
+			$rxA[$counter] = $hx * $cosrot + $hz * $sinrot;
+			$rzA[$counter] = $hz * $cosrot - $hx * $sinrot;
+		}
+
+		// And finally translate
+
+		$txA[$counter] += $tx;
+		$tyA[$counter] += $ty;
+		$tzA[$counter] += $tz;
+		$rxA[$counter] += $tx;
+		$ryA[$counter] += $ty;
+		$rzA[$counter] += $tz;
+		$counter++;
+		$nextLine = `fgetline $fileId`;
+	}
+
+
+	fclose $fileId;
+
+	//print("Read in " + size( $txA ) + " lines or " + $counter + "\n");
+
+	// This reflocator is used in upload_locator!
+	string $refparent = `createNode locator`;
+	$reflocator = `listRelatives -p $refparent`;
+
+	$attName = $reflocator[0] + ".rotateX";
+	$cmd1 = "setAttr " + "-lock true " +  $attName;
+	eval($cmd1);
+
+	$attName = $reflocator[0] + ".rotateZ";
+	$cmd1 = "setAttr " + "-lock true " +  $attName;
+	eval($cmd1);
+
+
+	// Where is the reflocator placed?
+	
+	if ($radio_parentloc > 1)	// 1 is leave it at the origin
+	{
+		string $cmd1;
+	
+		if ($radio_parentloc == 2)  // Lock it onto Cam0
+		{
+			$refx = $txA[0]; $refy = $tyA[0]; $refz = $tzA[0];
+
+			if (1)
+			{
+			$attName = $reflocator[0] + ".translateX";
+			$cmd1 = "setAttr " + $attName + " " + $txA[0];
+			eval($cmd1);
+			$attName = $reflocator[0] + ".translateY";
+			$cmd1 = "setAttr " + $attName + " " + $tyA[0];
+			eval($cmd1);
+			$attName = $reflocator[0] + ".translateZ";
+			$cmd1 = "setAttr " + $attName + " " + $tzA[0];
+			eval($cmd1);
+			}
+			else
+			{
+			$attName = $refparent + ".localPositionX";
+			$cmd1 = "setAttr " + $attName + " " + $txA[0];
+			eval($cmd1);
+			$attName = $refparent + ".localPositionY";
+			$cmd1 = "setAttr " + $attName + " " + $tyA[0];
+			eval($cmd1);
+			$attName = $refparent + ".localPositionZ";
+			$cmd1 = "setAttr " + $attName + " " + $tzA[0];
+			eval($cmd1);
+			}
+			
+			if ($debug)
+				print("Positioned parent locator at Cam0 - " + $refx + " " + $refy + " " + $refz + "\n");
+		}
+		else if ($radio_parentloc == 3)  // Lock it onto Targ0
+		{
+			$refx = $rxA[0]; $refy = $ryA[0]; $refz = $rzA[0];
+
+			if (1)
+			{
+			$attName = $reflocator[0] + ".translateX";
+			$cmd1 = "setAttr " + $attName + " " + $rxA[0];
+			eval($cmd1);
+			$attName = $reflocator[0] + ".translateY";
+			$cmd1 = "setAttr " + $attName + " " + $ryA[0];
+			eval($cmd1);
+			$attName = $reflocator[0] + ".translateZ";
+			$cmd1 = "setAttr " + $attName + " " + $rzA[0];
+			eval($cmd1);
+			}
+			else
+			{
+			$attName = $refparent + ".localPositionX";
+			$cmd1 = "setAttr " + $attName + " " + $rxA[0];
+			eval($cmd1);
+			$attName = $refparent + ".localPositionY";
+			$cmd1 = "setAttr " + $attName + " " + $ryA[0];
+			eval($cmd1);
+			$attName = $refparent + ".localPositionZ";
+			$cmd1 = "setAttr " + $attName + " " + $rzA[0];
+			eval($cmd1);
+			}
+			
+			if ($debug)
+				print("Positioned parent locator at Targ0 - " + $refx + " " + $refy + " " + $refz + "\n");
+		}
+	}
+	else
+		$refx = $refy = $refz = 0;
+
+	// Group all the following together?
+	//group -em -name mygroup;
+
+
+	if ($annotate)
+	{
+		//$cmd1 = "annotate -tx" + " Cam0 -p " + ($txA[$i] + 5) + " " + ($tyA[$i] + 5) + " " + ($tzA[$i] + 5) + " " + $camlocator[$i] + " ";
+
+		$cmd1 = "annotate -tx" + " ImportParent -p " + ($refx + 5) + " " + ($refy + 5) + " " + ($refz + 5) + " " + $reflocator[0];
+		//$cmd1 = "annotate -tx " + " ImportParent -p 5 -6 -5 " + $reflocator[0];
+		$annotationShape = eval($cmd1);
+		$annotation = Shape2Camera($annotationShape);
+		parent $annotation $reflocator;
+	}	
+
+
+	// If you don't eval a string it doesn't do anything!
+	//string $cmd = "group -parent mygroup $refparent ";
+
+	// Now set the keyframes one per frame for each of the animatable factors
+	for ($i = 0; $i < size( $txA ); $i++)
+	{
+		string $camlocator[];
+		string $targlocator[];
+
+		// All parented to the ref locator so offset by its origin
+		$txA[$i] = $txA[$i] - $refx;
+		$tyA[$i] = $tyA[$i] - $refy;
+		$tzA[$i] = $tzA[$i] - $refz;
+
+		$rxA[$i] = $rxA[$i] - $refx;
+		$ryA[$i] = $ryA[$i] - $refy;
+		$rzA[$i] = $rzA[$i] - $refz;
+
+		// Skip if not a granularity line or the last
+		if ($i % $gran && ($i != size($txA) - 1))
+			continue;
+
+		// Only the transform parent has a .translateXYZ attribute
+
+		$camshape[$i] = `createNode locator`;
+		$camlocator = `listRelatives -p $camshape[$i]`;
+
+		$targshape[$i] = `createNode locator`;
+		$targlocator = `listRelatives -p $targshape[$i]`;
+
+		if (!$i && $annotate)
+		{
+			// Use world not ref parent relative space since you locate it before you parent it!
+			$cmd1 = "annotate -tx" + " Cam0 -p " + ($txA[$i] + $refx + 5) + " " + ($tyA[$i] + $refy + 5)
+													 + " " + ($tzA[$i] + $refz + 5) + " " + $camlocator[$i] + " ";
+			$annotationShape = eval($cmd1);
+			$annotation = Shape2Camera($annotationShape);
+			parent $annotation $reflocator;
+
+			$cmd1 = "annotate -tx" + " Targ0 -p " + ($rxA[$i] + $refx + 5) + " " + ($ryA[$i] + $refy + 5)
+												 + " " + ($rzA[$i] + $refz + 5) + " " + $targlocator[$i] + " ";
+			$annotationShape = eval($cmd1);
+			$annotation = Shape2Camera($annotationShape);
+			parent $annotation $reflocator;
+		}
+		else if (($i + 1) == size($txA) && $annotate)
+		{
+			$cmd1 = "annotate -tx" + " Cam1 -p " + ($txA[$i] + $refx - 5) + " " + ($tyA[$i] + $refy - 5) + 
+																" " + ($tzA[$i] + $refz +- 5) + " " + $camlocator[0];
+			$annotationShape = eval($cmd1);
+			$annotation = Shape2Camera($annotationShape);
+			parent $annotation $reflocator;
+
+			// Use world not ref parent relative space since you locate it before you parent it!
+			$cmd1 = "annotate -tx" + " Targ1 " + " -p " + ($rxA[$i] + $refx - 5) + " " + ($ryA[$i] + $refy - 5) + 
+																" " + ($rzA[$i] + $refz - 5) + " " + $targlocator[0];
+			$annotationShape = eval($cmd1);
+			$annotation = Shape2Camera($annotationShape);
+			parent $annotation $reflocator;
+		}
+
+		// Set the scale on the locators.  It really matters what the Maya units are, if you are in
+		// metres, then these items should be .2 - .5 in size, if you are in metres.
+
+
+		if ($debug)
+			print("In mrmnullin maya scaling factor is " + $maya_units + "\n");
+			
+		$cmd1 = "setAttr " + $camlocator[0] + ".scaleX " + 0.2 * $maya_units;
+		eval($cmd1);
+		$cmd1 = "setAttr " + $camlocator[0] + ".scaleY " + 0.2 * $maya_units;
+		eval($cmd1);
+		$cmd1 = "setAttr " + $camlocator[0] + ".scaleZ " + 0.2 * $maya_units;
+		eval($cmd1);
+		$cmd1 = "setAttr " + $targlocator[0] + ".scaleX " + 0.5 * $maya_units;
+		eval($cmd1);
+		$cmd1 = "setAttr " + $targlocator[0] + ".scaleY " + 0.5 * $maya_units;
+		eval($cmd1);
+		$cmd1 = "setAttr " + $targlocator[0] + ".scaleZ " +  0.5 * $maya_units;
+		eval($cmd1);
+
+
+		// setting vals for Camera X
+		$attName = $camlocator[0] + ".translateX";
+		$cmd1 = "setAttr " + $attName + " " + $txA[$i];
+		eval($cmd1);
+		$cmd1 = "setAttr " + "-lock true " +   $attName;
+		eval($cmd1);
+
+		// setting vals for Camera Y
+		$attName = $camlocator[0] + ".translateY";
+		$cmd1 = "setAttr " + $attName + " " + $tyA[$i];
+		eval($cmd1);
+		$cmd1 = "setAttr " + "-lock true " +   $attName;
+		eval($cmd1);
+
+		// setting vals for Camera Z
+		$attName = $camlocator[0] + ".translateZ";
+		$cmd1 = "setAttr " + $attName + " " + $tzA[$i];
+		eval($cmd1);
+		$cmd1 = "setAttr " + "-lock true " +   $attName;
+		eval($cmd1);
+
+		// setting vals for Target X
+		$attName = $targlocator[0] + ".translateX";
+		$cmd1 = "setAttr " + $attName + " " + $rxA[$i];
+		eval($cmd1);
+		$cmd1 = "setAttr " + "-lock true " +   $attName;
+		eval($cmd1);
+
+		// setting vals for Target Y
+		$attName = $targlocator[0] + ".translateY";
+		$cmd1 = "setAttr " + $attName + " " + $ryA[$i];
+		eval($cmd1);
+		$cmd1 = "setAttr " + "-lock true " +   $attName;
+		eval($cmd1);
+
+		// setting vals for Target Z
+		$attName = $targlocator[0] + ".translateZ";
+		$cmd1 = "setAttr " + $attName + " " + $rzA[$i];
+		eval($cmd1);
+		$cmd1 = "setAttr " + "-lock true " +   $attName;
+		eval($cmd1);
+
+
+		// Should be some kind of key interrupt allowed here   KeyInterrupt();
+		// No needed since the ref point import is short?.
+
+
+		
+		// Parent - Works, but produces the error 
+		// 'parent' command only operates on transform nodes. To parent shapes, 
+//		parent -s $camshape[$i]  $refparent;
+//		parent -s $targshape[$i]  $refparent;   Last argu/ment must be a group. //
+
+//		parent  $camshape[$i]  $refparent;
+//		parent  $targshape[$i]  $refparent;
+
+		parent $targlocator[0]  $reflocator[0];
+		parent $camlocator[0]  $reflocator[0];
+
+
+		// Trying to create a 'group' command, but it does not work as the name
+		// changes in the real world.
+		//$cmd += "$targshape[" + $i + "] camshape[" + $i + "] ";
+
+	}	// Done creating all the locators
+
+
+	select -r $reflocator[0];
+
+	// TODO
+	// Constrain and group all the locators to the ref parent node
+	// Constrain the ref parent in rotx and rotz
+
+	//eval($cmd);
+
+	//print("Command is " + $cmd + "\n");
+
+	waitCursor -state off;
+
+	print ("DONE\n");
+}
+
+proc int isAim(string $query_node)
+{
+	string $relatives[] = `listRelatives -p $query_node`;
+	string $kids[];
+	int $i;
+	
+	if (size($relatives))
+	{
+		$kids = `listRelatives $relatives[0]`;
+	}
+	else
+		return 0;
+		
+	int $array_size = size($kids);
+	for ($i = 0; $i < $array_size; $i++)
+	{
+		print("Node " + $query_node + "'s relative[0] has " + $array_size + " kids " + $kids[$i] + "\n");
+	}
+	
+	if (size($kids) >= 2)
+	{
+		if ($kids[1] == $query_node)
+		{
+			return 1;
+		}
+		else
+		{
+			print("Relative[1] " + $relatives[1] + " is not " + $query_node + " - so not an aim\n");
+		}
+	}
+	
+	return 0;
+}
+
+global proc string getCamFromAim(string $aim_node)
+{
+	string $answer = " ";
+	string $relatives[] = `listRelatives -p $aim_node`;
+	string $kids[];
+	int $i;
+
+	int $array_size = size($relatives);
+	for ($i = 0; $i < $array_size; $i++)
+	{
+		print("Aim Node " + $aim_node + " has " + $array_size + " relatives - " + $relatives[$i] + "\n");
+	}
+
+	
+	if (size($relatives))
+	{
+		string $kids[] = `listRelatives $relatives[0]`;
+		// First relative is normally the camera!
+
+		int $array_size = size($kids);
+		for ($i = 0; $i < $array_size; $i++)
+		{
+			print("Aim Node " + $aim_node + "'parent has " + $array_size + " kids " + $kids[$i] + "\n");
+		}
+		
+		if (size($kids))
+			$answer = $kids[0];
+	}
+	
+	return $answer;
+	
+}
+
+global proc genuflex_import()
+{
+	// Read in data file and store vars into arrays
+	float $frameA[];
+	float $kuper_units;
+	int $fileId;
+	string $line;
+	int $ple = `about -ev`;
+	string $filepick;
+	float $fs;
+	float $fe;
+	int $i = 0;
+	int $counter = 0;
+	float $units;
+	float $TrackPos[];
+	float $SwingPos[];
+	float $BoomPos[];
+	float $PanPos[];
+	float $TiltPos[];
+	float $RollPos[];
+	float $scale;
+
+	global int $debug;
+	global float $maya_units;
+
+
+	$debug = `checkBox -query -value emc_debugimport`;
+	int $ple = `about -ev`;
+	
+	set_maya_units();
+
+	// Let's always print the data in PLE!
+	if ($ple)
+		$debug = 1;
+	
+	// Recover the file name selected
+	$filepick = `textField -q -fi imc_textField_filename`;
+
+	// Open the file
+	int $fileId = `fopen $filepick "r"`;
+	if ($fileId == 0)
+	{
+		string $errtext = "Could not open Import file " + $filepick;
+		error $errtext;
+		//return;
+	}
+
+	// Find out what kind of data it is and strip off the top lines
+	$temp = strip_header($fileId);
+
+	$data_type = $temp[0];
+	$units = $temp[1];
+	$timebase = $temp[2];
+	$coords = $temp[3];
+	$lines = $temp[4];
+	$ap_width = $temp[5];
+	$ap_height = $temp[6];
+	$import_fov = $temp[7];
+
+	if ($debug)
+		print("Strip header: Data type;  " + $temp[0] + " Units " + $temp[1] + " Timebase " + $temp[2] + " Coords " + $temp[3] + " Lines" + $lines + " Ap Width " + $ap_width + " Ap Height " + $ap_height +"\n");
+
+
+	$scale =  $maya_units * $units;
+
+//	print("Import: units " + $units + " Scale is " + $scale + "   Data type is " + $data_type + " Timebase " + $timebase + "\n");
+
+	if ($data_type == -3)
+	{
+		print("Ugh it's Kuper data :-)\n");
+		$data_type = 1;
+		$kuper = 1;
+		$lines = 99999;
+	}
+
+	if ($data_type < 1)
+	{
+		fclose($fileId);
+		error "Invalid Data for import in file - contact Simon Wakley 310 581 8343";
+		return;
+	}
+
+	waitCursor -state on;
+
+	$nextLine = `fgetline $fileId`;  // First useful line
+
+	$fs = 1.0;
+
+	if ($debug)
+		print("First Import line " + $nextLine);
+	
+	// Read all the data into a large buffer
+	while((size($nextLine) > 0)&& ($counter < $lines))
+	{
+		string $buffer[];
+		int $j = 0;
+		
+		// a comma is a valid delimiter now!!
+		$numTokens = tokenize($nextLine, " ,;	", $buffer);
+		$frameA[$counter] = $counter + 1;
+		$TrackPos[$counter] = float($buffer[0]);
+		$SwingPos[$counter] = $buffer[1];
+		$BoomPos[$counter] = $buffer[2];
+		$PanPos[$counter] = $buffer[3];
+		$TiltPosA[$counter] = $buffer[4];
+		$RollPos[$counter] = $buffer[5];
+
+		$fe = $frameA[$counter];
+		$counter++;
+		$nextLine = `fgetline $fileId`;
+	}
+
+	fclose $fileId;
+	
+	$fs = $frameA[0];
+
+//	print("Import: fe " + $fe + " counter " + $counter + " fe " + $frameA[$counter] + " XV0 " + $txA[0] + "\n");
+//	print("Import: fe " + $fe + " counter " + $counter + " fe " + $frameA[$counter-1] + " YV0 " + $tyA[0] + "\n");
+
+	// Adjusted the entire array of data as needed, now we can import
+	
+	// Set the playback options to make the slider bar the right length
+	playbackOptions -min $fs -max $fe;
+
+	int $loops = size($TrackPos);
+
+	if ($debug)
+		print( "FS " + $fs + " FE " + $fe + " Loops " + $loops + " Counter " + $counter +"\n" );
+
+	progressWindow
+	-title "Import Moco Genuflex File"
+	-progress $i
+	-status "Reading Line"
+	-isInterruptable true
+	-max $loops;
+
+	// Now set the keyframes one per frame for each of the animatable factors
+	for ($i = 0; $i < $loops ; $i++)
+	{
+		//print( "i:" + $i + " " + $txA[$i] + " " + $tyA[$i] + " " + $tzA[$i] +"\n" );
+
+		// set current frame
+		$cmd1 = "currentTime " + $frameA[$i];
+		eval($cmd1);
+
+		$attName = "AxisControl.Track";
+		$cmd1 = "setAttr " + $attName + " " + $TrackPos[$i];
+		eval($cmd1);
+		$cmd1 = "setKeyframe " + $attName;
+		eval($cmd1);
+
+		$attName = "AxisControl.Swing";
+		$cmd1 = "setAttr " + $attName + " " + $SwingPos[$i];
+		eval($cmd1);
+		$cmd1 = "setKeyframe " + $attName;
+		eval($cmd1);
+
+		$attName = "AxisControl.ShortArmBoom";
+		$cmd1 = "setAttr " + $attName + " " + $BoomPos[$i];
+		eval($cmd1);
+		$cmd1 = "setKeyframe " + $attName;
+		eval($cmd1);
+
+
+		// setting vals for Pan
+		$attName = "AxisControl.Pan";
+		$cmd1 = "setAttr " + $attName + " " + $PanPos[$i];
+		eval($cmd1);
+		$cmd1 = "setKeyframe " + $attName;
+		eval($cmd1);
+
+		// setting vals for Tilt
+		$attName = "AxisControl.Tilt";
+		$cmd1 = "setAttr " + $attName + " " + $TiltPos[$i];
+		eval($cmd1);
+		$cmd1 = "setKeyframe " + $attName;
+		eval($cmd1);
+
+		// setting vals for Roll
+//		$attName = "AxisControl.Roll";
+//		$cmd1 = "setAttr " + $attName + " " + $RollPos[$i];
+//		eval($cmd1);
+//		$cmd1 = "setKeyframe " + $attName;
+//		eval($cmd1);
+
+
+		// Check if the dialog has been cancelled
+		if ( `progressWindow -query -isCancelled` )
+			break;
+
+		progressWindow -edit  -progress $i
+		-status ("Reading Line: " + $i);
+
+
+	}
+	
+	// Set the tangents to linear since that is the least inappropriate
+	// -time ":" means all keyframes
+	keyTangent  -time ":" -itt spline -ott spline;
+	
+	progressWindow -endProgress;
+
+	// Set the playback slider bar to fit the length of the move
+	// print("Set playback option to " + $fs  + " and " + $fe + "\n");
+	playbackOptions -min $fs -max $fe;
+	currentTime $fs;
+
+	waitCursor -state off;
+	
+	print ("DONE with Genuflex import\n");
+
+}
+
+
+global proc mrmccamin()
+{
+	// Read in data file and store vars into arrays
+	float $frameA[];
+	float $txA[];
+	float $tyA[];
+	float $tzA[];
+	float $thxA[];
+	float $thyA[];
+	float $thzA[];
+	float $rxA[];
+	float $ryA[];
+	float $rzA[];
+	float $roA[];
+	float $foclenA[];
+	float $focus[]; // stored as inches in file
+	float $fs;
+	float $fe;
+	int $gran;
+	int $i = 0;
+	int $counter = 0;
+	string $attName;
+	string $filepick;
+	string $cmd1;
+	string $movecam;
+	int $data_type;
+	int $timebase;
+	int $coords;
+	float $ap_width, $ap_height;
+	float $units;
+	float $lines;
+	float $scale;
+	float $rotate, $rr_rotate;
+	float $tx, $rt_tx;
+	float $ty, $rt_ty;
+	float $tz, $rt_tz;
+	float $temp[];
+	float $cosrot;
+	float $sinrot;
+	int $match_frame;
+	int $import_fov;
+	int $kuper = 0;
+	string $selected_node[];
+
+	$selected_node = `ls -sl`;
+
+	global float $maya_units;
+	global int $debug;
+
+	$debug = `checkBox -query -value emc_debugimport`;
+
+	int $ple = `about -ev`;
+	
+	// Let's always print the data is PLE!
+	if ($ple)
+		$debug = 1;
+	
+	$temp = `floatFieldGrp -q -v imc_flt_scale`;
+	$scale = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_rotate`;
+	$rotate = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_tx`;
+	$tx = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_ty`;
+	$ty = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_tz`;
+	$tz = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_match_frame`;
+	$match_frame = $temp[0];
+
+	$temp = `floatFieldGrp -q -v imc_flt_granularity`;
+	$gran = $temp[0];
+	if ($gran == 0)
+		$gran = 1;
+
+	print ("Import move scale " + $scale + " rotate " + $rotate + " for match frame " + $match_frame + " Granularity " + $gran + "\n");
+	print ("Translate move TX: " + $tx + " TY: " + $ty + " TZ: " + $tz + "\n");
+
+	$cosrot = cos (deg_to_rad ($rotate));
+	$sinrot = sin (deg_to_rad ($rotate));
+
+	// Recover the file name selected
+	$filepick = `textField -q -fi imc_textField_filename`;
+
+	// Open the file
+	int $fileId = `fopen $filepick "r"`;
+	if ($fileId == 0)
+	{
+		string $errtext = "Could not open Import file " + $filepick;
+		error $errtext;
+		//return;
+	}
+
+	// Get the selected import translation 
+	int $radio_trans = `radioButtonGrp -query -select imc_radio_trans`;
+	int $radio_rot = `radioButtonGrp -query -select imc_radio_rot`;
+	int $radio_camspeed = `radioButtonGrp -query -select imc_radio_camspeed`;
+
+	if ($radio_camspeed == 2)
+	{
+		$cmd1 = "currentUnit -time film";
+		eval($cmd1);
+		if ($debug)
+			print("Current units set to " + $radio_camspeed + " by command" + $cmd1 + "\n");
+	}
+	else if ($radio_camspeed == 3)
+	{
+		$cmd1 = "currentUnit -time pal";
+		eval($cmd1);
+		if ($debug)
+			print("Current units set to" + $radio_camspeed + " by command" + $cmd1 + "\n");
+	}
+	else if ($radio_camspeed == 4)
+	{
+		$cmd1 = "currentUnit -time ntsc";
+		eval($cmd1);
+		if ($debug)
+		print("Current time units set to " + $radio_camspeed + " by command" + $cmd1 + "\n");
+	}
+	else
+	{
+		if ($debug)
+		print("Current time units set not set \n");
+	}
+	// Find out what kind of data it is and strip off the top lines
+	$temp = strip_header($fileId);
+
+	$data_type = $temp[0];
+	$units = $temp[1];
+	$timebase = $temp[2];
+	$coords = $temp[3];
+	$lines = $temp[4];
+	$ap_width = $temp[5];
+	$ap_height = $temp[6];
+	$import_fov = $temp[7];
+
+	if ($debug)
+		print("Strip header: Data type;  " + $temp[0] + " Units " + $temp[1] + " Timebase " + $temp[2] + " Coords " + $temp[3] + " Lines" + $lines + " Ap Width " + $ap_width + " Ap Height " + $ap_height +"\n");
+
+
+	$scale *= $units;
+
+	print("Import: units " + $units + " Scale is " + $scale + "   Data type is " + $data_type + " Timebase " + $timebase + "\n");
+
+	if ($data_type == -3)
+	{
+		print("Ugh it's Kuper data :-)\n");
+		$data_type = 1;
+		$kuper = 1;
+		$lines = 99999;
+	}
+
+	if ($data_type < 1)
+	{
+		fclose($fileId);
+		error "Invalid Data for import in file - contact Simon Wakley 310 581 8343";
+		return;
+	}
+
+	waitCursor -state on;
+
+	// Animate an existing camera, or make a new one
+	string $pickcam = `optionMenu -q -v cameras_option_menu`;
+
+	if ($pickcam == "Create New")
+	{
+		string $camName[] = `camera`;
+		string $camShape = $camName[1];
+		
+		if ($debug)
+			print("Create new camera " + $camName[0] + $camName[1] + "\n");
+
+		cameraMakeNode $data_type $camName[0];
+		$movecam = $camName[0];
+		
+		// Make sure we have the correct rotate order
+		//$radio_trans = 1;
+		
+		if ($data_type == 1)
+			setAttr ($movecam + ".rotateOrder") 2;
+
+		// Here set the default attributes that the camera should have
+		// first of these is it is 20 units in size...
+
+		//	print ("Convert file data to Metres " + $units + "\n");
+		$cmd1 = "setAttr " + $movecam + ".scaleX " + 20;
+		eval($cmd1);
+		$cmd1 = "setAttr " + $movecam + ".scaleY " + 20;
+		eval($cmd1);
+		$cmd1 = "setAttr " + $movecam + ".scaleZ " + 20;
+		eval($cmd1);
+
+		// I do not know what this does, Michael Sarkis wrote it
+		//setAttr "cameraShape1.displayFilmGate" 1; ??
+		
+	}
+	else
+	{
+		print("We are supposed to be using camera " + $pickcam + "\n");
+		$movecam = $pickcam;
+
+		if ($data_type == 1)
+		{
+			setAttr ($movecam + ".rotateOrder") 2;
+
+			// Make sure the selected camera is the correct rotation order
+			int $rotateorder = `getAttr ($movecam+".rotateOrder")`;
+
+			// Detect if not single node camera and error
+			if ($rotateorder != 2)
+			{
+				error "Importing 1 node data onto multi node camera;  Camera should be single node \n";
+			}
+			if ($debug)
+				print("Importing 1 node data onto camera with rotate order " + $rotateorder + "\n");
+		}
+		else if ($data_type == 2)
+		{
+			// Make sure the selected camera is 2 node
+			// This will error and stop 
+			float $test = `getAttr ($movecam + "_aim.tx")`;
+		}
+		else if ($data_type == 3)
+		{
+			// Make sure the selected camera has an Up!
+			// This will error and stop 
+			float $test = `getAttr ($movecam + "_up.tx")`;
+		}
+	}
+
+	// Set the aperture if we read in something .. should be user option
+
+	string $camShape = Camera2Shape($movecam);
+	
+	if (size($camShape) && $ap_width != 0.0 && $ap_height != 0.0)
+	{
+		// Set the camera aperture
+		camera -e -hfa $ap_width $camShape;
+		camera -e -vfa $ap_height $camShape;
+		
+		if ($debug)
+			print("Set the aperture of " + $camShape + " to " + $ap_width + " by " + $ap_height + "\n");
+		//setAttr "cameraShape1.horizontalFilmAperture" .816;
+	}
+	else
+	{
+		if ($debug)
+			print("Not setting the aperture of possibly unknown camera to " + $ap_width + " by " + $ap_height + "\n");
+		
+	}
+
+	int $array_size = size($selected_node);
+	
+	for ($i = 0; $debug && $i < $array_size; $i++)
+	{
+		print("Currently selected items " + $selected_node[$i] + "\n");
+	}
+
+	if ($radio_trans > 1 && $array_size)
+	{
+		vector $c = `xform -q -t -ws ($selected_node[0])`;
+		$rt_tx = $c.x;
+		$rt_ty = $c.y;
+		$rt_tz = $c.z;
+
+		//$rt_tx = `getAttr  ($selected_node[0] +".tx")`;
+		//$rt_ty = `getAttr  ($selected_node[0] +".ty")`;
+		//$rt_tz = `getAttr  ($selected_node[0] +".tz")`;
+		if ($debug)
+			print("Got trans from " + $selected_node[0] + " as " + $rt_tx  + " " + $rt_ty + " " + $rt_tz + " \n");
+	}
+	else
+	{
+		$rt_tx = 0.0;
+		$rt_ty = 0.0;
+		$rt_tz = 0.0;
+		
+		if ($radio_trans > 1)
+		{
+			error("Translate move to selected, but Nothing selected\n");
+			return;		
+		}
+	}
+
+	if ($debug)
+		print("Translate incoming move by " + $rt_tx + " " + $rt_ty + " " + $rt_tz + " " + "\n");
+
+	string $test = $selected_node[0] + "_aim";
+
+	if ($radio_rot == 2 && $array_size)
+	{
+		float $t_vx, $t_vz, $t_tx, $t_tz;
+		string $aim_cam;
+		vector $c;
+
+		// If the selected node is a camera aim..
+		if (isAim($selected_node[0]))
+		{
+			if ($debug)
+				print("Selected node " + $selected_node[0] +  " is an aim\n");
+				
+			$aim_cam = getCamFromAim($selected_node[0]);
+
+			// Get world space transforms			
+			$c = `xform -q -t -ws ($aim_cam)`;
+			$t_vx = $c.x;
+			$t_vz = $c.z;
+
+			$c = `xform -q -t -ws ($selected_node[0])`;
+			$t_tx = $c.x;
+			$t_tz = $c.z;
+
+			// atan2 is correctly viewpoint to target x , viewoint to target z
+			$rr_rotate = atan2d($t_vx - $t_tx, $t_vz - $t_tz);
+			
+			//print("Got Camera Rotate based on aim " + $aim_cam + " as " + $rr_rotate + "\n");
+			//print("Cam xz  " + $t_vx + " " + $t_vz + " Targ xz " + $t_tx + " " + $t_tz + "\n");
+		}
+		else if (`objExists $test`)	// It's a 2 node camera and we had the camera
+		{
+			if ($debug)
+				print("Selected node " + $selected_node[0] +  " is a 2 node camera\n");
+			
+			// Test is the Aim point
+			$c = `xform -q -t -ws ($test)`;
+			$t_tx = $c.x;
+			$t_tz = $c.z;
+
+			$c = `xform -q -t -ws ($selected_node[0])`;
+			$t_vx = $c.x;
+			$t_vz = $c.z;
+
+			$rr_rotate = atan2d($t_vx - $t_tx, $t_vz - $t_tz);
+			
+			//print("Got Camera Rotate based on its aim " + $test + " as " + $rr_rotate + "\n");
+			//print("Cam xz  " + $t_vx + " " + $t_vz + " Targ xz " + $t_tx + " " + $t_tz + "\n");
+		}
+		else	// Not an aim point or a camera point!
+		{
+			if ($debug)
+				print("Selected node " + $selected_node[0] +  " is NOT an aim or an aimable camera\n");
+			$rr_rotate = `getAttr ($selected_node[0] +".rotateY")`;
+		}
+					
+		if ($debug)
+			print("Rotate incoming move to match camera to " + $rr_rotate + "\n");
+	}
+	else if ($radio_rot == 2)
+	{
+		error("Rotate move to selected, but Nothing selected\n");		
+		return;
+	}
+
+	//print("Import from file " + $filepick + " radio trans is " + $radio_trans + "\n" );
+
+	$nextLine = `fgetline $fileId`;  // First useful line
+
+	$fs = 1.0;
+
+	if ($debug)
+		print("First Import line " + $nextLine);
+	
+	// Read all the data into a large buffer
+	while((size($nextLine) > 0)&& ($counter < $lines))
+	{
+		string $buffer[];
+		int $j = 0;
+		
+		
+		// a comma is a valid delimiter now!!
+		$numTokens = tokenize($nextLine, " ,;	", $buffer);
+		if (!$kuper)
+		{
+			if ($timebase == 1)
+			{
+				$frameA[$counter] = (int)($buffer[$j++]) + 1;
+				//print("Line " + $counter + " is " + $buffer[0] + " Line " + $nextLine + "\n");
+			}
+			else if ($timebase == 2)
+				$frameA[$counter] = (int)(24.0 * (float)($buffer[$j++])) + 1;
+			else
+				$frameA[$counter] = (int)($counter + 1);
+			
+			$temp[0] = $buffer[$j++];
+			$temp[1] = $buffer[$j++];
+			$temp[2] = $buffer[$j++];
+			$temp[3] = $buffer[$j++];
+			$temp[4] = $buffer[$j++];
+			$temp[5] = $buffer[$j++];
+
+			// Read the 7th column if there is one - not with Euler data!
+			
+			if ($data_type == 1)
+			{
+				// Pan Tilt and roll are normally  6, 7 and 8, but read into 3, 4 & 5
+				// This is done so that they are NOT juggled! 
+				$rxA[$counter] = $temp[3];
+				$ryA[$counter] = $temp[4];
+				$rzA[$counter] = $temp[5];
+				//print("Pan is " + $rxA[$counter] + "\n");
+			}
+			if ($data_type == 2)
+			{
+				// 2 Node camera with roll, get the roll
+				$temp[6] = $buffer[$j++];
+			}
+			else if ($data_type == 3)
+			{
+				// 3 Node get the Up (horizon) points
+				$temp[6] = $buffer[$j++];
+				$temp[7] = $buffer[$j++];
+				$temp[8] = $buffer[$j++];
+			}
+
+			// If there is a focal length, then get it here.
+			
+			if ($import_fov)
+				$foclenA[$counter] = $buffer[$j++];
+
+			// Juggle the carts around if needed
+
+			if ($coords) // 6 is to MAYA Y up
+				juggle_carts(6, $temp);
+
+			// And store...
+			$txA[$counter] = $temp[0];
+			$tyA[$counter] = $temp[1];
+			$tzA[$counter] = $temp[2];
+
+			if ($data_type == 2)
+			{
+				$rxA[$counter] = $temp[3];
+				$ryA[$counter] = $temp[4];
+				$rzA[$counter] = $temp[5];
+				// Roll data for 2 node camera
+				$roA[$counter] = $temp[6];
+			}
+			else if ($data_type == 3)
+			{	
+				// 3 node camera no roll
+				$rxA[$counter] = $temp[3];
+				$ryA[$counter] = $temp[4];
+				$rzA[$counter] = $temp[5];
+				$thxA[$counter] = $temp[6];
+				$thyA[$counter] = $temp[7];
+				$thzA[$counter] = $temp[8];
+			}
+	
+		}
+		else // it's kuper
+		{
+			$frameA[$counter] = $counter + 1;
+			$txA[$counter] = $buffer[1];
+			$tyA[$counter] = $buffer[2];
+			$tzA[$counter] = $buffer[0];
+
+			$rxA[$counter] = - (float)($buffer[3]);
+			$ryA[$counter] = $buffer[4];
+			$rzA[$counter] = - (float)($buffer[5]);
+		}
+
+		// Now apply the scaling factors, rotations and translations
+		// First Scaling
+		$txA[$counter] *= $scale;
+		$tyA[$counter] *= $scale;
+		$tzA[$counter] *= $scale;
+
+		if ($data_type == 2)
+		{
+			$rxA[$counter] = $rxA[$counter] * $scale;
+			$ryA[$counter] = $ryA[$counter] * $scale;
+			$rzA[$counter] = $rzA[$counter] * $scale;
+		}
+		else if ($data_type == 3)
+		{
+			$rxA[$counter] = $rxA[$counter] * $scale;
+			$ryA[$counter] = $ryA[$counter] * $scale;
+			$rzA[$counter] = $rzA[$counter] * $scale;
+
+			$thxA[$counter] = $thxA[$counter] * $scale;
+			$thyA[$counter] = $thyA[$counter] * $scale;
+			$thzA[$counter] = $thzA[$counter] * $scale;
+		}
+		
+		$fe = $frameA[$counter];
+		$counter++;
+		$nextLine = `fgetline $fileId`;
+	}
+
+	fclose $fileId;
+	
+	$fs = $frameA[0];
+
+//	print("Import: fe " + $fe + " counter " + $counter + " fe " + $frameA[$counter] + " XV0 " + $txA[0] + "\n");
+//	print("Import: fe " + $fe + " counter " + $counter + " fe " + $frameA[$counter-1] + " YV0 " + $tyA[0] + "\n");
+
+	if ($radio_rot > 1 || $radio_trans > 1)
+	{
+		if ($match_frame < $fs || $match_frame > $fe)
+		{
+			print(" Match frame requested " + $match_frame + " is outside of the move " + $fs + " to " + $fe + " " + $radio_rot + " " + $radio_trans + "\n");
+			return;
+		}
+		$match_frame -= 1;  // Moves start at index 0
+	}
+	else
+		$match_frame = 1;
+
+	// Now do the rotations and translations to match the chosen frame of the move.
+
+	for ($i = 0; $i < $counter; $i++)
+	{
+		float $xv, $yv, $zv, $xt, $yt, $zt, $xh, $yh, $zh;
+
+		// First rotation about the y axis
+		// First check if there is some rotate due to camera
+		if ($radio_rot > 1 && $i == 0)
+		{
+			float $match_rotate;
+			if ($data_type == 1)
+				$match_rotate = $rxA[$match_frame];	// Actually the pan!
+			else
+			{
+				// t is camera r is target! t for translations, r rotations!
+				$match_rotate = atan2d ($txA[$match_frame] - $rxA[$match_frame],
+				                        $tzA[$match_frame] - $rzA[$match_frame]);
+			}
+
+			$rotate += ($rr_rotate - $match_rotate);
+			// Here is rotate to current camera
+			// Setting the rotate used on last import!
+			floatFieldGrp -e -v1 $rotate imc_flt_urotate;
+
+		}
+
+		if ($i == 0)
+		{
+			//float $lxd, $lyd, $lzd;
+			// Set the initial values
+			$xv = $txA[$i];
+			$yv = $tyA[$i];
+			$zv = $tzA[$i];
+
+			$xt = $rxA[$i];
+			$yt = $ryA[$i];
+			$zt = $rzA[$i];
+
+			$xh = $thxA[$i];
+			$yh = $thyA[$i];
+			$zh = $thzA[$i];
+			
+			// Difference between start frame and match frame in translation
+			//$offsetx = $lxd = $txA[$match_frame] - $xv;
+			//$offsety = $lyd = $tyA[$match_frame] - $yv;
+			//$offsetz = $lzd = $tzA[$match_frame] - $zv;
+			
+			//if ($rotate != 0.0)
+			//{
+			//	$cosrot = cosd($rotate);
+			//	$sinrot = sind($rotate);
+				// Apply the rotation about the origin
+			//	$offsetx = $lxd * $cosrot + $lzd * $sinrot;
+			//	$offsetz = $lzd * $cosrot - $lxd * $sinrot;
+			//}
+			//$offsetx = $offsety = $offsetz = 0.0;
+			
+		}
+
+		// During the whole move
+		if ($rotate != 0.0)
+		{
+			$cosrot = cosd($rotate);
+			$sinrot = sind($rotate);
+			float $hx, $hz;
+
+			// Save the position as imported
+			$hx = $txA[$i];
+			$hz = $tzA[$i];
+			// Apply the rotation about the origin
+			$txA[$i] = $hx * $cosrot + $hz * $sinrot;
+			$tzA[$i] = $hz * $cosrot - $hx * $sinrot;
+
+			if ($data_type >= 2)
+			{
+				// Target Coordinates
+				$hx = $rxA[$i];
+				$hz = $rzA[$i];
+				// Apply the rotation about the origin
+				$rxA[$i] = $hx * $cosrot + $hz * $sinrot;
+				$rzA[$i] = $hz * $cosrot - $hx * $sinrot;
+			
+				if ($data_type == 3) // Up point coordinates
+				{
+					// Up point co-ordinates
+					$hx = $thxA[$i];
+					$hz = $thzA[$i];
+					// Apply the rotation about the origin
+					$thxA[$i] = $hx * $cosrot + $hz * $sinrot;
+					$thzA[$i] = $hz * $cosrot - $hx * $sinrot;
+				}
+			}
+			else // Pan Tilt Roll data
+			{
+				$rxA[$i] += $rotate;
+			}
+		}
+
+
+		// If this is the first time, then set the translations
+		// if the radio_trans flag is set
+
+		if ($radio_trans > 1 && $i == 0)
+		{
+			// Find the difference between the imported point and the
+			// match camera point
+			if ($radio_trans == 2)
+			{
+				$rt_tx = $rt_tx - $txA[$i];// - $offsetx; 		// - ($txA[$match_frame] - $xv);
+				$rt_ty = $rt_ty - $tyA[$i];// - $offsety;		// - ($tyA[$match_frame] - $yv);
+				$rt_tz = $rt_tz - $tzA[$i];// - $offsetz;		// - ($tzA[$match_frame] - $zv);
+			}
+			else if ($radio_trans == 3)
+			{
+				$rt_tx = $rt_tx - $rxA[$i];// - $offsetx;		// - ($rxA[$match_frame] - $xt);
+				$rt_ty = $rt_ty - $ryA[$i];// - $offsety;		// - ($ryA[$match_frame] - $yt);
+				$rt_tz = $rt_tz - $rzA[$i];// - $offsetz;		// - ($rzA[$match_frame] - $zt);
+			}
+
+			$tx += $rt_tx;
+			$ty += $rt_ty;
+			$tz += $rt_tz;
+
+			// Set the variables in the UI to these values
+			floatFieldGrp -e -v1 $tx imc_flt_utx;
+			floatFieldGrp -e -v1 $ty imc_flt_uty;
+			floatFieldGrp -e -v1 $tz imc_flt_utz;
+		}
+
+		// And finally translate
+
+		$txA[$i] += $tx;
+		$tyA[$i] += $ty;
+		$tzA[$i] += $tz;
+
+		if ($data_type == 2)
+		{
+			$rxA[$i] += $tx;
+			$ryA[$i] += $ty;
+			$rzA[$i] += $tz;
+		}
+		else if ($data_type == 3) // Up point
+		{
+			// Target point
+			$rxA[$i] += $tx;
+			$ryA[$i] += $ty;
+			$rzA[$i] += $tz;
+	
+			// And up point
+			$thxA[$i] += $tx;
+			$thyA[$i] += $ty;
+			$thzA[$i] += $tz;
+		}
+	}
+
+	// Adjusted the entire array of data as needed, now we can import
+	
+	// Set the playback options to make the slider bar the right length
+	playbackOptions -min $fs -max $fe;
+
+	int $loops = size($txA);
+
+	if ($debug)
+		print( "FS " + $fs + " FE " + $fe + " Loops " + $loops + " Counter " + $counter +"\n" );
+
+	progressWindow
+	-title "Import Moco File"
+	-progress $i
+	-status "Reading Line"
+	-isInterruptable true
+	-max $loops;
+
+	// Now set the keyframes one per frame for each of the animatable factors
+	for ($i = 0; $i < $loops ; $i++)
+	{
+		//print( "i:" + $i + " " + $txA[$i] + " " + $tyA[$i] + " " + $tzA[$i] +"\n" );
+
+		// Skip if not a granularity line or the last
+		if ($i % $gran && ($i != size($txA) - 1))
+			continue;
+
+		// set current frame
+		$cmd1 = "currentTime " + $frameA[$i];
+		eval($cmd1);
+
+
+		if ($import_fov && size($camShape))
+		{
+			$attName = $camShape + ".focalLength";
+			$cmd1 = "setAttr " + $attName + " " + $foclenA[$i];
+			//print("Set the focal Length with " + $cmd1 + "\n");
+			eval($cmd1);
+
+			$cmd1 = "setKeyframe " + $attName;
+			eval($cmd1);
+		}	
+
+		// setting vals for Camera X
+		$attName = $movecam + ".translateX";
+		$cmd1 = "setAttr " + $attName + " " + $txA[$i];
+		eval($cmd1);
+
+		$cmd1 = "setKeyframe " + $attName;
+		eval($cmd1);
+
+		// setting vals for Camera Y
+		$attName = $movecam + ".translateY";
+		$cmd1 = "setAttr " + $attName + " " + $tyA[$i];
+		eval($cmd1);
+
+		$cmd1 = "setKeyframe " + $attName;
+		eval($cmd1);
+
+		// setting vals for Camera Z
+		$attName = $movecam + ".translateZ";
+		$cmd1 = "setAttr " + $attName + " " + $tzA[$i];
+		eval($cmd1);
+
+		$cmd1 = "setKeyframe " + $attName;
+		eval($cmd1);
+
+		if ($data_type == 2)  // 2 Node Camera
+		{
+			// setting vals for Camera Roll
+			$attName = $movecam + "_group" + ".twist";
+			$cmd1 = "setAttr " + $attName + " " + $roA[$i];
+			eval($cmd1);
+			$cmd1 = "setKeyframe " + $attName;
+			eval($cmd1);
+		}
+		
+		if ($data_type > 1)
+		{
+			// setting vals for Target X
+			$attName = $movecam + "_aim" + ".translateX";
+			//			$attName = $movecam + "_view" + ".translateX";
+			$cmd1 = "setAttr " + $attName + " " + $rxA[$i];
+			eval($cmd1);
+
+			$cmd1 = "setKeyframe " + $attName;
+			eval($cmd1);
+
+			// setting vals for Target Y
+			$attName = $movecam + "_aim" + ".translateY";
+			//			$attName = $movecam + "_view" + ".translateY";
+			$cmd1 = "setAttr " + $attName + " " + $ryA[$i];
+			eval($cmd1);
+
+			$cmd1 = "setKeyframe " + $attName;
+			eval($cmd1);
+
+			// setting vals for Target Z
+			$attName = $movecam + "_aim" + ".translateZ";
+			//			$attName = $movecam + "_view" + ".translateZ";
+			$cmd1 = "setAttr " + $attName + " " + $rzA[$i];
+			eval($cmd1);
+
+			$cmd1 = "setKeyframe " + $attName;
+			eval($cmd1);
+		}
+		
+		if ($data_type == 3)   // 3 Node Camera
+		{
+			// setting vals for Up X
+			$attName = $movecam + "_up" + ".translateX";
+			//			$attName = $movecam + "_view" + ".translateX";
+			$cmd1 = "setAttr " + $attName + " " + $thxA[$i];
+			eval($cmd1);
+
+			$cmd1 = "setKeyframe " + $attName;
+			eval($cmd1);
+
+			// setting vals for Up Y
+			$attName = $movecam + "_up" + ".translateY";
+			//			$attName = $movecam + "_view" + ".translateY";
+			$cmd1 = "setAttr " + $attName + " " + $thyA[$i];
+			eval($cmd1);
+
+			$cmd1 = "setKeyframe " + $attName;
+			eval($cmd1);
+
+			// setting vals for Up Z
+			$attName = $movecam + "_up" + ".translateZ";
+			//			$attName = $movecam + "_view" + ".translateZ";
+			$cmd1 = "setAttr " + $attName + " " + $thzA[$i];
+			eval($cmd1);
+
+			$cmd1 = "setKeyframe " + $attName;
+			eval($cmd1);
+		}
+		else if ($data_type == 1)  // Pan Tilt Roll Camera
+		{
+			float $temp;
+
+			// setting vals for Pan
+			$attName = $movecam + ".rotateY";
+			$temp = $rxA[$i];
+			$cmd1 = "setAttr " + $attName + " " + $temp;
+			eval($cmd1);
+			$cmd1 = "setKeyframe " + $attName;
+			eval($cmd1);
+
+			// Wibble
+			//print(" Pan input as " + $temp + "Vals are "  + $temp + " " + $ryA[$i] + " " + $rzA[$i] +"\n");
+	
+
+			// setting vals for Tilt
+			$attName = $movecam + ".rotateX";
+			$cmd1 = "setAttr " + $attName + " " + $ryA[$i];
+			eval($cmd1);
+			$cmd1 = "setKeyframe " + $attName;
+			eval($cmd1);
+
+			// setting vals for Camera Roll
+			$attName = $movecam + ".rotateZ";
+			$temp = $rzA[$i];
+			$cmd1 = "setAttr " + $attName + " " + $temp;
+			eval($cmd1);
+			$cmd1 = "setKeyframe " + $attName;
+			eval($cmd1);
+
+		}
+
+
+		// Check if the dialog has been cancelled
+		if ( `progressWindow -query -isCancelled` )
+			break;
+
+		progressWindow -edit  -progress $i
+		-status ("Reading Line: " + $i);
+
+
+	}
+	
+	// Set the tangents to linear since that is the least inappropriate
+	// -time ":" means all keyframes
+	keyTangent  -time ":" -itt spline -ott spline;
+	
+	progressWindow -endProgress;
+
+	// Set the playback slider bar to fit the length of the move
+	// print("Set playback option to " + $fs  + " and " + $fe + "\n");
+	playbackOptions -min $fs -max $fe;
+	currentTime $fs;
+
+	waitCursor -state off;
+
+	// Put the selection back where we found it
+	select -r $selected_node;
+	
+	print ("DONE\n");
+
+}
+
+global proc upload_timeline()
+{
+	int $fs = `playbackOptions -q -minTime`;
+	int $fe = `playbackOptions -q -maxTime`;
+
+	intFieldGrp -e -value1 $fs emc_intGrp_fs;
+	intFieldGrp -e -value1 $fe emc_intGrp_fe;
+
+	return;
+}
+
+
+// Select the file you want to import/export
+global proc string pick_file_export()
+{
+	//string $filter = "cart (*.xyz), *.xyz; txt (*.txt), *.txt";
+	string $filter = "cart (*.xyz *.txt), *.xyz; *.txt";
+	string $picked_file;
+	
+	// Mode 1 is file WRITE
+	//fileBrowserDialog -m 1 -fc "file_Dialog_export" -ft "text" -an "Export_File" -om "ExportActive";
+	//fileBrowserDialog -m 1 -fc "file_Dialog_export" -ft "text" -fl "$filter" -an "Select File" -om "Import";
+
+	//int $os = `about -win`;
+	int $os = `about -li`;
+	
+//	if ($os == 1)
+//		$picked_file = 'fileDialog -m 1 -dm "*.xyz"';
+//	else
+//		$picked_file = 'fileBrowserDialog -m 1 -fc "file_Dialog_export" -fl $filter -an "Select File" -om "SaveAs" -ds 1';
+
+	if ($os == 1)
+	{
+		$picked_file = `fileDialog -m 1 -dm "*.xyz"`;
+		print("Picked file is " + $picked_file + "\n");
+		textField -e -fi $picked_file  emc_textField_filename;
+	}
+	else
+		fileBrowserDialog -m 1 -fc "file_Dialog_export" -fl $filter -an "Select File" -om "SaveAs" -ds 1;
+
+	return 1;
+}
+
+global proc string pick_file_import()
+{
+	string $filter = "cart (*.xyz *.txt), *.xyz; *.txt";
+	string $picked_file;
+
+	//int $os = `about -win`;
+	int $os = `about -li`;
+	
+	if ($os == 1)
+	{
+		$picked_file = `fileDialog -m 0 -dm $filter`;
+		// Picked file seems to strip the file extension?
+		print("Picked file is " + $picked_file + "\n");
+		textField -e -fi $picked_file  imc_textField_filename;
+	}
+	else
+		fileBrowserDialog -m 0 -fc "file_Dialog_import" -fl $filter -an "Select File" -om "Import" -ds 1;
+	// Mode 0 is file READ
+	
+	return 1;
+}
+
+global proc int file_Dialog_export(string $filepick, string $fileType)
+{
+	//print $filepick;
+	textField -e -fi $filepick  emc_textField_filename;
+	return 1;
+}
+
+global proc int file_Dialog_import(string $filepick, string $fileType)
+{
+	//print $filepick;
+	textField -e -fi $filepick  imc_textField_filename;
+	return 1;
+}
+
+
+global proc file_info()
+{
+	string $filepick;
+	int $fileId;
+	float $temp[], $data_type, $units, $timebase, $lines;
+	int $coords;
+	float $ap_width, $ap_height;
+	int $import_fov;
+	
+	//print ("Now get the file to test it \n");
+
+	// Recover the file name selected
+	$filepick = `textField -q -fi imc_textField_filename`;
+
+	//print ("Now open the file to test it \n");
+
+	// Open the file
+	int $fileId = `fopen $filepick "r"`;
+
+	if ($fileId == 0)
+	{
+		string $errtext = "Could not open file " + $filepick + " For testing";
+		error $errtext;
+		//return;
+	}
+
+	// Find out what kind of data it is and strip off the top lines
+	// And print the data
+	$temp = strip_header($fileId);
+
+	$data_type = $temp[0];
+	$units = $temp[1];
+	$timebase = $temp[2];
+	$coords = $temp[3];
+	$lines = $temp[4];
+	$ap_width = $temp[5];
+	$ap_height = $temp[6];
+	$import_fov = $temp[7];
+
+
+
+	string $buffer;
+
+	//print("Import data type " + $data_type + "\n");
+
+	if ($data_type == 1)
+		$buffer = " Data is Flair style Eulers \n";
+	else if ($data_type == 2)
+		$buffer = " Data is Flair style Carts \n";
+	else if ($data_type == 3)
+		$buffer = " Data is Flair style 3 Node \n";
+	else if ($data_type == -3)
+		$buffer = " Data is Kuper style Eulers \n Please Use a Milo with Flair!\n";
+	else
+		$buffer = " Data is an invalid form! \n Please check the file \n";
+
+	if ($units == 1.0)
+		$buffer += " Units are Centimetres \n";
+	else if ($units == 100.0)
+		$buffer += " Units are Metres \n";
+	else if ($units == 2.54)
+		$buffer += " Units are Inches \n";
+	else if ($units == 30.48)
+		$buffer += " Units are Feet \n";
+
+	if ($timebase <= 1)
+		$buffer += " Timebase is frames \n";
+	else if ($timebase == 2)
+		$buffer += " Timebase is seconds \n";
+
+	if ($coords == 0)
+		$buffer += " Co-ordinates are Maya Y Up \n";
+	else
+		$buffer += " Co-ordinates are MRMC\n";
+
+	if ($ap_width != 0 && $ap_height != 0.0)
+		$buffer += (" Aperture is " + $ap_width + " by " + $ap_height + "\n");
+
+	if (!$import_fov)
+		$buffer += " File does not contain focal length data\n";
+	else	
+		$buffer += " File contains focal length data\n";
+
+	moco_info($buffer);
+
+	fclose($fileId);
+}
+
+
+
+global proc set_maya_units()
+{
+	global float $maya_units;
+	string $temp;
+
+	
+	$temp = `currentUnit -q -l`;
+
+	// Data file will be converted to metre, so scale it
+	// to match the currently selected units
+
+	print("Current Maya units are  " + $temp + " \n");
+
+	if ($temp == "mm")
+		$maya_units = 1000.0;
+	else if ($temp == "cm")
+		$maya_units = 100.0;
+	else if ($temp == "m")
+		$maya_units = 1.0;
+	else if ($temp == "km")
+		$maya_units = 0.001;
+	else if ($temp == "in")
+		$maya_units = 100.0/2.54;
+	else	if ($temp == "ft")
+		$maya_units = 100.0/30.48;
+	else if ($temp == "yd")
+		$maya_units = 100.0 / 91.36;
+	else
+	{
+		print("Unrecognised Maya units " + $temp + " assuming cm\n");
+		$maya_units = 1.0;
+	}
+}
+
+//
+//	strip_header
+//
+
+// Take an existing open file, and move the file pointer down to the start
+// of the data.  Identify if it is CARTS data or EULER data or other
+// if it's Kuper barf loudly :-)
+// Return value is 1 for EULER (single node camera) 2 for CARTS (2 node camera) 3 for 3 NODE Camera
+// negative values indicate invalid data. -1 indicates end of file
+// Returns an array of data that indicates the data type, the units and the time base
+
+global proc float[] strip_header(int $fileId)
+{
+	string $nextLine;
+	int $i, $j;
+	string $buffer[];
+	string $hashmatch;
+	int $data_type = 0;
+	float $units;
+	float $timebase;
+	float $lines = 0;
+	float $coords = 0;	// 0 is the normal Maya Y Up coords
+	float $apwidth, $apheight;
+	int $done = 0;
+	float $data[];  // Contains the return values of data type units etc.
+	string $temp;
+	int $importfov = 0;
+	
+	global float $maya_units;
+
+
+	$no_roll = 1;  // True
+
+	set_maya_units();
+
+	$apwidth = $apheight = 0.0;
+
+	frewind($fileId);
+
+	do {
+		$nextLine = `fgetline $fileId`;  //
+		tokenize($nextLine, $buffer);
+
+		if ($buffer[0] == "DATA_TYPE")  // Read in the important data line
+		{
+			if ($buffer[1] == "3NODE_RAW")
+				$data_type = 3;   // 'cos it needs a 3 node camera
+			else if ($buffer[1] == "CARTS_RAW")
+				$data_type = 2;   // 'cos it needs a 2 node camera
+			else if ($buffer[1] == "EULER_RAW")
+				$data_type = 1;  // 'cos it needs a one node camera
+			else
+			{
+				print("Invalid Data Type in file" + $data_type + "\n") ;
+				print("Invalid data type " + $buffer[1] + "\n");
+				$data_type = -2;
+			}
+
+			if ($buffer[2] == "MAYAY_COORDS")
+			{
+				$coords = 0;
+			}
+			else if ($buffer[2] == "MRMC_COORDS")
+			{
+				$coords = 1;
+			}
+			else
+			{
+				error("Invalid Co-ordinate orientation, get data re-exported in Maya Y up cordinates\n");
+				$data_type = -1;
+				break;
+			}
+
+			// What do we have to divide by to convert the file to Metres
+			//
+
+			if ($buffer[3] == "IN_METRES")
+				$units = 1.0;
+			else if ($buffer[3] == "IN_CENTIMETRES")
+				$units = 100.0;
+			else if ($buffer[3] == "IN_INCHES")
+				$units = 39.37;
+			else if ($buffer[3] == "IN_FEET")
+				$units = 3.2808;
+			else
+				$units = 1.0;
+			
+			// Here would be the lens setting LENS35m or FOCAL_LENGTH - don't really care...
+
+		}
+		else if ($buffer[0] == "Axes" || $buffer[0] == "axes")
+		{
+			//print "Invalid Data, this is Kuper data! Please use a Milo with Flair Data  :-)";
+			print "This is Kuper data! Please use a Milo with Flair Data!\n";
+			$data_type = -3;
+			$units = 39.37;
+			$timebase = 0;
+			//Break does not work here ? Compiler/Interpreter bug
+			$done = 1;  // As that is all there is to Kuper Data    
+			
+		}
+
+		if ($buffer[0] == "POINTS")
+		{
+			$lines = $buffer[1];
+			// This should give me the the number of lines in the file
+			print("File has " + $lines + " lines \n");
+			
+			if ($buffer[6] == "APERTURE")
+			{
+				$apwidth = $buffer[7];
+				$apheight = $buffer[8];
+			}
+		}
+
+		if ($buffer[0] == "Time" || $buffer[0] == "Frame" || $buffer[0] == "XV")
+		{
+			if ($buffer[0] == "Time")
+				$timebase = 2.0;
+			else if ($buffer[0] == "Frame")
+				$timebase = 1.0;
+			else if ($buffer[0] == "XV")
+				$timebase = 0.0;
+			
+			// Somewhere on this line could be the lens data stored as "Lens"
+			
+			for ($j = 1; $j < size($buffer); $j++)
+			{
+				// It is either Lens or LENS..
+				if ($buffer[$j] == "Lens" || $buffer[$j] == "LENS")
+				{
+					$importfov = 1;
+					print ("Focal Length is in the file\n");
+					break;
+				}
+			}
+				
+			break; // Done, we got the last line we want
+		}	
+
+	} while (size( $nextLine ) > 0 && !$done);
+
+	print ("Convert file data to Metres " + $units + "\n");
+	print ("Convert Metres to Maya Units " + $maya_units + "\n");
+
+	$units = $maya_units / $units;
+
+	//if ($debug)
+	//	print ("The incoming data must be multiplied by " + $units + "\n");
+
+	if (size($nextLine) == 0)
+	{
+		$data[0] = -1;
+		$data[1] = $units;
+		$data[2] = $timebase;
+		$data[3] = $coords;
+		$data[4] = $lines;
+		$data[5] = $apwidth;
+		$data[6] = $apheight;
+		$data[7] = $importfov;
+		return $data;
+	}
+	else
+	{
+		refresh;
+		$data[0] = $data_type;
+		$data[1] = $units;
+		$data[2] = $timebase;
+		$data[3] = $coords;
+		$data[4] = $lines;
+		$data[5] = $apwidth;
+		$data[6] = $apheight;
+		$data[7] = $importfov;
+	return $data;
+	}
+}
+
+global proc export_space()
+{
+	int $val = `radioButtonGrp -q -select emc_radio_world`;
+//	int $exp_fov = `radioButtonGrp -query -select emc_radio_fov`;
+
+//	print("Export space switched to " + $val + "\n");
+	
+	if ($val == 3)
+	{
+		textField -e -en true emc_textField_nodename;
+	}
+	else
+		textField -e -en false emc_textField_nodename;
+	
+}
+
+global proc cam_select()
+{
+	int $g2 = 1;
+	int $g3 = 0;
+	int $val = 1;
+	string $pickcam = `optionMenu -q -v cameras_option_menu`;
+	string $threenode = $pickcam + "_group";
+
+	//print("Chose camera " + $pickcam + " Threenode is " + $threenode + "\n");
+
+	if ($pickcam == "Create New" || $pickcam == "persp")  // Then cannot translate
+	{
+		$g2 = 0;
+		$g3 = 0;
+	}
+	else if (objExists($threenode))
+	{
+		$g3 = 1;
+	}
+
+//	radioButtonGrp/
+//	-e
+//	-select $val/
+//	-enable2 $g2
+//	-enable3 $g3
+//	imc_radio_trans;
+
+//	radioButtonGrp
+//	-e
+//	-select $val
+//	-enable2 $g2
+//	imc_radio_rot;
+
+}
+
+
+// Clear the values in the rotate and translate move entries
+
+global proc clear_trots()
+{
+	$temp = 0.0;
+	floatFieldGrp -e -v1 $temp imc_flt_rotate;
+	floatFieldGrp -e -v1 $temp imc_flt_tx;
+	floatFieldGrp -e -v1 $temp imc_flt_ty;
+	floatFieldGrp -e -v1 $temp imc_flt_tz;
+}
+
+global proc upload_trots()
+{
+	float $tx;
+	float $ty;
+	float $tz;
+	float $rot;
+	vector $c, $r;
+
+	// Need to get world space...
+	
+	$tx = `getAttr (".tx")`;
+	$ty = `getAttr (".ty")`;
+	$tz = `getAttr (".tz")`;
+	$rot = `getAttr (".ry")`;
+
+//	$c = `xform -q -t -ws `;
+			
+//	$tx = $c.x;
+//	$ty = $c.y;
+//	$tz = $c.z;
+	
+//	$r = `xform -q -ro -ws`;
+//	$rot = $r.y;
+
+
+	floatFieldGrp -e -v1 $rot imc_flt_rotate;
+	floatFieldGrp -e -v1 $tx imc_flt_tx;
+	floatFieldGrp -e -v1 $ty imc_flt_ty;
+	floatFieldGrp -e -v1 $tz imc_flt_tz;
+}
+
+
+global proc upload_locator()
+{
+	float $tx;
+	float $ty;
+	float $tz;
+	float $rot;
+	float $offsetx, $offsetz;
+	float $cosrot, $sinrot;
+	vector $c, $r;
+	global float $refx, $refy, $refz;
+	global string $reflocator[];
+	
+	// Need to get world space...
+	
+	$tx = `getAttr ($reflocator[0] + ".tx")`;
+	$ty = `getAttr ($reflocator[0] + ".ty")`;
+	$tz = `getAttr ($reflocator[0] + ".tz")`;
+	$rot = `getAttr ($reflocator[0] + ".ry")`;
+
+	// So here is the fun part actually.  We have to get what the translations relative to
+	// a rotation about 0
+	
+	// rotate ref about locator..
+
+	$cosrot = cosd($rot);
+	$sinrot = sind($rot);
+	
+	$offsetx = (-$refx * $cosrot - $refz * $sinrot);
+	$offsetz = (-$refz * $cosrot + $refx * $sinrot);
+
+	// Offset from locator is..
+	print("Offset Values from locator are " + $offsetx + " " + $offsetz + "\n");
+
+	$tx += $offsetx;
+	$tz += $offsetz;
+	
+	$ty -= $refy;
+
+	floatFieldGrp -e -v1 $rot imc_flt_rotate;
+	floatFieldGrp -e -v1 $tx imc_flt_tx;
+	floatFieldGrp -e -v1 $ty imc_flt_ty;
+	floatFieldGrp -e -v1 $tz imc_flt_tz;
+}
+
+
+// transfer the last used rotate and translate values into the rotate and translate boxes for use on the
+// next import once the reference point has been lined up
+global proc xfer_trots()
+{
+	float $temp;
+	$temp = `floatFieldGrp -q -v1 imc_flt_urotate`;
+	floatFieldGrp -e -v1 $temp imc_flt_rotate;
+	$temp = `floatFieldGrp -q -v1 imc_flt_utx`;
+	floatFieldGrp -e -v1 $temp imc_flt_tx;
+	$temp = `floatFieldGrp -q -v1 imc_flt_uty`;
+	floatFieldGrp -e -v1 $temp imc_flt_ty;
+	$temp = `floatFieldGrp -q -v1 imc_flt_utz`;
+	floatFieldGrp -e -v1 $temp imc_flt_tz;
+
+	radioButtonGrp -e -select 1 imc_radio_trans;
+	radioButtonGrp -e -select 1 imc_radio_rot;
+
+}
+
+
+
+//
+//	MRMCOUT
+//
+// Procedure for exporting to a Mark Roberts Motion Control Ascii CGI data file
+//
+//
+//  Copyright (c) 2001 - 2009 Simon Wakley - Camera Control, Inc.
+//
+//  This MEL script is proprietary confidential information and is provided to
+//  customers on the basis that it will not be distributed or disseminated in any
+//  way and is soley for use in conjunction with Camera Control, Inc.
+//
+//
+global proc export_genuflex()
+{
+	float $kuper_units;
+	int $fileId;
+	string $line;
+	int $ple = `about -ev`;
+	global int $debug;
+	global float $maya_units;
+	
+	float $TrackPos[];
+	float $SwingPos[];
+	float $BoomPos[];
+	float $PanPos[];
+	float $TiltPos[];
+	float $RollPos[];
+
+	// Get the export parameters
+	
+	int $res[] = `intFieldGrp -q -v emc_intGrp_fs`;
+	int $fs = $res[0];
+	int $res[] = `intFieldGrp -q -v emc_intGrp_fe`;
+	int $fe = $res[0];
+
+	string $fileName = `textField -q -fi emc_textField_filename`;
+
+	if (!$ple)
+		$fileId = fopen($fileName, "w");
+
+	// OK, now export the data
+	
+	$line = "Axes = Track,Swing,Boom,Pan,Tilt,Roll\n";
+	if (!$ple)
+		fprint $fileId $line;
+	else
+		print $line;	
+	// Find out the current units
+	set_maya_units();
+	// Maya units is not correct to convert incoming metres to maya units.
+	// So for inches, our units would be 39.37
+	$kuper_units = 39.27;
+	// Now to convert to metres, we have to divide by maya_units
+	$kuper_units /= $maya_units;
+	
+	
+	for ($i = $fs; $i <= $fe; $i++)
+	{
+	
+		//print("Writing Frame: "+$i+"\n");
+		currentTime $i;
+		// collect vals
+		
+		$TrackPos[$i] = `getAttr ("AxisControl.Track")`;
+		$SwingPos[$i] = `getAttr ("AxisControl.Swing")`;
+		$BoomPos[$i] = `getAttr ("AxisControl.ShortArmBoom")`;
+			
+		$PanPos[$i] = `getAttr ("AxisControl.Pan")`;
+ 		$TiltPos[$i] = `getAttr ("AxisControl.Tilt")`;
+// 		$RollPos[$i] = `getAttr ("AxisControl.Roll")`;
+				
+		// Kuper is ..  in inches...
+		$line = (string($TrackPos[$i] * $kuper_units) + " \t" + string($SwingPos[$i]) +
+			 " \t" + string($BoomPos[$i]) +  " \t" + string($PanPos[$i]) + " \t" + 							string($TiltPos[$i])+ " \t" + string($RollPos[$i]));
+		
+
+		$line += ("\n");
+
+		if (!$ple)
+			fprint $fileId $line;
+		else
+			print $line;	
+	}
+
+	if (!$ple)
+	{
+		print("Genuflex Export done, now close file " + $fileId + "\n");
+		fclose $fileId;
+	}
+
+}	
+
+
+//
+// Output for a single node camera if you must !
+// Will not work unless the camera is correctly nested, zxy.
+// Window -> Attribute Editor -> Transform Attributes -> Rotate Order : zxy
+// Chances are that you have already animated the camera incorrectly thus the nesting
+// is set and so this will not work!
+//
+global proc mrmc1out(string $camera,
+                     int $fs,
+                     int $fe,
+                     string $fileName,
+                     int $exp_fov,
+                     int $exp_world,
+                     int $kuper,
+                     string $exp_names[])
+{
+	// Read in data file and store vars into arrays
+	float $tol = 0.0001;
+	float $frameA[];
+	int $rotateorder;
+	float $txRig;
+	float $tyRig;
+	float $tzRig;
+	float $rxRig;
+	float $ryRig;
+	float $rzRig;
+	float $txA[];
+	float $tyA[];
+	float $tzA[];
+	float $ropA[];
+	float $rotA[];
+	float $rorA[];
+	float $foclen[];
+	float $extra0[];
+	float $extra1[];
+	float $extra2[];
+	float $kuper_units;
+	vector $t, $r;
+	global float $maya_units;
+	string $rig[];		// "miloMove"
+	int $i;
+	int $fileId;
+	string $line;
+	int $ple = `about -ev`;
+	global int $debug;
+	
+///	string $camera = $cameras[0];
+	
+	$exporttype = 1;
+
+	int $frames = $fe - $fs + 1;
+	string $cmd1;
+
+	$rotateorder = `getAttr ($camera + ".rotateOrder")`;
+
+	if ($rotateorder != 2)
+	{
+		MyError ("Single node export rotation order Wrong - Should be zxy \n - Bake New Camera using 'Create Node Camera'");
+		error "Single node export rotation order Wrong - Should be zxy - Bake New Camera using 'Create Node Camera'";
+	}
+
+	// open file to write out to
+
+	if (!$ple)
+	{
+		$fileId = fopen($fileName, "w");
+	
+		if ($fileId == 0)
+		{
+			string $errtext = "Could not open export file " + $fileName + "for single node export";
+			error $errtext;
+			return;
+		}
+	}
+	else
+		$fileId = 33;
+		
+	print("Exporting 1 node camera to file id #" + $fileId + "\n");
+
+	if (!$kuper)
+	{
+		print_MRMC_header($fileId, $frames, $camera, 1, $exp_fov, $exp_names, $exporttype);
+          
+		print("Printed the header to file id #" + $fileId + "\n");
+	}
+	else
+	{
+		$line = "Axes = VTrack,VEW,VNS,VPan,VTilt,VRoll\n";
+		if (!$ple)
+			fprint $fileId $line;
+		else
+			print $line;	
+		// Find out the current units
+		set_maya_units();
+		// Maya units is not correct to convert incoming metres to maya units.
+		// So for inches, our units would be 39.37
+		$kuper_units = 39.27;
+		// Now to convert to metres, we have to divide by maya_units
+		$kuper_units /= $maya_units;
+	}
+
+	if ($exp_world == 3)
+	{
+		// Trying to export rig relative, so let's see if we can find the rig
+		string $RigName = `textField -q -fi emc_textField_nodename`;
+		print("Relative to node -" + $RigName + "- \n");
+	
+		$rig = `ls $RigName`;
+		
+		if (size($rig))
+			print("Selecting Node the resulted in " + $rig[0] + "\n");
+		else
+		{
+			// No rig selected or existing
+			$exp_world = 1;
+			MyError("No Node found with name " + $RigName + " -required for node relative export\n Data is being exported in local space");
+		}
+	}
+
+
+	progressWindow
+	-title "Exporting Single Node Camera to Moco File"
+	-progress $i
+	-status "Reading Line"
+	-isInterruptable true
+	-max $fe;
+
+
+	for ($i = $fs; $i <= $fe; $i++)
+	{
+		// set current frame
+
+		//print("Writing Frame: "+$i+"\n");
+		currentTime $i;
+		// collect vals
+		
+		// Get local space or rig relative space.
+		if ($exp_world == 1 || $exp_world == 3)
+		{
+			$txA[$i] = `getAttr ($camera+".tx")`;
+			$tyA[$i] = `getAttr ($camera+".ty")`;
+			$tzA[$i] = `getAttr ($camera+".tz")`;
+	
+			$ropA[$i] = `getAttr ($camera+".ry")`;
+			$rotA[$i] = `getAttr ($camera+".rx")`;
+			$rorA[$i] = `getAttr ($camera+".rz")`;
+			
+			if ($exp_world == 3)
+			{
+				float $txRig = `getAttr ($rig[0] +".tx")`;
+				float $tyRig = `getAttr ($rig[0] +".ty")`;
+				float $tzRig = `getAttr ($rig[0] +".tz")`;
+		
+				float $rxRig = `getAttr ($rig[0] +".rx")`;
+				float $ryRig = `getAttr ($rig[0] +".ry")`;
+				float $rzRig = `getAttr ($rig[0] +".rz")`;
+
+			 	if ($debug)
+			 	{
+					print("Rig is at " + $txRig + " " + $tyRig + " " + $tzRig + "\n");
+					print("Rig is angled " + $rxRig + " " + $ryRig + " " + $rzRig + "\n");
+				}
+				
+				// Now rotation about the y axis.
+				
+				$txA[$i] -= $txRig;
+				$tyA[$i] -= $tyRig;
+				$tzA[$i] -= $tzRig;
+				
+				if ($ryRig != 0.0)
+				{
+					float $cosrot = cos(deg_to_rad($ryRig));
+					float $sinrot = sin(deg_to_rad($ryRig));
+					
+					float $hx, $hz;
+					$hx = $txA[$i];
+					$hz = $tzA[$i];
+					
+					$txA[$i] = $hx * $cosrot - $hz * $sinrot;
+					$tzA[$i] = $hz * $cosrot + $hx * $sinrot;
+					
+					$ropA[$i] -= $ryRig;
+				}
+			}
+
+			if (abs($txA[$i]) < $tol)  $txA[$i] = 0.0000;
+			if (abs($tyA[$i]) < $tol)  $tyA[$i] = 0.0000;
+			if (abs($tzA[$i]) < $tol)  $tzA[$i] = 0.0000;
+			if (abs($ropA[$i]) < $tol)  $ropA[$i] = 0.0000;
+			if (abs($rotA[$i]) < $tol)  $rotA[$i] = 0.0000;
+			if (abs($rorA[$i]) < $tol)  $rorA[$i] = 0.0000;
+
+		}
+		else
+		{
+			// Don't use getAttr, use query world space
+			
+			$t = `xform -q -t -ws ($camera)`;
+			
+			$txA[$i] = $t.x;
+			$tyA[$i] = $t.y;
+			$tzA[$i] = $t.z;
+			
+			if (abs($txA[$i]) < $tol)  $txA[$i] =0.0000;
+			if (abs($tyA[$i]) < $tol)  $tyA[$i] =0.0000;
+			if (abs($tzA[$i]) < $tol)  $tzA[$i] =0.0000;
+	
+			$r = `xform -q -ro -ws ($camera)`;
+			$rotA[$i] = $r.x;
+			$ropA[$i] = $r.y;
+			$rorA[$i] = $r.z;
+	
+			$ropA[$i] = `getAttr ($camera+".ry")`;
+			if (abs($ropA[$i]) < $tol)  $ropA[$i] =0.0000;
+			$rotA[$i] = `getAttr ($camera+".rx")`;
+			if (abs($rotA[$i]) < $tol)  $rotA[$i] =0.0000;
+			$rorA[$i] = `getAttr ($camera+".rz")`;
+			if (abs($rorA[$i]) < $tol)  $rorA[$i] =0.0000;
+		}
+		
+		$line = ($i + " \t" + string($txA[$i]) + " \t" + string($tyA[$i]) + " \t" + string($tzA[$i]) + " \t" + string($ropA[$i]) + " \t" + string($rotA[$i])  + " \t" + string($rorA[$i]));
+
+		if ($exp_fov != 1 && !$kuper)
+		{
+			$foclen[$i] = `getAttr ($camera + ".focalLength")`;
+			print("Export 1 Cam zoom export is " + $exp_fov + "\n");
+			$line += (" \t" + string($foclen[$i]));
+		}
+
+		if (!$kuper)
+		{			
+			$line += print_extras($fileId, $exp_names);
+		}
+		else
+		{
+			// Kuper is ..  
+			$line = (string($tzA[$i] * $kuper_units) + " \t" + string($txA[$i] * $kuper_units) + " \t" + string($tyA[$i] * $kuper_units) +  " \t" + string(-$ropA[$i]) + " \t" + string($rotA[$i])  + " \t" + string(-$rorA[$i]));
+		}
+
+		$line += ("\n");
+
+		if (!$ple)
+			fprint $fileId $line;
+		else
+			print $line;	
+			
+		// Check if the dialog has been cancelled
+		if ( `progressWindow -query -isCancelled` )
+			break;
+
+		progressWindow -edit  -progress $i
+		-status ("Writing Line: " + $i);
+			
+	}
+
+	progressWindow -endProgress;
+
+
+	if (!$ple)
+	{
+		print("1 Node Export done, now close file " + $fileId + "\n");
+		fclose $fileId;
+	}
+}
+//
+// Export the data from a 2 node camera.
+//
+global proc mrmc2out(string $camera,
+                     int $fs,
+                     int $fe,
+                     string $fileName,
+                     int $exp_fov,
+                     int $exp_world,
+                     string $exp_names[])
+{
+	// Read in data file and store vars into arrays
+	float $frameA[];
+	float $txA[];
+	float $tyA[];
+	float $tzA[];
+	float $rxA[];
+	float $ryA[];
+	float $rzA[];
+	float $roA[];
+	float $foclen[];
+	float $extras[6];
+	float $tol = 0.0001;
+	int $i = 1;
+	string $cmd1;
+	$exporttype = 2;
+	int $frames = $fe - $fs + 1;
+	vector $c, $t, $u;
+	int $fileId;
+	string $line;
+	string $rig[];
+	global int $debug;
+
+	int $ple = `about -ev`;
+
+	// open file to write out to
+	if (!$ple)
+	{
+		$fileId = `fopen $fileName "w"`;
+
+		if ($fileId == 0)
+		{
+			string $errtext = "Could not open export file " + $fileName + " for 2 node export";
+			error $errtext;
+			return;
+		}
+	}
+	else
+		$fileId = 33;
+	
+	if ($debug)
+		print("Exporting 2 node camera\n");
+
+	print_MRMC_header($fileId, $frames, $camera, 0, $exp_fov, $exp_names, $exporttype);
+
+	if ($exp_world == 3)
+	{
+		// Trying to export rig relative, so let's see if we can find the rig
+		string $RigName = `textField -q -fi emc_textField_nodename`;
+		print("Relative to node -" + $RigName + "- \n");
+	
+		$rig = `ls $RigName`;
+		
+		if (size($rig))
+			print("Selecting Node the resulted in " + $rig[0] + "\n");
+		else
+		{
+			// No rig selected or existing
+			$exp_world = 1;
+			MyError("No Node found with name " + $RigName + " -required for node relative export\n Data is being exported in local space");
+		}
+	}
+
+	progressWindow
+	-title "Exporting two Node Camera to Moco File"
+	-progress $i
+	-status "Reading Line"
+	-isInterruptable true
+	-max $fe;
+
+
+	for ($i = $fs; $i <= $fe; $i++)
+	{
+		// set current frame
+		$cmd1 = "currentTime " + $i;
+		eval($cmd1);
+
+		if ($exp_world == 1 || $exp_world == 3)
+		{
+			// collect vals
+			$txA[$i] = `getAttr ($camera + ".tx")`;
+			$tyA[$i] = `getAttr ($camera + ".ty")`;
+			$tzA[$i] = `getAttr ($camera + ".tz")`;
+				
+			$rxA[$i] = `getAttr ($camera + "_aim.tx")`;
+			$ryA[$i] = `getAttr ($camera + "_aim.ty")`;
+			$rzA[$i] = `getAttr ($camera + "_aim.tz")`;
+				
+			if ($exp_world == 3)
+			{
+				float $txRig = `getAttr ($rig[0] +".tx")`;
+				float $tyRig = `getAttr ($rig[0] +".ty")`;
+				float $tzRig = `getAttr ($rig[0] +".tz")`;
+		
+				float $rxRig = `getAttr ($rig[0] +".rx")`;
+				float $ryRig = `getAttr ($rig[0] +".ry")`;
+				float $rzRig = `getAttr ($rig[0] +".rz")`;
+
+			 	if ($debug)
+			 	{
+					print("Rig is at " + $txRig + " " + $tyRig + " " + $tzRig + "\n");
+					print("Rig is angled " + $rxRig + " " + $ryRig + " " + $rzRig + "\n");
+				}
+				
+				
+				$txA[$i] -= $txRig;
+				$tyA[$i] -= $tyRig;
+				$tzA[$i] -= $tzRig;
+				
+				$rxA[$i] -= $txRig;
+				$ryA[$i] -= $tyRig;
+				$rzA[$i] -= $tzRig;
+				
+				// Now rotation about the y axis.
+				if ($ryRig != 0.0)
+				{
+					float $cosrot = cos(deg_to_rad($ryRig));
+					float $sinrot = sin(deg_to_rad($ryRig));
+					float $hx, $hz;
+
+					$hx = $txA[$i];
+					$hz = $tzA[$i];
+					
+					$txA[$i] = $hx * $cosrot - $hz * $sinrot;
+					$tzA[$i] = $hz * $cosrot + $hx * $sinrot;
+
+					$hx = $rxA[$i];
+					$hz = $rzA[$i];
+					
+					$rxA[$i] = $hx * $cosrot - $hz * $sinrot;
+					$rzA[$i] = $hz * $cosrot + $hx * $sinrot;
+					
+				}
+			}
+				
+			$roA[$i] = `getAttr ($camera + "_group.twist")`;
+			//		$roA[$i] = `getAttr ($camera + ".ry")`;
+
+			if (abs($txA[$i]) < $tol)
+				$txA[$i] =0.0000;
+			if (abs($tyA[$i]) < $tol)
+				$tyA[$i] =0.0000;
+			if (abs($tzA[$i]) < $tol)
+				$tzA[$i] =0.0000;
+			if (abs($rxA[$i]) < $tol)
+				$rxA[$i] =0.0000;
+			if (abs($ryA[$i]) < $tol)
+				$ryA[$i] =0.0000;
+
+			if (abs($roA[$i]) < $tol)
+				$roA[$i] =0.0000;
+		}
+		else
+		{
+			// Don't use getAttr, use query world space
+			
+			$c = `xform -q -t -ws ($camera)`;
+			$txA[$i] = $c.x;
+			$tyA[$i] = $c.y;
+			$tzA[$i] = $c.z;
+
+			$t = `xform -q -t -ws ($camera + "_aim")`;
+			$rxA[$i] = $t.x;
+			$ryA[$i] = $t.y;
+			$rzA[$i] = $t.z;
+
+			// Not sure if this is right or not!
+			$roA[$i] = `getAttr ($camera + "_group.twist")`;
+
+			if (abs($txA[$i]) < $tol)
+				$txA[$i] =0.0000;
+			if (abs($tyA[$i]) < $tol)
+				$tyA[$i] =0.0000;
+			if (abs($tzA[$i]) < $tol)
+				$tzA[$i] =0.0000;
+				
+			if (abs($rxA[$i]) < $tol)
+				$rxA[$i] =0.0000;
+			if (abs($ryA[$i]) < $tol)
+				$ryA[$i] =0.0000;
+			if (abs($rzA[$i]) < $tol)
+				$rzA[$i] =0.0000;
+			
+			if (abs($roA[$i]) < $tol)
+				$roA[$i] =0.0000;
+			
+			
+		}
+		$foclen[$i] = `getAttr ($camera + ".focalLength")`;
+
+		$line =  ($i + " \t" + string($txA[$i]) + " \t" + string($tyA[$i]) + " \t" + string($tzA[$i]) + " \t" + string($rxA[$i]) + " \t" + string($ryA[$i])  + " \t" + string($rzA[$i])+ "\t" + string($roA[$i]));
+		
+		if ($exp_fov != 1)
+		{
+//			print("Export 1 Cam zoom export is " + $exp_fov + " foclen is " + $foclen[$i] + "\n");
+			$line += (" \t" + string($foclen[$i]));
+		}
+
+		// Print out the extras if named and selected	
+		$line += print_extras($fileId, $exp_names);
+
+		$line += ("\n");
+			
+		if (!$ple)
+			fprint $fileId $line;
+		else
+			print $line;	
+		// Check if the dialog has been cancelled
+		if ( `progressWindow -query -isCancelled` )
+			break;
+
+		progressWindow -edit  -progress $i
+		-status ("Writing Line: " + $i);
+
+	}
+
+	progressWindow -endProgress;
+
+	if (!$ple)
+	{
+		print("2 Node Export done, now close file " + $fileId + "\n");
+		fclose $fileId;
+	}
+}
+
+//
+// Export the data from a 3 node camera.
+//
+global proc mrmc3out(string $camera,
+                     int $fs,
+                     int $fe,
+                     string $fileName,
+                     int $exp_fov,
+                     int $exp_world,
+                     string $exp_names[])
+{
+	// Read in data file and store vars into arrays
+	float $frameA[];
+
+	float $xvA[];
+	float $yvA[];
+	float $zvA[];
+	
+	float $xtA[];
+	float $ytA[];
+	float $ztA[];
+	
+	float $xhA[];
+	float $yhA[];
+	float $zhA[];
+	
+	float $foclen[];
+	float $extras[6];
+	float $tol = 0.0001;
+	int $i = 1;
+	string $cmd1;
+	$exporttype = 3;
+	int $frames = $fe - $fs + 1;
+	vector $c, $t, $u;
+	int $fileId;
+	string $line;
+	string $rig[];
+	global int $debug;
+
+	int $ple = `about -ev`;
+
+	// open file to write out to
+	if (!$ple)
+	{
+	
+		// open file to write out to
+		$fileId = `fopen $fileName "w"`;
+
+		if ($fileId == 0)
+		{
+			string $errtext = "Could not open export file " + $fileName + " for 3 node export";
+			error $errtext;
+			return;
+		}
+	}
+	else
+		$fileId = 33;
+	
+	print("Exporting 3 node camera called " + $camera + "\n");
+
+	print_MRMC_header($fileId, $frames, $camera, 0, $exp_fov, $exp_names, $exporttype);
+
+	if ($exp_world == 3)
+	{
+		// Trying to export rig relative, so let's see if we can find the rig
+		string $RigName = `textField -q -fi emc_textField_nodename`;
+		print("Relative to node -" + $RigName + "- \n");
+	
+		$rig = `ls $RigName`;
+		
+		if (size($rig))
+			print("Selecting Node the resulted in " + $rig[0] + "\n");
+		else
+		{
+			// No rig selected or existing
+			$exp_world = 1;
+			MyError("No Node found with name " + $RigName + " -required for node relative export\n Data is being exported in local space");
+		}
+	}
+
+	progressWindow
+	-title "Exporting three Node Camera to Moco File"
+	-progress $i
+	-status "Reading Line"
+	-isInterruptable true
+	-max $fe;
+
+	for ($i = $fs; $i <= $fe; $i++)
+	{
+
+		// set current frame
+		$cmd1 = "currentTime " + $i;
+		eval($cmd1);
+
+		if ($exp_world == 1 || $exp_world == 3)
+		{
+			// collect vals
+			$xvA[$i] = `getAttr ($camera + ".tx")`;
+			$yvA[$i] = `getAttr ($camera + ".ty")`;
+			$zvA[$i] = `getAttr ($camera + ".tz")`;
+	
+			$xtA[$i] = `getAttr ($camera + "_aim.tx")`;
+			$ytA[$i] = `getAttr ($camera + "_aim.ty")`;
+			$ztA[$i] = `getAttr ($camera + "_aim.tz")`;
+	
+			$xhA[$i] = `getAttr ($camera + "_up.tx")`;
+			$yhA[$i] = `getAttr ($camera + "_up.ty")`;
+			$zhA[$i] = `getAttr ($camera + "_up.tz")`;
+			
+			if ($exp_world == 3)
+			{
+				float $txRig = `getAttr ($rig[0] +".tx")`;
+				float $tyRig = `getAttr ($rig[0] +".ty")`;
+				float $tzRig = `getAttr ($rig[0] +".tz")`;
+		
+				float $rxRig = `getAttr ($rig[0] +".rx")`;
+				float $ryRig = `getAttr ($rig[0] +".ry")`;
+				float $rzRig = `getAttr ($rig[0] +".rz")`;
+	
+			 	if ($debug)
+			 	{
+					print("Rig is at " + $txRig + " " + $tyRig + " " + $tzRig + "\n");
+					print("Rig is angled " + $rxRig + " " + $ryRig + " " + $rzRig + "\n");
+				}
+				
+				// Now rotation about the y axis.
+				
+				$xvA[$i] -= $txRig;
+				$yvA[$i] -= $tyRig;
+				$zvA[$i] -= $tzRig;
+
+				$xtA[$i] -= $txRig;
+				$ytA[$i] -= $tyRig;
+				$ztA[$i] -= $tzRig;
+				
+				$xhA[$i] -= $txRig;
+				$yhA[$i] -= $tyRig;
+				$zhA[$i] -= $tzRig;
+				
+				if ($ryRig != 0.0)
+				{
+					float $cosrot = cos(deg_to_rad($ryRig));
+					float $sinrot = sin(deg_to_rad($ryRig));
+					float $hx, $hz;
+
+					$hx = $xvA[$i];
+					$hz = $zvA[$i];
+					$xvA[$i] = $hx * $cosrot - $hz * $sinrot;
+					$zvA[$i] = $hz * $cosrot + $hx * $sinrot;
+
+					$hx = $xtA[$i];
+					$hz = $ztA[$i];
+					$xtA[$i] = $hx * $cosrot - $hz * $sinrot;
+					$ztA[$i] = $hz * $cosrot + $hx * $sinrot;
+
+					$hx = $xhA[$i];
+					$hz = $zhA[$i];
+					$xhA[$i] = $hx * $cosrot - $hz * $sinrot;
+					$zhA[$i] = $hz * $cosrot + $hx * $sinrot;
+
+				}
+			}
+			
+			if (abs($xvA[$i]) < $tol)
+				$xvA[$i] =0.0000;
+			if (abs($yvA[$i]) < $tol)
+				$yvA[$i] =0.0000;
+			if (abs($zvA[$i]) < $tol)
+				$zvA[$i] =0.0000;
+
+			if (abs($xtA[$i]) < $tol)
+				$xtA[$i] =0.0000;
+			if (abs($ytA[$i]) < $tol)
+				$ytA[$i] =0.0000;
+			if (abs($ztA[$i]) < $tol)
+				$ztA[$i] =0.0000;
+		
+			if (abs($xhA[$i]) < $tol)
+				$xhA[$i] =0.0000;
+			if (abs($yhA[$i]) < $tol)
+				$yhA[$i] =0.0000;
+			if (abs($zhA[$i]) < $tol)
+				$zhA[$i] =0.0000;
+			
+		}
+		else
+		{
+			// collect vals
+			// Don't use getAttr, use query world space
+			
+			$c = `xform -q -t -ws ($camera)`;
+			$xvA[$i] = $c.x;
+			$yvA[$i] = $c.y;
+			$zvA[$i] = $c.z;
+
+			//print("World 3Node frame " + $i + " tx is " + $xvA[$i] + "\n");
+
+			$t = `xform -q -t -ws ($camera + "_aim")`;
+			$xtA[$i] = $t.x;
+			$ytA[$i] = $t.y;
+			$ztA[$i] = $t.z;
+
+			$u = `xform -q -t -ws ($camera + "_up")`;
+			$xhA[$i] = $u.x;
+			$yhA[$i] = $u.y;
+			$zhA[$i] = $u.z;
+
+			if (abs($xvA[$i]) < $tol)
+				$xvA[$i] =0.0000;
+			if (abs($yvA[$i]) < $tol)
+				$yvA[$i] =0.0000;
+			if (abs($zvA[$i]) < $tol)
+				$zvA[$i] =0.0000;
+	
+			if (abs($xtA[$i]) < $tol)
+				$xtA[$i] =0.0000;
+			if (abs($ytA[$i]) < $tol)
+				$ytA[$i] =0.0000;
+			if (abs($ztA[$i]) < $tol)
+				$ztA[$i] =0.0000;
+	
+			if (abs($xhA[$i]) < $tol)
+				$xhA[$i] =0.0000;
+			if (abs($yhA[$i]) < $tol)
+				$yhA[$i] =0.0000;
+			if (abs($zhA[$i]) < $tol)
+				$zhA[$i] =0.0000;
+		}
+		
+
+		//print( "i:" + $i + " " + $txA[$i] + " " + $tyA[$i] + " " + $tzA[$i] +"\n" );
+		//fprint $fileId ($i + "      " + substring(string($txA[$i] + 0.00000001),1,12) + "  " + substring(string($tyA[$i] + 0.00000001),1,12) + "  " + substring(string($tzA[$i] + 0.00000001),1,12)  + "  " + substring(string($rxA[$i] + 0.00000001),1,12)  + "  " + substring(string($ryA[$i] + 0.00000001),1,12)  + "  " + substring(string($rzA[$i] + 0.00000001),1,12)  + "\n\r"); fprint $fileId ($i + " \t" + string($txA[$i]) + " \t" + string($tyA[$i]) + " \t" + string($tzA[$i]) + " \t" + string($rxA[$i]) + " \t" + string($ryA[$i])  + " \t" + string($rzA[$i])  + " \t" + string($roA[$i]) + "\r\n");
+
+
+		$line = ($i + " \t" + string($xvA[$i]) + " \t" + string($yvA[$i]) + " \t" + string($zvA[$i]) + " \t" + string($xtA[$i]) + " \t" + string($ytA[$i])  + " \t" + string($ztA[$i])+ "\t" + string($xhA[$i]) + " \t" + string($yhA[$i])  + " \t" + string($zhA[$i]));
+
+		if ($exp_fov != 1)
+		{
+			$foclen[$i] = `getAttr ($camera + ".focalLength")`;
+			$line += (" \t" + string($foclen[$i]));
+		}
+				
+		// Print out the extras if named and selected	
+		$line += print_extras($fileId, $exp_names);
+		
+		$line += ("\n");
+		
+		if (!$ple)
+			fprint $fileId $line;
+		else
+			print $line;
+
+		// Check if the dialog has been cancelled
+		if ( `progressWindow -query -isCancelled` )
+			break;
+
+		progressWindow -edit  -progress $i
+		-status ("Writing Line: " + $i);
+			
+	}
+
+	progressWindow -endProgress;
+
+	if (!$ple)
+	{
+		print("2 Node Export done, now close file " + $fileId + "\n");
+		fclose $fileId;
+	}
+}
+
+
+global proc string print_extras(int $fileId, string $exp_names[])
+{
+	int $i;
+	float $value;
+	float $tol = 0.0001;
+	int $ple = `about -ev`;
+	string $extra_line;
+	global int $debug;
+	
+	$extra_line = " ";
+	
+	for ($i = 0; $i < 6; $i++)
+	{
+		// If there is a name assigned
+		if (size($exp_names[$i]))
+		{
+			string $keyable;
+			
+			if ($i == 0)
+				$keyable = `optionMenu -q -v item1_option_menu`;
+			else if ($i == 1)
+				$keyable = `optionMenu -q -v item2_option_menu`;
+			else if ($i == 2)
+				$keyable = `optionMenu -q -v item3_option_menu`;
+			else if ($i == 3)
+				$keyable = `optionMenu -q -v item4_option_menu`;
+			else if ($i == 4)
+				$keyable = `optionMenu -q -v item5_option_menu`;
+			else
+				$keyable = `optionMenu -q -v item6_option_menu`;
+			
+			// Get the value of that keyable
+			$value = `getAttr ("." + $keyable)`;
+				
+			if (abs($value) < $tol)  
+				$value = 0.0000;
+			
+			$extra_line += (" \t" + string($value));
+			//print("Exporting " + $exp_names[$i] + " as " + $value + "\n");
+		}
+	}
+	
+	return $extra_line;
+}
+
+
+global proc string[] get_all_persp_cameras()
+{
+	string $all_persp_cameras[];
+	string $cameras[] = `ls -type camera`;
+
+	for($i = 0; $i < size($cameras); $i++)
+	{
+		if (!`getAttr ($cameras[$i]+".orthographic")`)
+		{
+			// Full Path!
+			string $relatives[] = `listRelatives -p -f $cameras[$i]`;
+			if (size($relatives))
+				$all_persp_cameras[size($all_persp_cameras)]=$relatives[0];
+			else
+				$all_persp_cameras[size($all_persp_cameras)]=$cameras[$i];
+		}
+	}
+	return($all_persp_cameras);
+}
+
+global proc string[] get_all_keyable()
+{
+	string $keyables[] = `listAttr -k`;
+	return($keyables);
+}
+
+
+//
+// If the specified name is the destination of a connection,
+// then delete that connection.
+//
+global proc breakConnection( string $destName )
+{
+	if (`objExists $destName`)
+	{
+		if ( `connectionInfo -isDestination $destName` )
+		{
+			delete -icn `connectionInfo -getExactDestination $destName`;
+		}
+	}
+}
+
+global proc string getTransform( string $shape )
+{
+	string $transform = "";
+
+	if ( "transform" != `nodeType $shape` )
+		// If given node is already a transform, just pass on through
+	{
+		string $parents[] = `listRelatives -fullPath -parent $shape`;
+		$transform = $parents[0];
+	}
+
+	return $transform;
+}
+
+// Get the camera that has the provided Shape
+global proc string Shape2Camera(string $shape)
+{
+	string $camera;
+	string $relatives[] = `listRelatives -p $shape`;
+
+	if (size($relatives))
+		$camera=$relatives[0];
+	else
+		$camera=$shape;
+
+	//print("Returning " + $camera + " from Shape to Camera \n");
+	return $camera;
+}
+
+// Get the shape for the provided camera
+global proc string Camera2Shape(string $camera)
+{
+	string $shape;
+	string $relatives[] = `listRelatives -s $camera`;
+	global int $debug;
+
+	if (size($relatives))
+		$camera = $relatives[0];
+	else
+		$camera = $shape;
+
+	if ($debug)
+		print("Returning " + $camera + " from Camera to Shape " + $shape +  "\n");
+	
+	return $camera;
+}
+
+// 	Once the Export button is pushed, then get the UI data and export the motion
+//	If it is a 2 node camera, then do the 2 node export, if it is one, then
+//	do that!
+//	If it has been determined that a 2 or 3 node camera will be created, then use that!
+
+global proc export_moco_CB()
+{
+	int $res[] = `intFieldGrp -q -v emc_intGrp_fs`;
+	int $fs = $res[0];
+	int $res[] = `intFieldGrp -q -v emc_intGrp_fe`;
+	int $fe = $res[0];
+	int $nodes = 0;
+	int $exp_extra[3];
+	string $up;
+	string $exp_names[6];
+	int $ple = `about -ev`;
+	string $selected_node[];
+	global int $debug;
+
+	print("Export_moco_CB start is " + $fs + " end is " + $fe + "\n");
+
+	string $fileName = `textField -q -fi emc_textField_filename`;
+	string $camera = `optionMenu -q -v cameras_option_menu`;
+
+	int $kuper = `checkBox -query -value emc_check_kuper`;
+	int $exp_fov = `radioButtonGrp -query -select emc_radio_fov`;
+	int $exp_world = `radioButtonGrp -query -select emc_radio_world`;
+	int $createnode = `radioButtonGrp -query -select emc_create_node`;
+	
+	$debug = `checkBox -query -value emc_debugexport`;
+	
+//	$exp_extra[0] = `radioButtonGrp -query -select emc_radio_extra0`;
+//	$exp_extra[1] = `radioButtonGrp -query -select emc_radio_extra1`;
+//	$exp_extra[2] = `radioButtonGrp -query -select emc_radio_extra2`;
+	
+	$exp_names[0] = `textField -q -fi emc_textField_item1name`;
+	$exp_names[1] = `textField -q -fi emc_textField_item2name`;
+	$exp_names[2] = `textField -q -fi emc_textField_item3name`;
+	$exp_names[3] = `textField -q -fi emc_textField_item4name`;
+	$exp_names[4] = `textField -q -fi emc_textField_item5name`;
+	$exp_names[5] = `textField -q -fi emc_textField_item6name`;
+	
+	
+	playbackOptions -min $fs -max $fe;
+	currentTime $fs;
+
+	set_maya_units();
+
+	// Now create the camera if so desired...
+	print("Create node is " + $createnode + "\n");
+
+	// Save the current selection so we can re-select AFTER the camera
+	// creation has been done since that does some selecting and deselection
+	
+	$selected_node = `ls -sl`;
+
+
+	if ($kuper && ($createnode == 3 || $createnode == 4))
+	{
+		error("Alternate Format only supports single node cameras\n");
+	}
+
+
+	if ($createnode == 2)
+	{
+		Create1Node($camera);
+
+		string $cameras[] = `ls -sl -fl`;
+		print(" Camera is " + $cameras[0] + "\n");
+		
+		$camera = Shape2Camera($cameras[0]);
+	}
+	else if ($createnode == 3)
+	{
+		print("Create 2 Node based on camera: " + $camera + "\n");
+
+		$camera = Create2Node($camera);
+
+		string $cameras[] = `ls -sl -fl`;
+
+		$camera = $cameras[0];
+	}
+	else if ($createnode == 4)
+	{
+		Create3Node($camera);
+
+		string $cameras[] = `ls -sl -fl`;
+
+		$camera = $cameras[0];
+		
+		for ($i = 0; $i < size($cameras); $i++)
+		    print("3Node camera" + $i + " is " + $cameras[$i] + "\n");
+	}
+
+	print("We have selected camera  " + $camera + "\n");
+
+	string $test = $camera + "_aim";
+
+	if (`objExists $test`)
+	{
+		string $test2 = $camera + "_up";
+ 
+		$nodes = 2;
+
+		if (`objExists $test2`)
+		{
+			$nodes = 3;
+			//print("Yes it is " + $nodes + " nodes\n");
+		}
+	}
+	else
+	{
+		$nodes = 1;
+	}
+
+
+	select -r $selected_node;
+
+	print("Nodes for the camera " + $camera + " is " + $nodes + " world is " + $exp_world + "\n");
+
+	if ($kuper && $nodes > 1)
+	{
+		error("Alternate Format only supports single node cameras\n");
+	}
+
+		// If there are 2 cameras with the same name, you get 2 ints back!!
+//	if (size($camera) > 1)
+//	{
+//		MyError ("It appears there are multiple cameras with the same name");
+//		error ("It appears there are multiple cameras with the same name " + $camera);
+//	}
+
+	$up = `upAxis -q -axis`;
+
+	if ($nodes == 1)
+	{
+		if ($up == "y")
+		{
+			print ("Export Camera" + $camera + " \n");
+			mrmc1out($camera, $fs, $fe, $fileName, $exp_fov, $exp_world, $kuper, $exp_names);
+		}
+		else
+		{
+			print ("Up mode is " + $up + " \n");
+			error("Cannot export a Single node camera in Z up mode.  Try baking a 2 node camera\n");
+		}
+	}
+	else if ($nodes == 2)
+	{
+		mrmc2out($camera, $fs, $fe, $fileName, $exp_fov, $exp_world, $exp_names);
+	}
+	else if ($nodes == 3)
+	{
+		mrmc3out($camera, $fs, $fe, $fileName, $exp_fov, $exp_world, $exp_names);
+	}
+
+	if (!$ple)
+	{
+		// Print camera info to the maya script editor
+		string $today[];
+		string $sysDate = `system "date"`;
+		tokenize $sysDate $today;
+		string $nowTime[];
+		string $sysTime = `system "time"`;
+		tokenize $sysTime $nowTime;
+		
+		print ("Camera "+$camera+" exported to "+$fileName+" at "+$nowTime[4]+" on "+$today[5]+"\n");
+		print ("fs = "+$fs+"\n");
+		print ("fe = "+$fe+"\n");
+	}
+
+	mrmcoutdone();
+
+//	warning ("Exported data to file " + $fileName + "\n");
+	print ("Exported data to file " + $fileName + "\n");
+	
+}
+
+
+//
+// Create a GUI interface that allows the user to select the camera to be exported
+// the frame counts for start and end and the file name
+//
+global proc mrmcout()
+{
+	int $fs = `playbackOptions -q -minTime`;
+	int $fe = `playbackOptions -q -maxTime`;
+	string $fileName;
+	string $nodeName = " Export Relative to this node";
+	string $window_name = "Flair_Data_Export";
+
+	if (`window -ex $window_name`)
+		deleteUI $window_name;
+
+	window -mbv 1 -mb 1 $window_name;
+	menu -label "Help" -hm true;
+	menuItem -label "Web Help with moco import/export" -c "moco_web_help";
+	menuItem -label "Local Help with moco import/export" -c "moco_help";
+	menuItem -label "About moco import/export" -c "moco_about";
+
+	string $form = `formLayout -numberOfDivisions 100`;
+
+	// First the camera to export selection
+	
+	string $cameras_option_menu = `optionMenu -l "Select Camera to export" cameras_option_menu`;
+	string $cameras[] = get_all_persp_cameras();
+	for ($i=0; $i < size($cameras); $i ++)
+		menuItem -label $cameras[$i];
+
+
+	// Set the debug to window flag
+	string $debug_check = `checkBox
+	                       -label "Output progress info to script window?"
+	                       -width 200
+	                       -value 0
+	                       emc_debugexport`;
+	
+	int $num = `optionMenu -q -ni $cameras_option_menu`;
+	string $ils[] = `optionMenu -q -ils $cameras_option_menu`;
+
+	for ($i = 0; $i < $num; $i++)
+	{
+		optionMenu -e -sl ($i+1) $cameras_option_menu;
+		if (`optionMenu -q -v $cameras_option_menu` == "cam_main")
+			break;
+	}
+	
+	string $file_label = `text -label "Export File Name Selection"`;
+	
+	// Create a button to pull up the file dialog and a box to hold
+	// the name of the export file.
+
+	string $file_button = `button -l "Select File" -w 25 -c("pick_file_export;\n")`;
+
+	// Export in Kuper format
+	string $expkuper_check = `checkBox
+	                       -label "Kuper Format?"
+	                       -width 100
+	                       -value 0
+	                       //-align "center"
+	                       -align "left"
+	                       //-align "right"
+	                       emc_check_kuper`;
+
+	string $genuflex_button = `button -l "Export Genuflex" -w 25 -c("export_genuflex;\n")`;
+
+	string $file_name = `textField -fi $fileName  emc_textField_filename`;
+	textField -e -w 75 $file_name;
+
+	$sep1 = `separator -w 100`;
+
+	// Export selected camera or create a noded camera onto top of it and export that?
+	string $createnode_radio = `radioButtonGrp
+	                           -numberOfRadioButtons 4
+	                           -label "Create Node Camera?"
+	                           -labelArray4 "No" "1" "2" "3"
+	                           -columnWidth5 130 40 40 40 40
+	                           -width 320
+	                           -select 1
+	                           //-enable2 1
+	                           emc_create_node`;
+
+	// Frame start and end
+
+	// Set the start and end to the current animation start and end???
+
+	print("Export start is " + $fs + " end is " + $fe + "\n");
+	
+	string $start = `intFieldGrp -numberOfFields 1 -label "Frame start" -value1 $fs emc_intGrp_fs`;
+	string $end = `intFieldGrp -numberOfFields 1 -label "Frame end" -value1 $fe emc_intGrp_fe`;
+
+	string $timeline_button = `button -l "Upload Timeline" -c ( "upload_timeline;\n")`;
+
+
+	// intFieldGrp -e -value1 $fs emc_intGrp_fs;
+	// intFieldGrp -e -value1 $fe emc_intGrp_fe;
+
+
+	// Export the Field of View
+	string $expfov_radio = `radioButtonGrp
+	                       -numberOfRadioButtons 2
+	                       -label "Export Focal Length?"
+	                       -labelArray2 "No" "Yes"
+	                       -columnWidth3 120 70 70
+	                       -width 320
+	                       -select 1
+	                       -enable2 1
+	                       emc_radio_fov`;
+
+	// Export the Field of View
+	string $expworld_radio = `radioButtonGrp
+	                       -numberOfRadioButtons 3
+	                       -label "Export Coords?"
+	                       -labelArray3 "Local" "World" "Node Relative"
+	                       -columnWidth4 120 70 70 90
+	                       -width 360
+	                       -select 1
+	                       -enable2 1
+	                       emc_radio_world`;
+
+//   	optionMenu -e -changeCommand "cam_select" $cameras_option_menu;
+
+	radioButtonGrp  -e -changeCommand "export_space" $expworld_radio;
+	
+	string $node_label = `text -label "Node Name"`;
+
+	string $node_name = `textField -fi $nodeName  emc_textField_nodename`;
+	textField -e -en false -w 30 $node_name;
+  	
+                       
+
+// 6 Extra Axis out Output.  ---
+
+// Does not work..... in Linux leave it visible
+	string $frame = `frameLayout -cll 1 -cl 0 -l "Additional Export"`;
+	setParent($frame);
+	string $form1 = `formLayout -numberOfDivisions 100`;
+	setParent($form1);
+	
+	string $item1_option_menu = `optionMenu -l "Attribute 1 to export" item1_option_menu`;
+	
+	// If there is something selected, then list the keyables
+	string $test[] = `ls -sl`;
+
+	string $label0 = `text -align "right" -label "Selected Item:"`;
+
+	string $name0 = `text -label $test`;
+	
+	if (size($test))
+	{
+		string $keyables1[] = get_all_keyable();
+		for ($i = 0; $i < size($keyables1); $i ++)
+		menuItem -label $keyables1[$i];
+		int $k1num = `optionMenu -q -ni $item1_option_menu`;
+		string $k1ils[] = `optionMenu -q -ils $item1_option_menu`;
+		for ($i = 0; $i < $k1num; $i++)
+			optionMenu -e -sl ($i+1) $item1_option_menu;
+	}
+	
+	string $name1 = `text -label "Name it"`;
+	string $item1_name = `textField -fi $fileName  emc_textField_item1name`;
+	textField -e -w 120 $item1_name;
+
+
+	// Item 2
+	
+	string $item2_option_menu = `optionMenu -l "Attribute 2 to export" item2_option_menu`;
+	if (size($test))
+	{
+		string $keyables2[] = get_all_keyable();
+		for ($i = 0; $i < size($keyables2); $i ++)
+			menuItem -label $keyables2[$i];
+		int $k2num = `optionMenu -q -ni $item2_option_menu`;
+		string $k2ils[] = `optionMenu -q -ils $item2_option_menu`;
+		for ($i = 0; $i < $k2num; $i++)
+			optionMenu -e -sl ($i+1) $item2_option_menu;
+	}
+	
+	string $name2 = `text -label "Name it"`;
+	string $item2_name = `textField -fi $fileName  emc_textField_item2name`;
+	textField -e -w 120 $item2_name;
+
+
+	// Item 3
+	
+	string $item3_option_menu = `optionMenu -l "Attribute 3 to export" item3_option_menu`;
+	if (size($test))
+	{
+		string $keyables3[] = get_all_keyable();
+		for ($i = 0; $i < size($keyables3); $i ++)
+			menuItem -label $keyables3[$i];
+		int $k3num = `optionMenu -q -ni $item3_option_menu`;
+		string $k3ils[] = `optionMenu -q -ils $item3_option_menu`;
+		for ($i = 0; $i < $k3num; $i++)
+			optionMenu -e -sl ($i+1) $item3_option_menu;
+	}
+	
+	string $name3 = `text -label "Name it"`;
+	string $item3_name = `textField -fi $fileName  emc_textField_item3name`;
+	textField -e -w 120 $item3_name;
+
+
+	// Item 4
+	
+	string $item4_option_menu = `optionMenu -l "Attribute 4 to export" item4_option_menu`;
+	if (size($test))
+	{
+		string $keyables4[] = get_all_keyable();
+		for ($i = 0; $i < size($keyables4); $i ++)
+			menuItem -label $keyables4[$i];
+		int $k4num = `optionMenu -q -ni $item4_option_menu`;
+		string $k4ils[] = `optionMenu -q -ils $item4_option_menu`;
+		for ($i = 0; $i < $k4num; $i++)
+			optionMenu -e -sl ($i+1) $item4_option_menu;
+	}
+	
+	string $name4 = `text -label "Name it"`;
+	string $item4_name = `textField -fi $fileName  emc_textField_item4name`;
+	textField -e -w 120 $item4_name;
+
+
+	// Item 5
+	
+	string $item5_option_menu = `optionMenu -l "Attribute 5 to export" item5_option_menu`;
+	if (size($test))
+	{
+		string $keyables5[] = get_all_keyable();
+		for ($i = 0; $i < size($keyables5); $i ++)
+			menuItem -label $keyables5[$i];
+		int $k5num = `optionMenu -q -ni $item5_option_menu`;
+		string $k5ils[] = `optionMenu -q -ils $item5_option_menu`;
+		for ($i = 0; $i < $k5num; $i++)
+			optionMenu -e -sl ($i+1) $item5_option_menu;
+	}
+	
+	string $name5 = `text -label "Name it"`;
+	string $item5_name = `textField -fi $fileName  emc_textField_item5name`;
+	textField -e -w 120 $item5_name;
+
+
+	// Item 6
+	
+	string $item6_option_menu = `optionMenu -l "Attribute 6 to export" item6_option_menu`;
+	if (size($test))
+	{
+		string $keyables6[] = get_all_keyable();
+		for ($i = 0; $i < size($keyables6); $i ++)
+			menuItem -label $keyables6[$i];
+		int $k6num = `optionMenu -q -ni $item6_option_menu`;
+		string $k6ils[] = `optionMenu -q -ils $item6_option_menu`;
+		for ($i = 0; $i < $k6num; $i++)
+			optionMenu -e -sl ($i+1) $item6_option_menu;
+	}
+	
+	string $name6 = `text -label "Name it"`;
+	string $item6_name = `textField -fi $fileName  emc_textField_item6name`;
+	textField -e -w 120 $item6_name;
+
+
+	setParent($form);
+
+	$sep2 = `separator -w 100`;
+
+	string $export_button = `button -l "Export Moco" -c ( "export_moco_CB;\n")`;
+	string $cancel_button = `button -l "Cancel" -c ( "mrmcoutdone;\n" + "deleteUI " + $window_name)`;
+
+	// Now do the layouts
+
+
+	formLayout -edit
+
+// cameras_option_menu
+	-af $cameras_option_menu "top" 5
+	-af $cameras_option_menu "left" 15
+	-ap $cameras_option_menu "right" 5 50
+	-an $cameras_option_menu "bottom"
+
+// Check box for Debug
+	-af $debug_check "top" 5
+	-ac $debug_check "left" 15 $cameras_option_menu
+	-af $debug_check "right" 5
+	-an $debug_check "bottom"
+
+// file label
+	-ac $file_label "top" 5 $cameras_option_menu
+	-af $file_label "left" 15 
+	-ap $file_label "right" 5 30 
+	-an $file_label "bottom" 
+
+// file button
+	-ac $file_button "top" 5 $cameras_option_menu
+	-ac $file_button "left" 5 $file_label
+	-ap $file_button "right" 5 50
+	-an $file_button "bottom" 
+
+// expkuper_check
+	-ac $expkuper_check "top" 5 $cameras_option_menu
+	-ac $expkuper_check "left" 5 $file_button 
+	-an $expkuper_check "right"
+//	-af $expkuper_check "right" 5
+	-an $expkuper_check "bottom"
+
+// genuflex_button
+	-ac $genuflex_button "top" 5 $cameras_option_menu
+	-ac $genuflex_button "left" 5 $expkuper_check 
+	-af $genuflex_button "right" 5
+	-an $genuflex_button "bottom"
+
+// genuflex_button
+//	-ac $genuflex_button "top" 5 $cameras_option_menu
+//	-ac $genuflex_button "left" 5 $expkuper_check 
+//	-af $genuflex_button "right" 5
+//	-an $genuflex_button "bottom"
+
+// file name
+	-ac $file_name "top"  5 $file_button
+	-af $file_name "left" 15 
+	-af $file_name "right" 5
+	-an $file_name "bottom" 
+
+// Separator
+	-ac $sep1 "top" 5 $file_name
+	-af $sep1 "left" 15 
+	-af $sep1 "right" 5 
+	-an $sep1 "bottom" 
+
+// createnode_radio
+	-ac $createnode_radio "top" 5 $sep1
+	-af $createnode_radio "left" 5
+	-af $createnode_radio "right" 5
+	-an $createnode_radio "bottom" 
+
+// start
+	-ac $start "top" 5 $createnode_radio
+	-af $start "left" 5
+	-ap $start "right" 5 30
+	-an $start "bottom"
+
+// end
+	-ac $end "top" 5 $createnode_radio
+	-ac $end "left" 5 $start
+	-ap $end "right" 5 60
+	-an $end "bottom" 
+
+// Timeline
+	-ac $timeline_button "top" 5 $createnode_radio
+	-ac $timeline_button "left" 50 $end
+	-af $timeline_button "right" 50
+	-an $timeline_button "bottom" 
+
+// expfov_radio
+	-ac $expfov_radio "top" 15 $start
+	-af $expfov_radio "left" 15 
+	-af $expfov_radio "right" 5
+	-an $expfov_radio "bottom"
+
+// expfov_radio
+	-ac $expworld_radio "top" 15 $expfov_radio
+	-af $expworld_radio "left" 5 
+	-af $expworld_radio "right" 5
+	-an $expworld_radio "bottom"
+
+// node label
+	-ac $node_label "top" 15 $expworld_radio
+	-af $node_label "left" 15 
+//	-ac $node_label "right" 5 $node_name
+	-an $node_label "right"
+	-an $node_label "bottom"
+
+// node name
+	-ac $node_name "top" 15 $expworld_radio
+	-ac $node_name "left" 15 $node_label 
+	-af $node_name "right" 15
+	-an $node_name "bottom"
+
+	-ac $frame "top" 15 $node_name
+	-af $frame "left" 15
+	-af $frame "right" 5
+	-an $frame "bottom"
+
+
+// These items locked to the bottom of the form
+// Separator
+
+	-an $sep2 "top"
+	-af $sep2 "left" 5 
+	-af $sep2 "right" 5 
+	-ac $sep2 "bottom" 5 $export_button
+
+// Export button
+	-af $export_button "left" 5
+	-af $export_button "bottom" 5
+	-ap $export_button "right" 5 50
+	-an $export_button "top" 
+
+	-ac $cancel_button "left" 5 $export_button
+	-af $cancel_button "bottom" 5
+	-af $cancel_button "right" 5
+	-an $cancel_button "top"
+
+	$form;
+
+
+	formLayout -edit
+
+// item1_option_menu
+
+	-af $label0 "top" 5
+	-af $label0 "left" 5 
+	-ap $label0 "right" 5 50
+	-an $label0 "bottom" 
+
+	-af $name0 "top" 5
+	-ac $name0 "left" 5 $label0
+	-af $name0 "right" 5
+	-an $name0 "bottom" 
+
+	-ac $item1_option_menu "top" 5 $label0
+	-af $item1_option_menu "left" 5 
+	-ap $item1_option_menu "right" 5 50
+	-an $item1_option_menu "bottom" 
+
+	-ac $name1 "top" 5 $name0
+	-ac $name1 "left" 5 $item1_option_menu 
+	-ap $name1 "right" 5 65
+	-an $name1 "bottom" 
+
+	-ac $item1_name "top" 5 $name0
+	-ac $item1_name "left" 5 $name1
+	-af $item1_name "right" 5
+	-an $item1_name "bottom" 
+
+// item2_option_menu
+
+	-ac $item2_option_menu "top" 5 $item1_option_menu
+	-af $item2_option_menu "left" 5 
+	-ap $item2_option_menu "right" 5 50
+	-an $item2_option_menu "bottom"
+
+	-ac $name2 "top" 5 $item1_option_menu
+	-ac $name2 "left" 5 $item2_option_menu 
+	-ap $name2 "right" 5 65
+	-an $name2 "bottom" 
+
+	-ac $item2_name "top" 5 $item1_option_menu
+	-ac $item2_name "left" 5 $name2
+	-af $item2_name "right" 5
+	-an $item2_name "bottom" 
+
+// item3_option_menu
+
+	-ac $item3_option_menu "top" 5 $item2_option_menu
+	-af $item3_option_menu "left" 5 
+	-ap $item3_option_menu "right" 5 50
+	-an $item3_option_menu "bottom"
+
+	-ac $name3 "top" 5 $item2_option_menu
+	-ac $name3 "left" 5 $item3_option_menu 
+	-ap $name3 "right" 5 65
+	-an $name3 "bottom" 
+
+	-ac $item3_name "top" 5 $item2_option_menu
+	-ac $item3_name "left" 5 $name3
+	-af $item3_name "right" 5
+	-an $item3_name "bottom" 
+
+// item4_option_menu
+
+
+	-ac $item4_option_menu "top" 5 $item3_option_menu
+	-af $item4_option_menu "left" 5 
+	-ap $item4_option_menu "right" 5 50
+	-an $item4_option_menu "bottom"
+
+	-ac $name4 "top" 5 $item3_option_menu
+	-ac $name4 "left" 5 $item4_option_menu 
+	-ap $name4 "right" 5 65
+	-an $name4 "bottom" 
+
+	-ac $item4_name "top" 5 $item3_option_menu
+	-ac $item4_name "left" 5 $name4
+	-af $item4_name "right" 5
+	-an $item4_name "bottom" 
+
+// item5_option_menu
+
+
+	-ac $item5_option_menu "top" 5 $item4_option_menu
+	-af $item5_option_menu "left" 5 
+	-ap $item5_option_menu "right" 5 50
+	-an $item5_option_menu "bottom"
+
+	-ac $name5 "top" 5 $item4_option_menu
+	-ac $name5 "left" 5 $item5_option_menu 
+	-ap $name5 "right" 5 65
+	-an $name5 "bottom" 
+
+	-ac $item5_name "top" 5 $item4_option_menu
+	-ac $item5_name "left" 5 $name5
+	-af $item5_name "right" 5
+	-an $item5_name "bottom" 
+
+// item6_option_menu
+
+	-ac $item6_option_menu "top" 5 $item5_option_menu
+	-af $item6_option_menu "left" 5 
+	-ap $item6_option_menu "right" 5 50
+	-an $item6_option_menu "bottom"
+
+	-ac $name6 "top" 5 $item5_option_menu
+	-ac $name6 "left" 5 $item6_option_menu 
+	-ap $name6 "right" 5 65
+	-an $name6 "bottom" 
+
+	-ac $item6_name "top" 5 $item5_option_menu
+	-ac $item6_name "left" 5 $name6
+	-af $item6_name "right" 5
+	-an $item6_name "bottom" 
+
+	$form1;
+
+
+
+
+	mrmcoutstart();
+
+	showWindow;
+}
+
+
+global proc mrmcin()
+{
+	int $fs;
+	int $fe;
+	float $unity = 1.0;
+	string $filepick;
+	string $fileName;
+	string $window_name = "Flair_Data_Import";
+
+	if (`window -ex $window_name`)
+		deleteUI $window_name;
+
+	window -mbv 1 -mb 1 $window_name;
+	menu -label "Help" -hm true;
+	menuItem -label "Web help with moco import/export" -c "moco_web_help";
+	menuItem -label "Local help with moco import/export" -c "moco_help";
+	menuItem -label "About moco import/export" -c "moco_about";
+
+	string $form = `formLayout -numberOfDivisions 100`;
+	string $frame = `frameLayout -borderStyle "in" -lv 0`;
+	string $inner = `formLayout -numberOfDivisions 100`;
+
+	setParent $inner;
+
+	//columnLayout;
+
+	// Find out how many camera there are and make a selection for each
+	string $cameras_option_menu = `optionMenu -l "Select Camera to animate" cameras_option_menu`;
+	string $cameras[] = get_all_persp_cameras();
+	for($i = 0; $i < size($cameras); $i++)
+	{
+		menuItem -label $cameras[$i];
+	}
+	menuItem -label "Create New";
+
+	// Find out how many camera that was...
+	int $num = `optionMenu -q -ni $cameras_option_menu`;
+	string $ils[] = `optionMenu -q -ils $cameras_option_menu`;
+
+	// This just selects the cam_main I think...
+	for ($i = 0; $i < $num; $i++)
+	{
+		optionMenu -e -sl ($i+1) $cameras_option_menu;
+		if (`optionMenu -q -v $cameras_option_menu` == "cam_main")
+			break;
+	}
+
+	// Set the callback for the cameras option menu
+	optionMenu -e -changeCommand "cam_select" $cameras_option_menu;
+
+	// Set the debug to window flag
+	string $debug_check = `checkBox
+	                       -label "Output progress info to script window?"
+	                       -width 200
+	                       -value 0
+	                       emc_debugimport`;
+
+
+	// Create a button to pull up the file dialog and a box to hold
+	// the name of the file.
+	//rowLayout -nc 2 -cw2 60 280;
+	string $file_button = `button -l "Select File" -c ("pick_file_import();\n")`;
+	string $file_name = `textField -fi $fileName  imc_textField_filename`;
+	//button -e -w 60 $file_button;
+	//textField -e -w 280 $file_name;
+
+	string $camspeed_radio = `radioButtonGrp
+	                         -numberOfRadioButtons 4
+	                         -label "Camera Speed?"
+	                         -labelArray4 "Current" "24fps" "25fps" "30fps"
+	                         -columnWidth5 150 60 60 60 60
+	                         -width 100
+	                         -select 1
+	                         imc_radio_camspeed`;
+
+	string $scale = `floatFieldGrp -label "Scale Move" -value1 $unity -pre 3 imc_flt_scale`;
+
+	string $granularity = `floatFieldGrp -label "Data Granularity" -pre 0 imc_flt_granularity`;
+
+	string $rotate = `floatFieldGrp -label "Rotate Move" -pre 3 imc_flt_rotate`;
+
+	string $ltx = `text -label "Translate X"`;
+	string $lty = `text -label "Translate Y"`;
+	string $ltz = `text -label "Translate Z"`;
+
+	string $tx = `floatFieldGrp -pre 3 imc_flt_tx`;
+	string $ty = `floatFieldGrp -pre 3 imc_flt_ty`;
+	string $tz = `floatFieldGrp -pre 3 imc_flt_tz`;
+
+
+	string $sep1 = `separator - style "single"`;
+
+	// Translate to current ? None / Camera / Target options;
+	// The 2nd and Third items are set up invalid until a good cam is picked
+
+	string $trans_radio = `radioButtonGrp
+	                      -numberOfRadioButtons 3
+	                      -label "Translate to Selected?"
+	                      -labelArray3 "None" "Camera" "Target"
+	                      -columnWidth4 200 60 60 60
+	                      -width 100
+	                      -select 1
+	                      -enable2 1
+	                      -enable3 1
+	                      imc_radio_trans`;
+
+	string $rot_radio = `radioButtonGrp
+	                    -numberOfRadioButtons 2
+	                    -label "Rotate to Selected Camera?"
+	                    -labelArray2 "No" "Yes"
+	                    -columnWidth3 200 60 60
+	                    -width 100
+	                    -select 1
+	                    -enable2 1
+	                    imc_radio_rot`;
+
+	string $match_frame = `floatFieldGrp -label "Match Frame of move" -pre 0 imc_flt_match_frame`;
+
+	string $urotate = `floatFieldGrp -label "Rotated Move by" -pre 3 -en false imc_flt_urotate`;
+
+	string $lutx = `text -label "Translated by X" -en false`;
+	string $luty = `text -label "Translated by Y" -en false`;
+	string $lutz = `text -label "Translated by Z" -en false`;
+
+	string $utx = `floatFieldGrp -pre 3 -en false imc_flt_utx`;
+	string $uty = `floatFieldGrp -pre 3 -en false imc_flt_uty`;
+	string $utz = `floatFieldGrp -pre 3 -en false imc_flt_utz`;
+
+
+	string $clear_button = `button -l "Clear Import Variables" -c ("clear_trots();\n" )`;
+
+	string $xfer_button = `button -l "Transfer Import Variables" -c ("xfer_trots();\n" )`;
+
+	string $upload_button = `button -l "Upload Selected" -c ("upload_trots();\n" )`;
+
+	string $sep2 = `separator - style "single"`;
+
+	// Import reference move.
+
+	string $ref_button = `button -l "Import Reference Points" -c ("mrmcnullin();\n")`;
+	string $annotate_check = `checkBox -label "Annotate Reference Points?"
+	                       -width 200 -value 1  emc_annotate`;
+
+
+	string $refparent_radio = `radioButtonGrp
+	                         -numberOfRadioButtons 3
+	                         -label "Place Parent Locator at?"
+	                         -labelArray3 "Origin" "Cam0" "Targ0"
+	                         -columnWidth4 200 60 60 60
+	                         -select 2
+	                         imc_radio_refparent`;
+
+	string $locator_button = `button -l "Upload Locator Translations + Y Rotation" -c ("upload_locator();\n")`;
+
+	string $genuflex_import = `button -l "Import Genuflex Data" -c ("genuflex_import();\n")`;
+
+
+	setParent $form;
+
+
+	string $import_button = `button -l "Import Move" -c ("mrmccamin();\n")`;  //+"deleteUI " + $window_name)`;
+
+	// Now the buttons at the bottom of the screen for import move
+
+	string $test_button = `button -l "Test File" -c ("file_info;\n")`;
+	string $cancel_button = `button -l "Cancel" -c ( "mrmcindone();\n" + "deleteUI " + $window_name)`;
+
+
+	formLayout -edit
+	-af $frame "left" 0
+	-ac $frame "bottom" 5 $import_button
+	-af $frame "right" 0
+	-ap $frame "top" 0 0
+
+	-af $import_button "left" 10
+	-af $import_button "bottom" 5
+	-ap $import_button "right" 10 33
+	-an $import_button "top"
+
+	-ac $test_button "left" 10 $import_button
+	-af $test_button "bottom" 5
+	-ap $test_button "right" 10 66
+	-an $test_button "top"
+
+	-ac $cancel_button "left" 10 $test_button
+	-af $cancel_button "bottom" 5
+	-af $cancel_button "right" 10
+	-an $cancel_button "top"
+	$form;
+
+
+	formLayout -edit
+	-af $cameras_option_menu  "left" 5
+	-an $cameras_option_menu  "bottom"
+	-an $cameras_option_menu  "right"
+	-af $cameras_option_menu  "top" 5
+
+	-ac $debug_check "left" 5 $cameras_option_menu
+	-an $debug_check "bottom"
+	-af $debug_check "right" 5
+	-af $debug_check "top" 5 
+
+	-af $file_button "left" 5
+	-an $file_button "bottom"
+	-ap $file_button "right" 2 25
+	-ac $file_button "top" 5 $cameras_option_menu
+
+	-ap $file_name "left" 2 25
+	-an $file_name "bottom"
+	-af $file_name "right" 5
+	-ac $file_name "top" 5 $cameras_option_menu
+
+	-af $camspeed_radio "left" 5
+	-an $camspeed_radio "bottom"
+	-af $camspeed_radio "right" 5
+	-ac $camspeed_radio "top" 5 $file_name
+
+
+	-af $scale "left" 5
+	-an $scale "bottom"
+	-ap $scale "right" 5 50
+	-ac $scale "top" 5 $camspeed_radio
+
+	-ap $granularity "left" 5 50
+	-an $granularity "bottom"
+	-af $granularity "right" 5
+	-ac $granularity "top" 5 $camspeed_radio
+
+	-af $rotate "left" 5
+	-an $rotate "bottom"
+	-af $rotate "right" 5
+	-ac $rotate "top" 5 $scale
+
+	// Translation labels
+
+	-af $ltx "left" 5
+	-an $ltx "bottom"
+	-ap $ltx "right" 5 33
+	-ac $ltx "top" 5 $rotate
+
+	-ap $lty "left" 5 33
+	-an $lty "bottom"
+	-ap $lty "right" 5 66
+	-ac $lty "top" 5 $rotate
+
+	-ap $ltz "left" 5 66
+	-an $ltz "bottom"
+	-af $ltz "right" 5
+	-ac $ltz "top" 5 $rotate
+
+	// Translation values
+
+	-af $tx "left" 5
+	-an $tx "bottom"
+	-ap $tx "right" 5 33
+	-ac $tx "top" 5 $ltx
+
+	-ap $ty "left" 5 33
+	-an $ty "bottom"
+	-ap $ty "right" 5 66
+	-ac $ty "top" 5 $lty
+
+	-ap $tz "left" 5 66
+	-an $tz "bottom"
+	-af $tz "right" 5
+	-ac $tz "top" 5 $ltz
+
+
+	-af $sep1 "left" 1
+	-an $sep1 "bottom"
+	-af $sep1 "right" 1
+	-ac $sep1 "top" 5 $tx
+
+	-af $trans_radio "left" 5
+	-an $trans_radio "bottom"
+	-af $trans_radio "right" 5
+	-ac $trans_radio "top" 5 $sep1
+
+	-af $rot_radio "left" 5
+	-an $rot_radio "bottom"
+	-af $rot_radio "right" 5
+	-ac $rot_radio "top" 5 $trans_radio
+
+	-af $match_frame "left" 5
+	-an $match_frame "bottom"
+	-af $match_frame "right" 5
+	-ac $match_frame "top" 5 $rot_radio
+
+	-af $urotate "left" 5
+	-an $urotate "bottom"
+	-af $urotate "right" 5
+	-ac $urotate "top" 5 $match_frame
+
+	// Used Translation Labels
+
+	-af $lutx "left" 5
+	-an $lutx "bottom"
+	-ap $lutx "right" 5 33
+	-ac $lutx "top" 5 $urotate
+
+	-ap $luty "left" 5 33
+	-an $luty "bottom"
+	-ap $luty "right" 5 66
+	-ac $luty "top" 5 $urotate
+
+	-ap $lutz "left" 5 66
+	-an $lutz "bottom"
+	-af $lutz "right" 5
+	-ac $lutz "top" 5 $urotate
+
+	// Used Translation Values
+
+	-af $utx "left" 5
+	-an $utx "bottom"
+	-ap $utx "right" 5 33
+	-ac $utx "top" 5 $lutx
+
+	-ap $uty "left" 5 33
+	-an $uty "bottom"
+	-ap $uty "right" 5 66
+	-ac $uty "top" 5 $luty
+
+	-ap $utz "left" 5 66
+	-an $utz "bottom"
+	-af $utz "right" 5
+	-ac $utz "top" 5 $lutz
+
+	// Clear & Transfer xfer values
+
+	-af $clear_button "left" 10
+	-an $clear_button "bottom"
+	-ap $clear_button "right" 5 33
+	-ac $clear_button "top" 5 $utz
+
+	-ap $xfer_button "left" 5 33
+	-an $xfer_button "bottom"
+	-ap $xfer_button "right" 5 66
+	-ac $xfer_button "top" 5 $utz
+
+	-ap $upload_button "left" 5 66
+	-an $upload_button "bottom"
+	-af $upload_button "right" 5
+	-ac $upload_button "top" 5 $utz
+
+
+	-af $sep2 "left" 1
+	-an $sep2 "bottom"
+	-af $sep2 "right" 1
+	-ac $sep2 "top" 5 $xfer_button
+
+
+	-ac $refparent_radio "top" 5 $sep2
+	-af $refparent_radio "left" 20
+	-af $refparent_radio "right" 20
+	-an $refparent_radio "bottom"
+
+
+	-af $ref_button "left" 20
+	-an $ref_button "bottom"
+	-ap $ref_button "right" 20 50
+	-ac $ref_button "top" 5 $refparent_radio
+
+	-ap $annotate_check "left" 20 50
+	-an $annotate_check "bottom"
+	-af $annotate_check "right" 20
+	-ac $annotate_check "top" 5 $refparent_radio
+
+
+	-af $locator_button "left" 20
+	-an $locator_button "bottom"
+	-af $locator_button "right" 20
+	-ac $locator_button "top" 5 $ref_button
+
+	-ap $genuflex_import "left" 5 66
+	-an $genuflex_import "bottom"
+//	-ap $genuflex_import "right" 5 33
+	-af $genuflex_import "right" 5 
+	-ac $genuflex_import "top" 5 $locator_button
+
+
+	$inner;
+
+	mrmcinstart();
+
+	showWindow;
+}
+
+//
+//
+//
+//	UI menu for firing off mrmcin or mrmcout
+//
+//
+
+global proc moco_gui()
+{
+	string $window_name = "Moco_Data";
+
+	if (`window -ex $window_name`)
+		deleteUI $window_name;
+
+	window -mbv 1 -mb 1 $window_name;
+	menu -label "Help" -hm true;
+	menuItem -label "Web Help with moco import/export" -c "moco_web_help";
+	menuItem -label "Local Help with moco import/export" -c "moco_help";
+	menuItem -label "About moco import/export" -c "moco_about";
+
+	string $form = `formLayout -numberOfDivisions 100`;
+	string $frame = `frameLayout -borderStyle "in" -lv 0`;
+	columnLayout;
+
+	// Put a little info here.
+
+	text "MEL Script for importing and\n exporting Flair Motion Control\n data for customers of \n Camera Control, Inc.\n  v1.45 24 Aug 2010";
+
+	setParent $form;
+	string $import_button = `button -l "Import Moco" -c ( "mrmcin;\n")`;
+	string $export_button = `button -l "Export Moco" -c ( "mrmcout;\n")`;
+	string $cancel_button = `button -l "Cancel" -c ( "deleteUI " + $window_name)`;
+
+	formLayout -edit
+	-af $frame "left" 0
+	-ac $frame "bottom" 5 $export_button
+	-af $frame "right" 0
+	-af $frame "top" 0
+
+	-af $export_button "left" 5
+	-ap $export_button "bottom" 5 60
+	-af $export_button "right" 5
+	-ap $export_button "top" 5 40
+
+	-af $import_button "left" 5
+	-ap $import_button "bottom" 5 80
+	-af $import_button "right" 5
+	-ac $import_button "top" 5 $export_button
+
+	-af $cancel_button "left" 5
+	-ap $cancel_button "bottom" 5 100
+	-af $cancel_button "right" 5
+	-ac $cancel_button "top" 5 $import_button
+	$form;
+
+	showWindow;
+};
+
+global proc moco_about()
+{
+	print ("Flair Motion Control Data import & export\n");
+
+	string $window_name = "Moco_About";
+
+	if (`window -ex $window_name`)
+		deleteUI $window_name;
+
+	window -mbv 1 -mb 1 $window_name;
+	string $form = `formLayout -numberOfDivisions 100`;
+	string $frame = `frameLayout -borderStyle "in" -lv 0`;
+
+	text "Flair Motion Control Data import \n and export v 1.45 24 Aug 2010 \n Author Simon Wakley";
+
+	setParent $form;
+
+	string $cancel_button = `button -l "Cancel" -c ( "deleteUI " + $window_name)`;
+
+	formLayout -edit
+	-af $frame "left" 5
+	-ac $frame "bottom" 5 $cancel_button
+	-af $frame "right" 5
+	-af $frame "top" 5
+
+	-af $cancel_button "left" 5
+	-ap $cancel_button "bottom" 5 100
+	-af $cancel_button "right" 5
+	-ap $cancel_button "top" 5 70
+	$form;
+
+	showWindow;
+
+}
+
+global proc MyError(string $errortext)
+{
+
+	string $window_name = "Moco_Error";
+
+	if (`window -ex $window_name`)
+		deleteUI $window_name;
+
+	window -mbv 1 -mb 1 $window_name;
+	string $form = `formLayout -numberOfDivisions 100`;
+	string $frame = `frameLayout -borderStyle "in" -lv 0`;
+
+	string $label = `text $errortext`;
+
+
+	//if ($debug)
+
+	int $width = `text -q -width $label`;
+
+	print("Label is " + $label + " width is " + $width + "\n");
+
+	$width += $width/6;
+
+// Try to make the window big enough
+//	formLayout -edit -width $width $form;
+//	frameLayout -edit -width $width $frame;
+	window -edit -width $width $window_name;
+				
+		
+	setParent $form;
+
+	string $cancel_button = `button -l "Cancel" -c ( "deleteUI " + $window_name)`;
+
+	formLayout -edit
+	-af $frame "left" 5
+	-ac $frame "bottom" 5 $cancel_button
+	-af $frame "right" 5
+	-af $frame "top" 5
+
+	-af $cancel_button "left" 5
+	-ap $cancel_button "bottom" 5 100
+	-af $cancel_button "right" 5
+	-ap $cancel_button "top" 5 70
+	$form;
+
+	showWindow;
+
+}
+
+global proc moco_web_help()
+{
+	int $ple = `about -ev`;
+
+	print ("Contact Simon Wakley (310) 581 8343  simon@cameracontrol.com\n");
+	print ("Help file is http://www.cameracontrol.com/MelScript/mel_help.html\n");
+
+	// build the args needed by the maya command
+	// Try to find the help file in the expected places.
+
+	string $help_file = "http://www.cameracontrol.com/MelScript/mel_help.html";
+	launch -web $help_file;
+}
+
+global proc moco_help()
+{
+	// build the args needed by the maya command
+	// Try to find the help file in the expected places.
+
+	string $buffer[];
+	string $find_file;
+	string $file_name = "/mel_help.html";
+	string $script_path = getenv("MAYA_SCRIPT_PATH");
+ 
+	int $numpaths = tokenize($script_path, ";", $buffer);
+ 
+	for ($i = 0; $i < $numpaths; $i++)
+	{ // If it exists, then open it
+		$find_file = $buffer[$i] + $file_name;
+		print("Trying file :" + $find_file + "\n");
+		if (`file -q -ex $find_file`)
+			break;
+ 	}
+ 
+	if ($i == $numpaths)
+	{
+		// Didn't find it yet
+		string $script_path = getenv("HOME");
+		
+		$numpaths = tokenize($script_path, ";", $buffer);
+		
+		for ($i = 0; $i < $numpaths; $i++)
+		{ // If it exists, then open it
+			$find_file = $buffer[$i] + $file_name;
+			print("Trying file :" + $find_file + "\n");
+			if (`file -q -ex $find_file`)
+				break;
+		}
+	 }
+ 
+	if ($i < $numpaths)
+ 	{ // Found the file, so open it 
+		launch -web $find_file;
+	}
+	else
+		MyError("Could not find the help file, go to www.cameracontrol.com/MelScript/mel_help.html");
+
+}
+
+
+global proc moco_info(string $buffer)
+{
+	string $window_name = "Moco_Info";
+
+	if (`window -ex $window_name`)
+		deleteUI $window_name;
+
+	window -mbv 1 -mb 1 $window_name;
+	string $form = `formLayout -numberOfDivisions 100`;
+	string $frame = `frameLayout -borderStyle "in" -lv 0`;
+
+	text $buffer;
+
+	formLayout -edit
+	-af $frame "left" 0
+	-af $frame "bottom" 0
+	-af $frame "right" 0
+	-af $frame "top" 0
+	$form;
+
+	showWindow;
+}
+
+
+global proc mrmcinstart()
+{
+	string $filename = "import.xyz";
+	float $scale = 1.00;
+	float $rotate = 0.0;
+	float $tx = 0.0;
+	float $ty = 0.0;
+	float $tz = 0.0;
+	float $urotate = 0.0;
+	float $utx = 0.0;
+	float $uty = 0.0;
+	float $utz = 0.0;
+	float $match_frame;
+	float $gran;
+	string $dataline;
+	string $buffer[];
+	string $namebuffer[];
+	string $whitespace = " ,	";
+	int $fileId = 0;
+
+	// Here read them off disk if the file exists
+
+	// Open the file
+	// If we have a home directory, use that otherwise forget about it
+	string $setfile = getenv("HOME");
+	
+	if (size($setfile))
+	{
+		$setfile += "/mrmcin.set";
+		// Open the file
+		$fileId = `fopen $setfile "r"`;
+	}
+
+	if ($fileId != 0)
+	{
+		$dataline = `fgetline $fileId`;
+		//print(" Line 1 is " + $dataline + "\n");
+		// Dump the info line that tells people what the file is and get the file name
+
+		// Get the filename		
+		$dataline = `fgetline $fileId`;
+		if (tokenize($dataline, $namebuffer) != 0)
+			$filename = $namebuffer[0];
+		//print(" Filename  is " + $filename + "\n");
+		
+
+		$dataline = `fgetline $fileId`;
+		//print(" Line 3 is " + $dataline + "\n");
+		$numTokens = tokenize($dataline, " ,;	", $buffer);
+
+		//print(" Buffers are " + $buffer[0] + " " + $buffer[1] + " " + $buffer[2] + " " + $buffer[3] + "\n");
+		//print(" and " + $buffer[4] + " " + $buffer[5] + " " + $buffer[6] + " " + $buffer[7] + "\n");
+
+		$scale = $buffer[0];
+		$rotate = $buffer[1];
+		$tx = $buffer[2];
+		$ty = $buffer[3];
+		$tz = $buffer[4];
+		$match_frame = $buffer[5];
+		$gran = $buffer[6];
+
+		// Get the next set of variables
+		// Used translations and rotations
+
+		$dataline = `fgetline $fileId`;
+		//print(" Line 4 is " + $dataline + "\n");
+		$numTokens = tokenize($dataline, $buffer);
+
+		//print(" Buffers are " + $buffer[0] + " " + $buffer[1] + " " + $buffer[2] + " " + $buffer[3] + "\n");
+		//print(" and " + $buffer[4] + " " + $buffer[5] + " " + $buffer[6] + " " + $buffer[7] + "\n");
+
+		$urotate = $buffer[0];
+		$utx = $buffer[1];
+		$uty = $buffer[2];
+		$utz = $buffer[3];
+
+		if ($scale == 0)
+			$scale = 1.0;
+		if ($match_frame == 0)
+			$match_frame = 1.0;
+
+
+
+		fclose($fileId);
+	}
+
+	if ($gran == 0)
+		$gran = 1;
+	if ($scale == 0)
+		$scale = 1;
+
+	// Default settings from file set into GUI
+	textField -e -fi $filename  imc_textField_filename;
+	floatFieldGrp -e -v1 $scale imc_flt_scale;
+	floatFieldGrp -e -v1 $rotate imc_flt_rotate;
+	floatFieldGrp -e -v1 $tx imc_flt_tx;
+	floatFieldGrp -e -v1 $ty imc_flt_ty;
+	floatFieldGrp -e -v1 $tz imc_flt_tz;
+	floatFieldGrp -e -v1 $gran imc_flt_granularity;
+	floatFieldGrp -e -v1 $match_frame imc_flt_match_frame;
+
+	floatFieldGrp -e -v1 $urotate imc_flt_urotate;
+	floatFieldGrp -e -v1 $utx imc_flt_utx;
+	floatFieldGrp -e -v1 $uty imc_flt_uty;
+	floatFieldGrp -e -v1 $utz imc_flt_utz;
+
+}
+
+global proc mrmcoutstart()
+{
+	string $filename = "export.xyz";
+	int $start = 1;
+	int $end = 100;
+	int $exp_fov = 1;
+	int $exp_world = 1;
+	string $dataline;
+	string $buffer[];
+	string $namebuffer[];
+	int $fileId = 0;
+
+	// Should pick up the current playback options for default values
+	//$start = playbackOptions -query -min;
+
+
+	// Here read them off disk if the file exists
+
+	// Open the file
+	// If we have a home directory, use that otherwise forget about it
+	string $setfile = getenv("HOME");
+	if (size($setfile))
+	{
+		$setfile += "/mrmcout.set";
+		// Open the file
+		$fileId = `fopen $setfile "r"`;
+	}
+	
+
+	if ($fileId != 0)
+	{
+		$dataline = `fgetline $fileId`;
+		// Dump the info line that tells people what the file is and get the file name
+
+		//$filename = `fgetline $fileId`;
+		$dataline = `fgetline $fileId`;
+		if (tokenize($dataline, $namebuffer) != 0)
+			$filename = $namebuffer[0];
+		//print(" Filename  is " + $filename + "\n");
+
+		$dataline = `fgetline $fileId`;
+		$numTokens = tokenize($dataline, $buffer);
+
+		$start = $buffer[0];
+		$end = $buffer[1];
+		$exp_fov = $buffer[2];
+		$exp_world = $buffer[3];
+
+		fclose($fileId);
+	}
+
+	// Default settings from file set into GUI
+
+	textField -e -fi $filename  emc_textField_filename;
+	intFieldGrp -e -value1 $start emc_intGrp_fs;
+	intFieldGrp -e -value1 $end emc_intGrp_fe;
+	radioButtonGrp - e -select $exp_fov emc_radio_fov;
+
+
+}
+
+
+global proc mrmcindone()
+{
+	string $filepick = "";
+	float $scale = 0.01;
+	float $rotate = 0.0;
+	float $tx = 0.0;
+	float $ty = 0.0;
+	float $tz = 0.0;
+	float $urotate = 0.0;
+	float $utx = 0.0;
+	float $uty = 0.0;
+	float $utz = 0.0;
+	float $match_frame = 0.0;
+	float $temp[];
+	int $fileId = 0;
+	int $gran = 1;
+
+	int $start;
+	int $end;
+	int $itemp[];
+	int $ple = `about -ev`;
+
+	if ($ple)
+		return;
+
+	$temp = `floatFieldGrp -q -v imc_flt_scale`;
+	$scale = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_rotate`;
+	$rotate = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_tx`;
+	$tx = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_ty`;
+	$ty = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_tz`;
+	$tz = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_match_frame`;
+	$match_frame = $temp[0];
+
+	$temp = `floatFieldGrp -q -v imc_flt_urotate`;
+	$urotate = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_utx`;
+	$utx = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_uty`;
+	$uty = $temp[0];
+	$temp = `floatFieldGrp -q -v imc_flt_utz`;
+	$utz = $temp[0];
+
+	// Recover the file name selected
+	$filepick = `textField -q -fi imc_textField_filename`;
+
+
+	// If we have a home directory, use that otherwise forget about it
+	string $setfile = getenv("HOME");
+	if (size($setfile))
+	{
+		$setfile += "/mrmcin.set";
+		// Open the file
+		$fileId = `fopen $setfile "w"`;
+	}
+
+	if ($fileId != 0)
+	{
+		fprint $fileId ("Default settings for Flair data import v1.45 \n");
+		// File on its own line since it can have white space now !
+		fprint $fileId ($filepick + "\n");
+		fprint $fileId (string($scale) + " ");
+		fprint $fileId ($rotate + " ");
+		fprint $fileId ($tx + " ");
+		fprint $fileId ($ty + " ");
+		fprint $fileId ($tz + " ");
+		fprint $fileId ($match_frame + " ");
+		fprint $fileId ($gran + " \n");
+
+		// Last line used rotation and translations
+		fprint $fileId ($urotate + " ");
+		fprint $fileId ($utx + " ");
+		fprint $fileId ($uty + " ");
+		fprint $fileId ($utz + "\n ");
+		
+		fprint $fileId ("Scale, Rotate, Tx, Ty, Tz, Match Frame, Granularity, Used Rotate, Used Tx, Used Ty, Used Tz\n");
+
+		fclose($fileId);
+		print("Saved Import defaults\n");
+	}
+	else
+		print ("Could not open config file??" + $setfile + "\n");
+
+}
+
+
+global proc mrmcoutdone()
+{
+	string $filepick = "";
+	int $fileId = 0;
+	int $gran = 1;
+
+	int $start;
+	int $end;
+	int $itemp[];
+	int $ple = `about -ev`;
+
+	if ($ple)
+		return;
+		
+	$itemp = `intFieldGrp -q -v emc_intGrp_fs`;
+	$start = $itemp[0];
+	$itemp = `intFieldGrp -q -v emc_intGrp_fe`;
+	$end = $itemp[0];
+
+	int $exp_fov = `radioButtonGrp -query -select emc_radio_fov`;
+	int $exp_world = `radioButtonGrp -query -select emc_radio_world`;
+	
+	// Recover the file name selected
+	$filepick = `textField -q -fi emc_textField_filename`;
+
+	// If we have a home directory, use that otherwise forget about it
+	string $setfile = getenv("HOME");
+	if (size($setfile))
+	{
+		$setfile += "/mrmcout.set";
+		// Open the file
+		$fileId = `fopen $setfile "w"`;
+	}
+
+	if ($fileId != 0)
+	{
+		fprint $fileId ("Default settings for Flair data Export v1.45 \n");
+		// File on its own line since it can have white space now !
+		fprint $fileId ($filepick + "\n ");
+		fprint $fileId ($start + " ");
+		fprint $fileId ($end + " ");
+		fprint $fileId ($exp_fov + " ");
+		fprint $fileId ($exp_world + " ");
+		fprint $fileId (" \n");
+
+		fprint $fileId ("Start Frame, End Frame, Export FOV, Export World \n");
+
+
+		fclose($fileId);
+		print("Saved Export defaults\n");
+	}
+	else
+		print ("Could not open config file??" + $setfile + "\n");
+
+}
+
+
+global proc Delete(string $item_name)
+{
+	string $items[] = `ls $item_name`;
+	
+	if (size($items))
+	{
+		delete $items;
+	}
+}
+
+
+global proc MakeAimUp (string $currentCam)
+{
+	global float $maya_units;
+	float $tdist = -0.15;
+	string $cmd1;
+
+	$tdist *= $maya_units;
+
+	// If it exists delete it.
+	Delete("Targ_Aim");
+	$TargetName = `polyCube -w 1 -h 1 -d 1 -sx 1 -sy 1 -sz 1 -ax 0 1 0 -ch 0`;
+	rename $TargetName "Targ_Aim";
+	select "Targ_Aim";
+	select -add $currentCam ;
+	parent -r;
+
+	// Translate the box along the optical axis
+	select "Targ_Aim";
+	$cmd1 = "move -os -z " +  $tdist;
+	eval($cmd1);
+	
+	$tdist = -$tdist;
+
+	//print("Made the Target Aim\n");
+
+	// If it exists delete it.
+	Delete("Targ_Up");
+	$UpName = `polyCube -w 1 -h 1 -d 1 -sx 1 -sy 1 -sz 1 -ax 0 1 0 -ch 0`;
+	rename $UpName "Targ_Up";
+	select -r "Targ_Up";
+	select -add $currentCam ;
+	parent -r;
+	
+	// Translate the box above the optical axis
+	select "Targ_Up";
+	$cmd1 = "move -os -y " +  $tdist;
+	eval($cmd1);
+}
+
+
+////////////////////////////  Create 1 Node Camera from existing Camera //////////////////////////////////
+//
+//	It will create a new 1 Node Camera based on the original
+//
+//	Needs to be completed
+//
+
+global proc Create1Node(string $selectedCamera)
+{
+	float $focal;
+	string $cameracreate[];
+	global int $debug;
+	
+	$currentCam = $selectedCamera;
+
+	if ($debug)
+		print ("Create a 1 node camera over " + $currentCam + "\n");
+
+	MakeAimUp($currentCam);
+	
+	$cameracreate = `camera`;
+
+	cameraMakeNode 1 $cameracreate[0];
+	setAttr ($cameracreate[0] + ".rotateOrder") 2;  // zxy Rotate order
+	
+	Delete("MocoBakeCamera_group");
+	Delete("MocoBakeCamera");
+
+	rename $cameracreate[0] "MocoBakeCamera";
+
+	select -cl;
+	select -r $currentCam ;
+	select -add "MocoBakeCamera" ;
+	pointConstraint -offset 0 0 0 -weight 1;
+
+	select -cl;
+	select -r "Targ_Aim" ;
+	select -add "MocoBakeCamera" ;
+	aimConstraint -aimVector 0 0 -1 -worldUpType "object" -worldUpObject "Targ_Up";
+
+
+	// Connect the focal length to the chosen camera	
+	if (1)
+	{
+		string $camShape[] = `listRelatives -s $currentCam`;
+		
+		if ($debug)
+			print("Found relative " + $camShape[0] + "\n");
+
+		// Duplicate the film back
+		float $ap_width, $ap_height;
+
+		if ($debug);
+			print ("Get the ap size of camera " + $camShape[0] + "\n");
+
+		$ap_width = `camera -q -hfa $camShape[0]`;
+		$ap_height = `camera -q -vfa $camShape[0]`;
+	
+		$camShape[0] = $camShape[0] + ".focalLength";	
+	
+		connectAttr -f $camShape[0]  "MocoBakeCameraShape.focalLength";
+
+		
+		camera -e -hfa $ap_width MocoBakeCameraShape;
+		camera -e -vfa $ap_height MocoBakeCameraShape;
+	}
+	
+	// Select the camera so that its motion is the output one.
+
+	select -r "MocoBakeCamera";
+	
+	if ($debug)
+		print("Done Creating 1 node for baking\n");
+
+}
+////////////////////////////  Create 2 Node Camera from existing Camera //////////////////////////////////
+//
+//	It will create a new 2 Node Camera based on the original
+//
+//	Depending on your Scale, you might have to offset the Target_Aim (move -r -z "some value)
+//
+//	contributed by Oliver Hotz 11/24/2003
+//
+
+
+global proc Create2Node(string $selectedCamera)
+{
+	float $focal;
+	string $currentCam = $selectedCamera;
+	string $createcamera[];
+	global int $debug;
+	
+	if ($debug)
+		print ("Create a 2 node camera over " + $currentCam + "\n");
+	
+	select $selectedCamera;
+//	$currentCamShape = `listRelatives -s`;
+
+	MakeAimUp($currentCam);
+
+	// Create and name the camera as needed for 2 nodes
+	$cameracreate = `camera`;
+	cameraMakeNode 2 $cameracreate[0];
+	setAttr ($cameracreate[0] + ".rotateOrder") 2;  // zxy Rotate order
+
+	string $cameragroup = $cameracreate[0] + "_group";
+	string $cameraaim = $cameracreate[0] + "_aim";
+
+	Delete("MocoBakeCamera_group");
+	Delete("MocoBakeCamera");
+	
+	rename $cameracreate[0] "MocoBakeCamera";
+	rename $cameragroup "MocoBakeCamera_group";
+	rename $cameraaim "MocoBakeCamera_aim";
+
+
+	select -cl  ;
+	select -r $currentCam ;
+	select -add "MocoBakeCamera" ;
+	pointConstraint -offset 0 0 0 -weight 1;
+
+	if (0)
+	{
+		select -cl;
+		select -r "Targ_Aim" ;
+		select -add "MocoBakeCamera" ;
+		aimConstraint -aimVector 0 0 -1 -worldUpType "object" -worldUpObject "Targ_Up";
+		// This does not work, but was a nice idea
+	}
+	else
+	{
+		select -cl  ;
+		select -r "Targ_Aim" ;
+		select -add ("MocoBakeCamera_aim");
+		pointConstraint -offset 0 0 0 -weight 1;
+	}
+
+	// Connect the focal length to the chosen camera	
+	if (1)
+	{
+		string $camShapeFocal;
+		string $camShape[] = `listRelatives -s $currentCam`;
+		int $i;
+		
+		for ($i = 0; $i < size($camShape); $i++)
+			print("Found relative "+ $i + " " + $camShape[$i] + "\n");
+	
+		$camShapeFocal = $camShape[0] + ".focalLength";	
+	
+		connectAttr -f $camShapeFocal  "MocoBakeCameraShape.focalLength";
+
+		// Duplicate the film back
+		float $ap_width, $ap_height;
+		
+		if (1)	// This can fail...
+		{
+			if ($debug)
+				print("Get Hx film back \n");
+				
+			$ap_width = `camera -q -hfa $camShape[0]`;
+			
+			if ($debug)
+				print("Now get the ap_height\n");
+				
+			$ap_height = `camera -q -vfa $camShape[0]`;
+		
+			print("Transfer to Moco Bake Camea\n");
+			camera -e -hfa $ap_width MocoBakeCameraShape;
+			camera -e -vfa $ap_height MocoBakeCameraShape;
+		}	
+	}
+
+
+	// Select the camera so that its motion is the output one.
+	
+	select -r "MocoBakeCamera";
+	print("Done Creating 2 node for baking\n");
+
+}
+
+////////////////////////////  Create 3 Node Camera from existing Camera //////////////////////////////////
+//
+//	It will create a new 3 Node Camera based on the original
+//
+//	Depending on your Scale, you might have to offset the Target_Aim (move -r -z "some value)
+//
+//	contributed by Oliver Hotz 11/24/2003
+//
+
+global proc Create3Node(string $selectedCamera)
+{
+	float $focal;
+	$currentCam = $selectedCamera;
+	global int $debug;
+
+	if ($debug)
+		print ("Create a 3 node camera over " + $currentCam + "\n");
+
+	select $selectedCamera;
+	
+	$currentCamShape = `listRelatives -s`;
+
+	MakeAimUp($currentCam);
+
+	// Create and name the camera as needed for 3 nodes
+	$cameracreate = `camera`;
+	cameraMakeNode 3 $cameracreate[0];
+	string $cameragroup = $cameracreate[0] + "_group";
+	string $cameraaim = $cameracreate[0] + "_aim";
+	string $cameraup = $cameracreate[0] + "_up";
+
+	Delete("MocoBakeCamera_group");
+//	Delete("MocoBakeCamera");
+//	Delete("MocoBakeCamera_aim");
+//	Delete("MocoBakeCamera_up");
+	
+	rename $cameracreate[0] "MocoBakeCamera";
+	rename $cameragroup "MocoBakeCamera_group";
+	rename $cameraaim "MocoBakeCamera_aim";
+	rename $cameraup "MocoBakeCamera_up";
+
+
+	select -cl  ;
+	select -r $currentCam ;
+	select -add "MocoBakeCamera" ;
+	pointConstraint -offset 0 0 0 -weight 1;
+
+	select -cl  ;
+	select -r "Targ_Aim" ;
+	select -add "MocoBakeCamera_aim";
+	pointConstraint -offset 0 0 0 -weight 1;
+
+	select -cl  ;
+	select -r "Targ_Up" ;
+	select -add "MocoBakeCamera_up";
+	pointConstraint -offset 0 0 0 -weight 1;
+
+	// Connect the focal length to the chosen camera	
+	if (1)
+	{
+		string $camShape[] = `listRelatives -s $currentCam`;
+		
+		if ($debug)
+			print ("Found relative " + $camShape[0] + "\n");
+	
+		// Duplicate the film back
+		float $ap_width, $ap_height;
+		$ap_width = `camera -q -hfa $camShape[0]`;
+		$ap_height = `camera -q -vfa $camShape[0]`;
+
+		$camShape[0] = $camShape[0] + ".focalLength";	
+		connectAttr -f $camShape[0]  "MocoBakeCameraShape.focalLength";
+		
+		camera -e -hfa $ap_width MocoBakeCameraShape;
+		camera -e -vfa $ap_height MocoBakeCameraShape;
+	}
+
+
+	select -r "MocoBakeCamera";
+	print("Done Creating 3 node for baking\n");
+
+	return;
+}
+
+// Now start up the gui when the script is sourced
+
+moco_gui();

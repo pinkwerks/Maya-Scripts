@@ -1,0 +1,163 @@
+//
+// relativity translation according to the last picked thing (usually a camera)
+// v20061109 pink
+// notes :
+// could make more primitive functions called copyChannel or something.
+//
+
+global proc
+relativity()
+{
+	string $me = "relativityMotion";
+	string $sel[] = `ls -sl`;
+	int $selSize = `size $sel`;
+	if ( $selSize < 2 )
+		error($me + " : Select at least 2 transforms!");
+	string $anchor = $sel[$selSize - 1];
+
+	string $crv;
+	string $obj;
+	string $objChan;
+	string $relativityName = "relativity";
+	string $txoName = "tx_relativity_orig";
+	string $tyoName = "ty_relativity_orig";
+	string $tzoName = "tz_relativity_orig";
+	string $exp;
+	int $i;
+
+	//
+	// add attributes to objects if needed.
+	// also do some curve surgery.
+	//
+	for ( $i = $selSize - 1; $i >= 0; $i-- )
+	{
+		$obj = $sel[$i];
+
+		if ( `attributeExists "relativity" $obj` )
+			warning($me + " : relativity attribute exists on "+ $obj+", ignoring.");
+		else
+			addAttr -ln relativity -dv 1 -at bool -k 1 $obj;
+
+		// TX
+		if ( `attributeExists $txoName $obj` )
+			warning($me + " : Attribute "+ $txoName +" already exists on "
+				+ $obj +" ignoring.");
+		else
+			addAttr -ln $txoName -at double -k 1 $obj;
+		
+		// TY
+		if ( `attributeExists $tyoName $obj` )
+			warning($me + " : Attribute "+ $tyoName +" already exists on "
+				+ $obj +" ignoring.");
+		else
+			addAttr -ln $tyoName -at double -k 1 $obj;
+
+		// TZ
+		if ( `attributeExists $tzoName $obj` )
+			warning($me + " : Attribute "+ $tzoName +" already exists on "
+				+ $obj +" ignoring.");
+		else
+			addAttr -ln $tzoName -at double -k 1 $obj;
+
+
+		//
+		// connect the curves to new attrs
+		//
+
+		// TX
+		$objChan = ($obj+".tx");
+		if ( `connectionInfo -id $objChan` == 0 )
+		{
+			warning($me +" : Channel tx has no animation curve!");
+			setKeyframe $objChan;
+		}
+		$crv = `connectionInfo -sfd $objChan`;
+		disconnectAttr $crv $objChan; 
+		$objNewChan = ($obj+"."+$txoName);
+		connectAttr $crv $objNewChan;
+		if ( $i != $selSize - 1 )
+		{
+			$exp = (
+				"if ( relativity )\n\t"
+				+ $objChan+" = "+$objNewChan+" - "+$anchor+"."+$txoName+";\n"
+				+ "else\n\t"
+				+ $objChan +" = "+ $objNewChan +";\n"
+			);
+		}
+		else // we're the camera (last selected) object.
+		{
+			$exp = (
+				"if ( relativity )\n\t"
+				+ $objChan +" = 0;\n"
+				+ "else\n\t"
+				+ $objChan +" = "+ $objNewChan +";\n"
+			);
+		}
+		expression -s $exp -o $obj -ae 1 -uc all;
+
+
+		// TY
+		$objChan = ($obj+".ty");
+		if ( `connectionInfo -id $objChan` == 0 )
+		{
+			warning($me +" : Channel ty has no animation curve!");
+			setKeyframe $objChan;
+		}
+		$crv = `connectionInfo -sfd $objChan`;
+		disconnectAttr $crv $objChan; 
+		$objNewChan = ($obj+"."+$tyoName);
+		connectAttr $crv ($obj+"."+$tyoName);
+		if ( $i != $selSize - 1 )
+		{
+			$exp = (
+				"if ( relativity )\n\t"
+				+ $objChan+" = "+$objNewChan+" - "+$anchor+"."+$tyoName+";\n"
+				+ "else\n\t"
+				+ $objChan +" = "+ $objNewChan +";\n"
+			);
+		}
+		else // we're the camera (last selected) object.
+		{
+			$exp = (
+				"if ( relativity )\n\t"
+				+ $objChan +" = 0;\n"
+				+ "else\n\t"
+				+ $objChan +" = "+ $objNewChan +";\n"
+			);
+		}
+		expression -s $exp -o $obj -ae 1 -uc all;
+
+		// TZ
+		$objChan = ($obj+".tz");
+		if ( `connectionInfo -id $objChan` == 0 )
+		{
+			warning($me +" : Channel tz has no animation curve!");
+			setKeyframe $objChan;
+		}
+		$crv = `connectionInfo -sfd $objChan`;
+		disconnectAttr $crv $objChan; 
+		$objNewChan = ($obj+"."+$tzoName);
+		connectAttr $crv ($obj+"."+$tzoName);
+		if ( $i != $selSize - 1 )
+		{
+			$exp = (
+				"if ( relativity )\n\t"
+				+ $objChan+" = "+$objNewChan+" - "+$anchor+"."+$tzoName+";\n"
+				+ "else\n\t"
+				+ $objChan +" = "+ $objNewChan +";\n"
+			);
+		}
+		else // we're the camera (last selected) object.
+		{
+			$exp = (
+				"if ( relativity )\n\t"
+				+ $objChan +" = 0;\n"
+				+ "else\n\t"
+				+ $objChan +" = "+ $objNewChan +";\n"
+			);
+		}
+		expression -s $exp -o $obj -ae 1 -uc all;
+
+	}
+}
+

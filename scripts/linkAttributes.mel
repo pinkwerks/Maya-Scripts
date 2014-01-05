@@ -1,0 +1,37 @@
+// linkAttributes.mel by pink
+//
+// link values from first selected thing to the rest of the selected crap.
+// to use, select channels in channel box, select first thing, then the
+// rest of the shit you want linked.
+//
+
+global proc
+linkAttributes()
+{
+	global string $gChannelBoxName;
+	string $objs[] = `ls -sl -l`;
+	string $obj;
+	string $src = $objs[0];
+	string $srcAttrs[] = `listAttr -k $src`;
+	string $attr;
+	float $v;
+	string $plugSrc;
+	string $plugDest;
+	string $attrs[] = `channelBox -q -sma $gChannelBoxName`;
+	for ($obj in $objs) {
+		// Skip over the first object...
+		if ($obj == $src)
+			continue;
+		for ($attr in $attrs) {
+			if (`attributeExists $attr $obj` && `attributeExists $attr $src`) {
+				// deal with attributes that are connected to say, animCurves....
+				//$plugSrc = `connectionInfo -sfd ($src+"."+$attr)`;
+				//warning("src = "+$plugSrc);
+				$plugDest = ($obj+"."+$attr);
+				//warning("dst = "+$plugDest);
+				catch(`connectAttr -f ($src+"."+$attr) $plugDest`);
+			}
+		}
+	}
+}
+

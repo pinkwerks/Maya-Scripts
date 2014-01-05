@@ -1,0 +1,81 @@
+// visFluidNoise.mel
+//
+// v.200500721 pink@hydraulx.com
+//
+// Create a poly-plane and shaders for visualizing the
+// noise textures in the selected fluid object.  close enough.
+
+global proc visFluidNoise()
+{
+	string $selected[] = `ls -sl -l`;
+	if ( `size $selected` == 0 ) {
+		error("Select at least one fluid object sucka!\n");
+	}
+	string $fluid;
+	for ( $fluid in $selected ) {
+		select $fluid;
+		pickWalk -d down;
+		$fluidShape = `ls -l -sl`;
+		if ( `nodeType $fluidShape[0]` != "fluidShape" ) {
+			warning($fluid + " : is not of type 'fluidShape', skipping\n");
+			continue;
+		}
+		string $poly[] = `polyPlane -w 1 -h 1 -sx 1 -sy 1 -ax 0 0 1 -tx 1 -ch 1 -name ($fluid + "_visFluidNoise")`;
+		string $noise = `shadingNode -asTexture volumeNoise -name visFluidNoise`;
+		string $p3d = `shadingNode -asUtility place3dTexture -name visFluidNoiseP3d`;
+		select $fluid $p3d;
+		string $ptConstraint[] = `pointConstraint -offset 0 0 0 -weight 1`;
+		setAttr ($poly[0] + ".sx") `getAttr ($fluidShape[0] + ".dimensionsW")`;
+		setAttr ($poly[0] + ".sy") `getAttr ($fluidShape[0] + ".dimensionsH")`;
+		setAttr ($poly[0] + ".sz") `getAttr ($fluidShape[0] + ".dimensionsD")`;
+		setAttr ($poly[0] + ".primaryVisibility") 0;
+		addAttr -ln resolution -at long -k 1 $poly[0];
+		select $poly[0] $fluid;
+		parent -r;
+		connectAttr ($p3d + ".wim[0]") ($noise + ".pm");
+		setAttr ($p3d + ".scaleX") 10;
+		setAttr ($p3d + ".scaleY") 10;
+		setAttr ($p3d + ".scaleZ") 10;
+		setAttr ($p3d + ".v") 0;
+		setAttr -lock true ($p3d + ".sx");
+		setAttr -lock true ($p3d + ".sy");
+		setAttr -lock true ($p3d + ".sz");
+		connectAttr -f ($fluidShape[0] + ".textureType") ($noise + ".noiseType");
+		connectAttr -f ($fluidShape[0] + ".invertTexture") ($noise + ".invert");
+		connectAttr -f ($fluidShape[0] + ".amplitude") ($noise + ".amplitude");
+		connectAttr -f ($fluidShape[0] + ".ratio") ($noise + ".ratio");
+		connectAttr -f ($fluidShape[0] + ".threshold") ($noise + ".threshold");
+		connectAttr -f ($fluidShape[0] + ".textureScale") ($noise + ".scale");
+		connectAttr -f ($fluidShape[0] + ".textureOrigin") ($noise + ".origin");
+		connectAttr -f ($fluidShape[0] + ".depthMax") ($noise + ".depthMax");
+		connectAttr -f ($fluidShape[0] + ".frequency") ($noise + ".frequency");
+		connectAttr -f ($fluidShape[0] + ".frequencyRatio") ($noise + ".frequencyRatio");
+		connectAttr -f ($fluidShape[0] + ".inflection") ($noise + ".inflection");
+		connectAttr -f ($fluidShape[0] + ".textureTime") ($noise + ".time");
+		connectAttr -f ($fluidShape[0] + ".billowDensity") ($noise + ".density");
+		connectAttr -f ($fluidShape[0] + ".spottyness") ($noise + ".spottyness");
+		connectAttr -f ($fluidShape[0] + ".sizeRand") ($noise + ".sizeRand");
+		connectAttr -f ($fluidShape[0] + ".randomness") ($noise + ".randomness");
+		connectAttr -f ($fluidShape[0] + ".falloff") ($noise + ".falloff");
+		connectAttr -f ($fluidShape[0] + ".numWaves") ($noise + ".numWaves");
+		connectAttr -f ($fluidShape[0] + ".implode") ($noise + ".implode");
+		//connectAttr -f ($fluidShape[0] + ".implodeCenter") ($noise + ".implodeCenter");
+		expression -s (
+			"float $scale = .5;\n" +
+			"implodeCenterX = " + $fluidShape[0] + ".implodeCenterX * $scale;\n" +
+			"implodeCenterY = " + $fluidShape[0] + ".implodeCenterY * $scale;\n" +
+			"implodeCenterZ = " + $fluidShape[0] + ".implodeCenterZ * $scale;"
+			) -o $noise -ae 1 -uc all -name visFluidNoiseExp;
+
+		// make the shader and connect it
+		string $shader = `shadingNode -asShader surfaceShader`;
+		$shader = `rename $shader visFluidNoiseShader`;
+		string $SG = `sets -renderable true -noSurfaceShader true -empty -name ($shader + "SG")`;
+		connectAttr -f ($shader + ".outColor") ($SG + ".surfaceShader");
+		//connectAttr -f ($shader + ".resolution") ($poly[0] + ".resolution");
+		//setAttr ($poly[0] + ".resolution") 256;
+		select $poly[0];
+		assignShadingGroup ($SG);
+		connectAttr -force ($noise +".outColor") ($shader + ".outColor");
+	}
+}

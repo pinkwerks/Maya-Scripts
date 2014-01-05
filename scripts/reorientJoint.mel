@@ -1,0 +1,3 @@
+global proc reorientJoint () {
+    joint -e -oj xyz -zso -ch;
+}

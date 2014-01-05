@@ -1,0 +1,412 @@
+/************************************************\
+**************************************************
+**						**
+**	aboutExplodeNodes()		 	**
+**						**
+**	bring up a window with some version nfo	**
+**						**
+**************************************************
+\************************************************/
+
+global proc
+aboutExplodeNodes()
+{
+    confirmDialog
+	-t "About Explode Nodes"
+	-m "explodeNodes v1.0 - pinkwerks 3/98"
+	-ma center
+	-b "Cool Beans.";
+}
+
+/************************************************\
+**************************************************
+**						**
+**	explodeNodesHelp()		 	**
+**						**
+**	bring up a window with some help	**
+**						**
+**************************************************
+\************************************************/
+
+global proc
+explodeNodesHelp()
+{
+    confirmDialog
+	-t "explodeNodes Help"
+	-m (
+	    "explodeNodes:\n\n" +
+	    "> Use Ground Zero:\n" +
+	    "- Use the selected node's location in world space as " +
+	    "the point which all transformations are relative to.\n\n" +
+	    "> Behaviour:\n" +
+	    "- Behaviour only works with Ground Zero on.\n" +
+	    "- Implode, affected nodes trasform toward ground zero.\n" +
+	    "- Explode, affected nodes trasform away from ground zero.\n" +
+	    "- Chaos, affected nodes trasform anywhere they damn please.\n"
+	)
+	-ma left
+	-b "k, got it.";
+}
+
+//////////////////////////
+//	build the gui	//
+//////////////////////////
+
+global proc
+explodeNodes()
+{
+    // destroy the Pinkwerks Main Menu if it exists
+    if (`window -ex pwMM`) deleteUI pwMM;
+
+    int $direction = 1;	// modified by behavior box, passed to randTRS
+
+    float $tmin[3];
+    float $rmin[3];
+    float $smin[3];
+    float $tmax[3];
+    float $rmax[3];
+    float $smax[3];
+
+    string $winName = "explodeNodes";
+
+    if (`window -ex $winName`) deleteUI $winName;
+
+    string $xformtype;
+    string $vectortype;
+    string $lchname[3] = {"Translate", "Rotate", "Scale"};
+    string $channel[3] = {"T", "R", "S"};
+    string $component[3] = {"X", "Y", "Z"};
+    string $mm[2] = {"Min", "Max"};
+
+    //
+    // create the top window, everything is parented to this bad boy.
+    //
+
+    window("-title", "explodeNodes", "-s", 0, "-mb", 1, $winName);
+
+    frameLayout(
+	"-lv", 0,
+	"-borderStyle", "in",
+	"-parent", $winName,
+	"shit"
+    );
+
+    //
+    // menu
+    //	build menu bar slap some labels on shit etc....
+    //
+
+    menu -label "pinkwerks";
+    menuItem -label "Main Menu" -c "pwMainMenu";
+
+    menu -label "Help" -helpMenu true;
+    menuItem -label "Help with Explode Nodes" -c "explodeNodesHelp";
+    menuItem -label "About Explode Nodes" -c "aboutExplodeNodes";
+
+    //
+    // create the top layout control
+    //
+
+    columnLayout( "-cal", "center", "-adj", 1, "cl");
+
+	////////////////////////////////////////////////////////////////
+	//
+	// ground zero
+	//	this decides on whether to use the top node's
+	//	pivot in calculating the implode/explode reference.
+	//	otherwise maybe i'll use the center of the bounding box.
+	//
+	////////////////////////////////////////////////////////////////
+
+	radioButtonGrp(
+	    "-label", "Use Ground Zero",
+	    "-nrb", 2,
+	    "-la2", "On", "Off",
+	    "-sl", 1
+	);
+
+	////////////////////////////////////////////////////////////
+	//
+	// behaviour:
+	//
+	//	implode - nodes will move toward ground zero or
+	//		the collectives center.
+	//
+	//	explode - nodes will move away from ground zero or
+	//		the collectives center.
+	//
+	//	chaos - you're a rebel, you don't give a shit!  let
+	//		those goddam nodes go where they may.
+	//
+	////////////////////////////////////////////////////////////
+
+	radioButtonGrp(
+	    "-nrb", 3,
+	    "-label", "Behavior",
+	    "-la3", "Implode", "Explode", "Chaos",
+	    "-sl", 2,
+	    "-on1", "$direction = -1",
+	    "-on2", "$direction = 1",
+	    "-on3", "$direction = 0",
+	    "behaviour"
+	);
+
+	/**********************************************************\
+	************************************************************
+
+	// i'm not using this at the moment
+
+	//
+	// xform type
+	//
+
+	string $xftBtn1OnCmd = "frameLayout -edit -en 1 " + $lchname[0];
+	string $xftBtn1OnCmd = "aboutPinkwerks";
+	string $xftBtn2OnCmd = "frameLayout -edit -en 1 " + $lchname[1];
+	string $xftBtn3OnCmd = "frameLayout -edit -en 1 " + $lchname[2];
+	string $xftBtn1OffCmd = "frameLayout -edit -en 0 " + $lchname[0];
+	string $xftBtn2OffCmd = "frameLayout -edit -en 0 " + $lchname[1];
+	string $xftBtn3OffCmd = "frameLayout -edit -en 0 " + $lchname[2];
+
+	checkBoxGrp(
+	    "-ncb", 3,
+	    "-label", "Transfrom Type",
+	    "-la3", "Translate", "Rotate", "Scale",
+	    "-on1", $xftBtn1OnCmd,
+	    "-on2", $xftBtn2OnCmd,
+	    "-on3", $xftBtn3OnCmd,
+	    "-of1", $xftBtn1OffCmd,
+	    "-of2", $xftBtn2OffCmd,
+	    "-of3", $xftBtn3OffCmd,
+	    "-va3", 1, 1, 1,
+	    "xformCBG"
+	);
+
+	************************************************************
+	\**********************************************************/
+
+	//
+	// make the array of boxes for trs/xyz combos
+	//
+
+	for ($j = 0; $j < 3; $j++) {
+	    float $iminv, $imaxv;
+
+	    if ($j == 0) {
+	    	$iminv = .1;
+	    	$imaxv = 1;
+	    } else if ($j == 1) {
+	    	$iminv = 10;
+	    	$imaxv = 45;
+	    } else {
+	    	$iminv = 0;
+	    	$imaxv = 0;
+	    }
+
+	    frameLayout(
+		"-label", $lchname[$j] + " Values",
+		"-parent", "cl",
+		"-bs", "etchedIn",
+		"-marginHeight", 5,
+		$lchname[$j]
+	    );
+		columnLayout("-cal", "center",
+		    "-adj", 1, 
+		    "-parent", $lchname[$j],
+		    $lchname[$j] + "cl"
+		);
+		    for ($i = 0; $i < 2; $i++) {
+			if ($i == 0)
+			    $v = $iminv; 
+			else
+			    $v = $imaxv; 
+
+			floatFieldGrp(
+			    "-label", $mm[$i],
+			    "-extraLabel", "xyz",
+			    "-numberOfFields", 3,
+			    "-precision", 4,
+			    "-v1", $v,
+			    "-v2", $v,
+			    "-v3", $v,
+			    "-parent", $lchname[$j] + "cl",
+			    $lchname[$j] + "cl" + $mm[$i]
+			);
+		    }
+	}
+
+	//
+	// make the button box at the bottom
+	//
+
+	frameLayout(
+	    "-lv", 0,
+	    "-borderStyle", "out",
+	    "-marginHeight", 10,
+	    "-parent", "cl",
+	    "buttonFrame"
+	);
+
+	    string $form = `formLayout -nd 4`;
+	    string $gBtnCmd = "explodeNodesEngine";
+	    string $uBtnCmd = "undo";
+	    string $rBtnCmd = "redo";
+	    string $cBtnCmd = "deleteUI " + $winName;
+	    string $gBtn = `button -l "Go" -rs false -command $gBtnCmd`;
+	    string $uBtn = `button -l "Undo" -rs false -command $uBtnCmd`;
+	    string $rBtn = `button -l "Redo" -rs false -command $rBtnCmd`;
+	    string $cBtn = `button -l "Cancel" -rs false -command $cBtnCmd`;
+	    
+	    formLayout -edit -parent buttonFrame
+		-attachForm	$gBtn	"left"	5
+		-attachPosition	$gBtn	"right"	5	1
+
+		-attachPosition	$uBtn	"left"	5	1
+		-attachPosition	$uBtn	"right"	5	2
+
+		-attachPosition	$rBtn	"left"	5	2
+		-attachPosition	$rBtn	"right"	5	3
+
+		-attachPosition	$cBtn	"left"	5	3
+		-attachForm	$cBtn	"right"	5
+
+		$form;
+
+    showWindow;
+};
+
+/************************************************\
+**************************************************
+**						**
+**	explodeNodesEngine()		 	**
+**						**
+**	take the data from gui and do work	**
+**						**
+**************************************************
+\************************************************/
+
+proc int
+explodeNodesEngine(
+    float $direction,
+    float $min,
+    float $max,
+    float $tmin[],
+    float $rmin[],
+    float $smin[],
+    float $tmax[],
+    float $rmax[],
+    float $smax[],
+    string $vectortype,
+    string $xformtype
+)
+{
+    int $debug = 0;	// debugging/verbose info - 1/on or 0/off
+
+    $objs = `ls -sl`;	// array of selected objects
+
+    $sobjs = size($objs);
+
+    if ($sobjs < 1) {
+	print("explodeNodes: select at least one object\n");
+	return(1);
+    } else if ($sobjs == 1)
+	$i = 0;
+    else
+	$i = 1;
+
+    $refobj = $objs[0];
+    $rx = getAttr($refobj + ".boundingBoxCenterX");
+    $ry = getAttr($refobj + ".boundingBoxCenterY");
+    $rz = getAttr($refobj + ".boundingBoxCenterZ");
+
+    if ($debug) {
+	print("refobj is : " + $refobj + " " + $rx + " " + $ry + " " +
+	    $rz + "\n\n"
+	);
+    }
+
+    for ($i; $i < $sobjs; $i++) {
+	$cx = getAttr($objs[$i] + ".boundingBoxCenterX");
+	$cy = getAttr($objs[$i] + ".boundingBoxCenterY");
+	$cz = getAttr($objs[$i] + ".boundingBoxCenterZ");
+
+	switch ($vectortype) {
+	    case "x":
+	    case "X":
+		$x = rand($min, $max);
+		$y = $z = 0;
+		break;
+	    case "y":
+	    case "Y":
+		$y = rand($min, $max);
+		$x = $z = 0;
+		break;
+	    case "z":
+	    case "Z":
+		$z = rand($min, $max);
+		$x = $y = 0;
+		break;
+	    case "xyz":
+	    case "XYZ":
+		$x = rand($min, $max);
+		$y = rand($min, $max);
+		$z = rand($min, $max);
+		break;
+	    default:
+		print("randTRS : invalid <vector_type> : " +
+		    "valid types, xyz x y z "
+		);
+		return(1);
+		break;
+	}
+
+	if ($direction > 0) {
+	    if ($cx < $rx && $x > 0) $x *= -1;
+	    if ($cx > $rx && $x < 0) $x *= -1;
+	    if ($cy < $ry && $y > 0) $y *= -1;
+	    if ($cy > $ry && $y < 0) $y *= -1;
+	    if ($cz < $rz && $z > 0) $z *= -1;
+	    if ($cz > $rz && $z < 0) $z *= -1;
+	} else if ($direction < 0) {
+	    if ($cx < $rx && $x < 0) $x *= -1;
+	    if ($cx > $rx && $x > 0) $x *= -1;
+	    if ($cy < $ry && $y < 0) $y *= -1;
+	    if ($cy > $ry && $y > 0) $y *= -1;
+	    if ($cz < $rz && $z < 0) $z *= -1;
+	    if ($cz > $rz && $z > 0) $z *= -1;
+	}
+
+	switch ($xformtype) {
+	    case "t":
+	    case "T":
+		move -r $x $y $z $objs[$i];
+		break;
+	    case "r":
+	    case "R":
+		rotate -r $x $y $z $objs[$i];
+		break;
+	    case "s":
+	    case "S":
+		scale -r $x $y $z $objs[$i];
+		break;
+	    default:
+		print("randTRS : invalid <xform_type> : " +
+		    "valid types, t r s"
+		);
+		return(1);
+		break;
+	}
+
+	if ($debug) {
+	    print("obj : " + $objs[$i] + "\n");
+	    print("\tdelta : " + $x + " " + $y + " " + $z + "\n");
+	    print("\twas   : " + $cx + " " + $cy + " " + $cz + "\n");
+	    print("\tnow   : " + ($cx + $x) + " " + ($cy + $y) +
+		" " + ($cz + $z) + "\n\n"
+	    );
+	}
+    }
+
+    return(0);
+};
+

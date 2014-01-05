@@ -1,0 +1,24 @@
+// clusterPerCv v20040714
+// pinkelton wicham
+//
+// for selected vertexs, generate a one cluster per cv, and one master,
+// group them, and name them nicely :-D
+
+global proc clusterPerVtx()
+{
+	string $vertexs[] = `ls -fl -sl -l`;
+	string $vertex;
+	string $clusters[];
+	for ( $vertex in $vertexs ) {
+		string $vtxs[];
+		string $groupName;
+		string $cluster[];
+
+		select $vertex;
+		$cluster = `newCluster "-envelope 1"`;
+		$clusters[`size $clusters`] = $cluster[1];
+	}
+	select $clusters;
+	$groupName = `group`;
+	rename $groupName ($vertex + "_clusters");
+}

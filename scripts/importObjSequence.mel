@@ -1,0 +1,20 @@
+global proc importObjSequence() {
+	int $f = 1;
+	int $fe = 45;
+	while ($f <= $fe){
+		file -import -type "OBJ" -rpr "jcs010_fluid_v006" -options "mo=0"  -pr -loadReferenceDepth "all" ("/jobs/josecuervo_cuervosilver/sequences/jcs/jcs100/maya/data/crack_all/crack_all."+$f+".obj");
+		$f++;
+	}
+	string $sobjs[] = `ls -sl`;
+	string $loca[] = `spaceLocator -p 0 0 0 -name "cuntroller"`;
+	addAttr -ln "framevis"  -at double $loca[0];
+	setAttr -e-keyable true ($loca[0]+".framevis");
+	string $o;
+	int $f = 1;
+	for ($o in $sobjs){
+		//expression -s ($o+".visibility=="+$f+"?1:0;") -o $o -ae 1 -uc all;
+		expression -s ($o+".visibility=int("+$loca[0]+".framevis)=="+$f+"?1:0;") -o $o -ae 1 -uc all;
+		$f++;
+	}
+}
+

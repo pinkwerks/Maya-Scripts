@@ -1,0 +1,13 @@
+global proc int
+unparentNodesWithNoKids() {
+	waitCursor -state on;
+	$items = `ls -sl`;
+	for ($item in $items) {
+		$kids = `listRelatives -c $item`;
+		if (size($kids) != 1) {
+			parent -w -r $item;
+		}
+	}
+	waitCursor -state off;
+	return(0);
+}

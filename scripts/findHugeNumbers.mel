@@ -1,0 +1,58 @@
+// v20070104 pinkwerks
+//
+// cause 32-bits ain't shit.
+//
+// TODO : filter out shit like pointContraint for hiding.
+// XXX : technically this finds transforms not just any numbers
+//
+global proc findHugeNumbers()
+{
+	int $intMax = 2147483647;
+	int $intMin = -2147483648;
+	string $transforms[] = `ls -type transform`;
+	string $transform;
+	string $attributes[];
+	string $attribute;
+	float $floatValue = 0;
+	string $badTransforms[];
+	int $i = 0;
+	int $flag = 0;
+	waitCursor -state on;
+	for ( $transform in $transforms )
+	{
+		$attributes = `listAttr -s -r $transform`;
+		for ( $attribute in $attributes )
+		{
+			if ( 
+				`gmatch $attribute "*.*"` 
+				|| $attribute == "inheritFactor" // fluid
+				|| $attribute == "isFull" // fluid
+				|| $attribute == "startTime" // fluid
+				|| $attribute == "deltaTime" // fluid
+				|| $attribute == "seed" // fluid
+				)
+			{
+				continue;
+			}
+			//print($attribute+"\n");
+			$floatValue = `getAttr ($transform +"."+ $attribute)`;
+			if ( $floatValue > $intMax || $floatValue < $intMin )
+			{
+				print("// "+ $transform +"."+ $attribute
+					+" = "+ $floatValue +"\n");
+				// XXX Dont flag boundingBoxes for picking...
+				// they may contain the real offender as a child node.
+				if ( `gmatch $attribute "*boundingBox*"` == 0 )
+					$flag = 1;
+			}
+		}
+		if ( $flag == 1 )
+		{
+			$badTransforms[$i] = $transform;
+			$i++;
+			$flag = 0;
+		}
+	}
+	select $badTransforms;
+	waitCursor -state off;
+}

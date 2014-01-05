@@ -1,0 +1,22 @@
+// v20060323 pink
+// Select all the file texture nodes that don't have a valid texture
+global proc
+selectMissingFileTextures()
+{
+  string $file;
+  string $nodes[];
+  int $i = 0;
+  string $texs[] = `ls -type file`;
+  for($tex in $texs )
+	  {
+	  $file =	`getAttr ($tex+".fileTextureName")`;
+
+	  if (!`file -q -ex $file` || $tex == "")
+	  {
+		  print($file+"\n");
+		  $nodes[$i] = $tex; 
+		  $i++;
+	  }
+  }
+  select $nodes;
+}

@@ -1,0 +1,64 @@
+// make some particles that modify uv coordinates or something
+// v20061024 pink
+// note this shit is slow with a mere 1000 uv's... would be a better plugin.
+
+global proc
+uv3d_engine(string $parts, string $shape)
+{
+	undoInfo -state off;
+	int $c = `getAttr ($parts+".count")`;
+	int $i;
+	int $j;
+	float $p[] = `getParticleAttr -at position -a 1 $parts`;
+	for ($i = 0; $i < $c; $i++)
+	{
+		polyEditUV -r 0 -u $p[$j] -v $p[$j+2] ($shape+".map["+$i+"]");
+		$j += 3;
+	}
+	undoInfo -state on;
+}
+
+global proc
+uv3d()
+{
+	string $selected[] = `ls -sl -l`;
+	string $obj;
+	int $indices[];
+	string $UVSetName;
+	string $uv;
+	string $uvlist[];
+	int $j = 0;
+	int $i = 0;
+	int $p = 0;
+	string $exp;
+	string $parts = `createNode particle`;
+	string $tmps[] = `pickWalk -d up`;
+	$parts = $tmps[0];
+	connectAttr time1.outTime ($parts+".currentTime");
+	addAttr -ln uvmap -dt "string" -k 1 $parts;
+	$kn = "uv3d";
+	float $st[];
+	for ($obj in $selected)
+	{
+		if ( `nodeType $obj` != "mesh" )
+			error("uv3d : Sorry I only do polygon meshes.");
+		$shape = `getShape $obj`;
+		$indices = `polyUVSet -q -allUVSetsIndices $shape`;
+		for ($i in $indices)
+		{
+			setAttr -type "string" ($parts+".uvmap") ($shape+".map");
+			$uvlist = `ls -l -fl ($shape+".map[*]")`;
+			$uvs_size = `size $uvlist`;
+			for ($uv in $uvlist)
+			{
+				select $uv;
+				$st = `polyEditUV -q`;
+				emit -object $parts -pos $st[0] 0 $st[1];
+			}
+			saveInitialState $parts;
+		}
+		select $parts;
+		$exp = ("uv3d_engine "+$parts+" "+$shape+";\n");
+		scriptNode -scriptType 7 -n uv3d -bs $exp;
+	}
+}

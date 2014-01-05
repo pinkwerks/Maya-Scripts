@@ -1,0 +1,24 @@
+//
+// v20060306 pink
+//
+// select selected nurbsCurves' cv-number
+// 
+global proc
+selectCurveCv(int $cvnum)
+{
+  string $sl[] = `ls -sl -l`;
+  if ( `size $sl` < 1 )
+    error("selectCurveCv : select more than one curve!");
+  string $crv;
+  string $cvs[];
+  for ( $crv in $sl )
+  {
+    if ( `nodeType $crv` != "nurbsCurve" )
+      {
+	warning("selectCurveCv : "+$crv+" is not of type 'nurbsCurve', skipping.");
+	continue;
+      }
+    $cvs[`size $cvs`] = ($crv+".cv["+$cvnum+"]");
+  }
+  select $cvs;
+}

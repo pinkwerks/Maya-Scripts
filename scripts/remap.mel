@@ -1,0 +1,13 @@
+// remap.mel
+// from pink
+// shout-out's to awhite, who i stole this from, and improved!
+// (dog knows where that seedy pirate looted this booty)
+// remap $oldMin with range $oldMin to $oldMax to new range $newMin to $newMax.
+// remap(.5, 0 ,1 ,2 ,4) == 3.0
+global proc float remap(float $n,float $oldMin,float $oldMax,float $newMin,float $newMax){
+	// Avoid division by zero.
+	if ($oldMin == $oldMax)
+		return $oldMin;
+    return(($newMax-$newMin) * (clamp($oldMin,$oldMax,$n)-$oldMin) / ($oldMax-$oldMin) + $newMin);
+}
+

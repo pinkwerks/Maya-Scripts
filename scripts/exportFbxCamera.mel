@@ -1,0 +1,29 @@
+// pink
+global proc exportFbxCamera() {
+	string $cam[] = `ls -sl -l -typ camera`;
+	select $cam[0];
+	pickWalk -d up;
+	string $camTran[] = `ls -sl -l`;
+	if ( `size $cam` == 0 ) {
+		error("No camera selected for export!");
+	} else if ( `size $cam` > 1 ) {
+		error("Currently only one camera supported!");
+	}
+	select $cam;
+	string $dcam[] = `duplicate -n bakedCamera`;
+	parent -w;
+	select $camTran[0] $dcam[0];
+	string $cunt[] = `parentConstraint -mo -weight 1`;
+	select $dcam[0];
+	int $fs = `getAttr "defaultRenderGlobals.startFrame"`;
+	int $fe = `getAttr "defaultRenderGlobals.endFrame"`;
+	bakeResults -t ($fs+":"+$fe);
+	delete $cunt[0];
+	string $proj = dirname(`file -q -sn`);
+	string $file = basenameEx(`file -q -sn`);
+	string $export = ($proj+"/"+$file+"_camera-export.fbx");
+	file -force -op "v=0" -typ "FBX export" -es $export;
+//	delete $dcam[0];
+	print("// Wrote "+$export+"\n");
+}
+

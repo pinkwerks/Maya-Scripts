@@ -1,0 +1,680 @@
+warning("using art3dPaintValues.mel override");
+// Copyright (C) 1997-2006 Autodesk, Inc., and/or its licensors.
+// All rights reserved.
+//
+// The coded instructions, statements, computer programs, and/or related
+// material (collectively the "Data") in these files contain unpublished
+// information proprietary to Autodesk, Inc. ("Autodesk") and/or its licensors,
+// which is protected by U.S. and Canadian federal copyright law and by
+// international treaties.
+//
+// The Data is provided for use exclusively by You. You have the right to use,
+// modify, and incorporate this Data into other products for purposes authorized 
+// by the Autodesk software license agreement, without fee.
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. AUTODESK
+// DOES NOT MAKE AND HEREBY DISCLAIMS ANY EXPRESS OR IMPLIED WARRANTIES
+// INCLUDING, BUT NOT LIMITED TO, THE WARRANTIES OF NON-INFRINGEMENT,
+// MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, OR ARISING FROM A COURSE 
+// OF DEALING, USAGE, OR TRADE PRACTICE. IN NO EVENT WILL AUTODESK AND/OR ITS
+// LICENSORS BE LIABLE FOR ANY LOST REVENUES, DATA, OR PROFITS, OR SPECIAL,
+// DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES, EVEN IF AUTODESK AND/OR ITS
+// LICENSORS HAS BEEN ADVISED OF THE POSSIBILITY OR PROBABILITY OF SUCH DAMAGES.
+
+//
+//  Alias Script File
+//  MODIFY THIS AT YOUR OWN RISK
+//
+//  Creation Date:  June 2000
+//
+//  Description:
+//      Option tool property window for Artisan tools
+//
+//  Procedure Name:
+//      art3dPaintValues
+//
+//  Description:
+//      Initialize the option values.
+//
+//  Input Arguments:
+//
+//  Return Value:
+//      None.
+//
+
+proc art3dBrushValues(
+	string 	$artCommand
+)
+//	Deal with the brush and its parameters.
+{
+	string $cmd = $artCommand + " -q -brushtype `currentCtx`";
+	string $brushType = eval( $cmd );
+	$cmd = $artCommand + " -q -paintoperationtype `currentCtx`";
+	string $operation = eval( $cmd );
+
+	float $value;
+	if ( $brushType == "artisanBrush" ) {
+		$cmd = ($artCommand + " -q -radius " + `currentCtx` );
+		$value = `eval $cmd`;
+	} else if ( $brushType == "effectsBrush" ) {
+		// Set the slider.
+		$cmd = ($artCommand + " -q -pfxScale " + `currentCtx` );
+		$value = `eval $cmd`;
+
+		// Set Paint Effects global scale.
+        // 
+        string $attr = getDefaultBrush() + ".globalScale";
+        float $oldValue = getAttr( $attr );
+        if ( abs( $oldValue - $value ) > 0.00001 ) {
+			setAttr( $attr, $value );
+        }
+	}
+	floatSliderGrp -e -v $value art3dUppRadiusSlider;
+
+
+	if ( $brushType == "artisanBrush" ) {
+		$cmd = ($artCommand + " -q -lowerradius " + `currentCtx` );
+		$value = `eval $cmd`; 
+	} else if ( $brushType == "effectsBrush" ) {
+		$cmd = ($artCommand + " -q -pfxWidth " + `currentCtx` );
+		$value = `eval $cmd`;
+
+		// Set Paint Effects global scale.
+        // 
+        string $attr = getDefaultBrush() + ".brushWidth";
+        float $oldValue = getAttr( $attr );
+        if ( abs( $oldValue - $value ) > 0.00001 ) {
+			setAttr( $attr, $value );
+        }
+	}
+	floatSliderGrp -e -v $value art3dLowRadiusSlider;
+
+	symbolCheckBox -e -v false art3dGaussianChBx;
+    symbolCheckBox -e -v false art3dPolyBrushChBx;
+    symbolCheckBox -e -v false art3dSolidChBx;
+    symbolCheckBox -e -v false art3dRectBrushChBx;
+    symbolCheckBox -e -v false art3dFileBrushChBx;
+    symbolCheckBox -e -v false art3dLastPFXBrush;
+    symbolCheckBox -e -v false art3dPFXBrushEditor;
+    symbolCheckBox -e -v false art3dVisorEditor;
+
+	$cmd = ($artCommand + " -q -stampProfile " + `currentCtx`);
+	string $profile   = `eval $cmd`;
+	string $brushType = "artisanBrush";
+	if ( $profile == "gaussian" ) {
+		symbolCheckBox -e -v true art3dGaussianChBx;
+	} else if ( $profile == "poly" ) {
+		symbolCheckBox -e -v true art3dPolyBrushChBx;
+	} else if ( $profile == "solid" ) {
+		symbolCheckBox -e -v true art3dSolidChBx;
+	} else if ( $profile == "square" ) {
+		symbolCheckBox -e -v true art3dRectBrushChBx;
+	} else if ( $profile == "shape" ) {
+		symbolCheckBox -e -v true art3dFileBrushChBx;
+	} else if ( $profile == "paintEffects" ) {
+		symbolCheckBox -e -v true art3dLastPFXBrush;
+		$brushType = "effectsBrush";
+	}
+
+	art3dUpdateLastBrushIcon( $artCommand );
+	
+	$cmd = ($artCommand + " -q -brushalignment " + `currentCtx`);
+	checkBoxGrp -e -v1 `eval $cmd` art3dPaintBrushAlignmentChkBox;
+	int $alignmentCheckValue = false;
+	int $enableAlignmentCheck = true;
+
+	if ( ( $brushType == "effectsBrush" ) ||
+		 ( $operation == "Clone" ) )
+	{
+		// Grey out the checkbox.
+		//
+		$enableAlignmentCheck = false;
+	} else {
+		// Get value of checkbox from tool
+		//
+		$cmd = ($artCommand + " -q -brushalignment " + `currentCtx`);
+		$alignmentCheckValue = `eval $cmd`;
+	}
+	checkBoxGrp -e -enable $enableAlignmentCheck -v1 $alignmentCheckValue 
+		art3dPaintBrushAlignmentChkBox;
+
+	// Update radius sliders to give them a proper names.
+	art3dUpdateRadiusSliders( $artCommand, $brushType );
+
+    // Disable/enable pressure UI based on the stamp profile..
+    art3dUpdatePressure( $artCommand );
+
+	// Update the pressure UI.
+	if ( $brushType == "effectsBrush" ) {
+		art3dUpdatePfxPressure( $artCommand );
+	}
+}
+
+
+proc art3dColorValues(
+	string 	$artCommand
+)
+// 
+//	Desrciption:
+//		Set the values in the color framelayout.
+//
+{
+	// Opacity.
+	$cmd = ($artCommand + " -q -opacity " + `currentCtx` );
+	float $opacity = `eval $cmd`;
+	floatSliderGrp -e -v $opacity art3dOpacitySlider;
+
+	string $cmd = $artCommand + " -q -brushtype `currentCtx`";
+    string $brushType = eval( $cmd );
+	float $color[3];
+	if ( $brushType == "artisanBrush" ) {
+		$color = eval( $artCommand + " -q -rgb `currentCtx` " );
+	} else {
+		$color = getAttr (getDefaultBrush() + ".color1");
+	}
+
+	colorSliderGrp -e 
+		-rgb $color[0] $color[1] $color[2] 
+	art3dColorSlider;
+}
+
+proc art3dFloodValues(
+	string 	$artCommand
+)
+// 
+//	Desrciption:
+//		Set the values in the flood framelayout.
+//
+{
+	// Opacity.
+	$cmd = ($artCommand + " -q -floodOpacity " + `currentCtx` );
+	float $opacity = `eval $cmd`;
+	floatSliderGrp -e -v $opacity art3dFloodOpacitySlider;
+
+	float $color[3] = eval( $artCommand + " -q -rgbflood `currentCtx` " );
+	colorSliderGrp -e 
+		-rgb $color[0] $color[1] $color[2] 
+	art3dFloodColorSlider;
+}
+
+proc art3dOperationValues(
+	string 	$artCommand
+)
+// 
+//	Desrciption:
+//		Set the values in the paint operation framelayout.
+//
+{
+	// Paint operation frameLayout.
+	string $cmd = ($artCommand + " -q -pot " + `currentCtx`);
+	string $opType = `eval $cmd`;
+	$cmd = $artCommand + " -q -brushtype `currentCtx`";
+	string $brushType = eval( $cmd );
+
+	string $defaultBrush = getDefaultBrush();
+	int $mode = getAttr( $defaultBrush + ".brushType" );
+
+	float $value;
+	int $enableBlend = true;
+	if ( $brushType == "artisanBrush" ) {
+		switch( $opType ) {
+		case "Paint":
+			radioButtonGrp -e -sl 1 art3dPaintOperation0;
+			break;
+		case "Erase":
+			radioButtonGrp -e -sl 2 art3dPaintOperation0;
+			break;
+		case "Clone":
+			radioButtonGrp -e -sl 3 art3dPaintOperation0;
+			break;
+		}
+	} else if ( $brushType == "effectsBrush" ) {
+		switch( $opType ) {
+		case "Paint":
+			radioButtonGrp -e -sl 1 art3dPaintOperation1;
+			break;
+		case "Smear":
+			radioButtonGrp -e -sl 2 art3dPaintOperation1;
+			break;
+		case "Blur":
+			radioButtonGrp -e -sl 3 art3dPaintOperation1;
+
+			// Set the blur intensity from the default brush.
+			int $blurInt = getAttr (getDefaultBrush() + ".blurIntensity");
+			intSliderGrp -e -value $blurInt art3dBlurIntSlider;
+
+			break;
+		}
+		// Blend doesn't work on paint effects brushes
+		//
+		$enableBlend = false;
+	} else {
+		error (uiRes("m_art3dPaintValues.kUnknownBrushError"));
+	}
+
+	art3dUpdatePaintOperation( $artCommand, $brushType, $opType );
+	
+	if( !`exists alphaBlend_melToUI` ) {
+		source "art3dPaintProperties.mel";
+	}
+	// Blend mode framelayout.
+	//
+	$cmd = ($artCommand + " -q -alphablendmode " + `currentCtx` );
+	string $selectedItem =`eval $cmd`;
+	optionMenuGrp -e -enable $enableBlend -v `alphaBlend_melToUI($selectedItem)` art3dBlendModeOptionMenu;
+	
+	// Clone.
+	$cmd = ($artCommand + " -q -dynclonemode " + `currentCtx` );
+	if ( `eval $cmd` ) {
+		radioButtonGrp -e -sl 1 art3dCloneMode;
+	} else {
+		radioButtonGrp -e -sl 2 art3dCloneMode;
+	}
+}
+
+proc art3dFileTextureValues(
+	string 	$artCommand
+)
+// 
+//	Desrciption:
+//		Set the values in the file texture framelayout.
+//
+{
+	global int $gTextFieldHeight ;
+	global int $gOptionFieldHeight ;
+	global string $g3dPaintAttrName ;
+	
+	// File framelayout.
+	$cmd = ($artCommand + " -q -painttxtattr " + `currentCtx` );
+	
+	// bug 227512 
+	// if we are in a context different than normal 3dPaint context
+	// then hide the attribute list and display a read only text box
+	
+	// The value displayed in the text box is coming from the global variable $g3dPaintAttrName
+	if( `currentCtx` == "art3dPaintContext" )
+	{
+		textFieldGrp -e -visible false  -height 1 art3dPaintHairAttr;
+		optionMenuGrp -e -height 32 -visible true art3dPaintAttrOptionMenu ;
+		
+		if( !`exists attributeToPaint_melToUI` ) {
+			source "art3dPaintProperties.mel";
+		}
+		string $selectedItem =`eval $cmd`;
+		optionMenuGrp -e -v `attributeToPaint_melToUI($selectedItem)` art3dPaintAttrOptionMenu;
+		art3dPaintDimPaintableAttr( $artCommand );
+	}
+	else
+	{
+		textFieldGrp -e -height $gTextFieldHeight -visible true art3dPaintHairAttr;
+		optionMenuGrp -e -visible false -height 1 art3dPaintAttrOptionMenu ;
+
+		textFieldGrp -e -text $g3dPaintAttrName art3dPaintHairAttr ;
+	}
+
+	// Update on each stroke.
+	$cmd = ($artCommand + " -q -saveonstroke " + `currentCtx` );
+    checkBoxGrp -e -v1 `eval $cmd` art3dSaveOnStrokeChkBox;
+
+	// Save on each stroke.
+	int $flag = eval($artCommand + " -q -saveTextureOnStroke " + `currentCtx` );
+    checkBoxGrp -e -v1 $flag art3dSaveTextureOnStrokeChkBox;
+
+	// check if "Save Texture on Stroke" is ON and grey out Erase UIs.
+	if( $flag == true )
+	{
+		button -e -enable false art3dFloodEraseButton;
+		radioButtonGrp -e -en2 false art3dPaintOperation0;
+	}
+	else
+	{
+		button -e -enable true art3dFloodEraseButton;
+		radioButtonGrp -e -en2 true art3dPaintOperation0;
+	}
+
+	// Extend fill color.
+	$cmd = ($artCommand + " -q -extendFillColor " + `currentCtx` );
+    checkBoxGrp -e -v1 `eval $cmd` art3dExtendFillColorChkBox;
+}
+
+
+proc art3dStrokeValues( 
+	string 	$artCommand
+)
+// 
+//	Desrciption:
+//		Set the values in the stroke framelayout.
+//
+{
+	// Paint Mode FrameLayout.
+	string $cmd = ($artCommand + " -q -projective " + `currentCtx` );
+	checkBoxGrp -e -v1 `eval $cmd` art3dProjectionModeChkBox;
+
+	// Reflection Mode.
+	$cmd = ($artCommand + " -q -reflection  " + `currentCtx` );
+	checkBoxGrp -e -v1 `eval $cmd` art3dReflectionModeChkBox; 
+	art3dUpdatePaintMode( $artCommand );
+
+	// Reflection Axis
+	$cmd = ($artCommand + " -q -reflectionaxis "+ `currentCtx`);
+	string $refaxis = `eval $cmd`;
+	if ( $refaxis == "x" ) {
+	radioButtonGrp -e -sl 1 art3dReflectionRadBtn;
+	} else if ( $refaxis == "y" ) {
+	radioButtonGrp -e -sl 2 art3dReflectionRadBtn;
+	} else if ( $refaxis == "z" ) {
+	radioButtonGrp -e -sl 3 art3dReflectionRadBtn;
+	}
+
+	// Stamp Quality Sliders.
+	string $cmd = ($artCommand + " -q -stampSpacing " + `currentCtx`);
+	floatSliderGrp -e -v `eval $cmd` art3dStampSpacingSlider;
+
+	string $cmd = ($artCommand + " -q -stampDepth " + `currentCtx`);
+	floatSliderGrp -e -v `eval $cmd` art3dStampDepthSlider;
+}
+
+proc art3dPressureValues(
+	string	$artCommand
+)
+// 
+//	Desrciption:
+//		Set the values in the the the Stylus Pressure framelayout.
+//
+{
+	// Stylus pressure.
+	string $cmd = ($artCommand + " -q -usepressure " + `currentCtx` );
+	checkBoxGrp -e -v1 `eval $cmd` art3dStylusPressureChkBox;
+	
+	if( !`exists artisanPressure_melToUI` ) {
+		source "art3dPaintProperties.mel";
+	}
+	if ( `eval $cmd` ) {
+		// Only set this if the pressure is on.
+		$cmd = ($artCommand + " -q -mappressure " + `currentCtx`);
+		string $selectedItem =`eval $cmd`;
+		optionMenuGrp -e -v `artisanPressure_melToUI($selectedItem)` art3dArtisanPressure;
+		
+	}
+
+	//  Disable/enable pressure UI based on brush type.
+    art3dUpdatePressure( $artCommand );
+}
+
+
+proc art3dDisplayValues( 
+	string 	$artCommand
+)
+// 
+//	Desrciption:
+//		Set the values in the display framelayout.
+//
+{
+	string $cmd = ($artCommand + " -q -outline " + `currentCtx`);
+	checkBoxGrp -e -v1 `eval $cmd` art3dDrawOutlineChkBox;
+	art3dUpdateDisplayValues( $artCommand );
+
+	$cmd = ($artCommand + " -q -outwhilepaint " + `currentCtx`);
+	checkBoxGrp -e -v1 `eval $cmd` art3dBrushWhilePaintingChkBox;
+
+	$cmd = ($artCommand + " -q -brushfeedback " + `currentCtx`);
+	checkBoxGrp -e -v1 `eval $cmd` art3dBrushFeedbackChkBox;
+
+	$cmd = ($artCommand + " -q -showactive " + `currentCtx`);
+	checkBoxGrp -e -v1 `eval $cmd` art3dShowActiveLinesChkBox;
+}
+
+//
+//  Procedure Name:
+//      saveBrushSettings
+//
+//  Description:
+//      Eash paint effects painting mode remembers the last brush that it was
+//		using.  So, each of paint, smear and blur will remember the last brush
+//		that was in use.  Switching between these painting modes will also 
+//		switch between the remembered brush settings.  The same is true for
+//		artisan, except that it remembers brush profiles.
+//
+//  Input Arguments:
+//      $artCommand - command to change tool settings
+//
+//  Return Value:
+//      None.
+//
+proc saveBrushSettings( string $artCommand ) 
+{
+	// Store the paint effects brush if necessary
+	//
+	string $cmd = $artCommand + " -q -brushtype `currentCtx`";
+	string $brushType = eval( $cmd );
+
+	if ( $brushType == "effectsBrush" ) {
+		// Save the current brush setting for this paint mode (paint, smear, or 
+		// blur) so that we can restore them later if the user switches out of
+		// the current mode and then back again.
+		//
+
+			global string $gCreatorWireCtx;
+			if ($gCreatorWireCtx == "") {
+				warning (uiRes("m_art3dPaintValues.kPaintEffectsWarning"));
+				return;
+			}
+
+			if ( catch ( art3dPaintStoreBrushSettings() ) ) {
+			art3dPaintRestoreBrushSettings( "Paint" );
+			$operation = "Paint";
+			
+			// Report the error in an idle event so that the user will see it.
+			// There's another callback that will obsure the message if we don't
+			//
+			string $err =(uiRes("m_art3dPaintValues.kPaintEffectsBrushError"));
+			evalDeferred( "error $err" );
+		}
+		
+		// Store this as the last used artisan operation
+		//
+		global string $gArt3dPaintLastEffectsOperation;
+		string $cmd = ($artCommand + " -q -pot `currentCtx`");
+		$gArt3dPaintLastEffectsOperation = `eval $cmd`;
+	} else {
+		// Store the artisan profile settings
+		//		
+		string $cmd = ($artCommand + " -q -pot `currentCtx`");
+		string $opType = `eval $cmd`;
+		string $cmd = ($artCommand + " -q -brushalignment `currentCtx`");
+		int $rotateToStroke = `eval $cmd`;
+
+		// Stored brush profiles
+		//
+		global string $gArt3dPaintLastPaintProfile = "poly";
+		global string $gArt3dPaintLastEraseProfile = "poly";
+		global string $gArt3dPaintLastCloneProfile = "poly";
+
+		global int    $gArt3dPaintArtisanRotateToStroke = 1;
+
+		// Look up the current profile
+		//
+		$cmd = ($artCommand + " -q -stampProfile `currentCtx`");
+		string $profile = `eval $cmd`;
+
+		switch ( $opType ) {
+			case "Paint":
+				$gArt3dPaintLastPaintProfile = $profile;
+				$gArt3dPaintArtisanRotateToStroke = $rotateToStroke;
+				break;
+			case "Erase":
+				$gArt3dPaintLastEraseProfile = $profile;
+				$gArt3dPaintArtisanRotateToStroke = $rotateToStroke;
+				break;
+			case "Clone":
+				$gArt3dPaintLastCloneProfile = $profile;
+				break;
+		}
+		
+		// Store this as the last used artisan operation
+		//
+		global string $gArt3dPaintLastArtisanOperation;
+		string $cmd = ($artCommand + " -q -pot `currentCtx`");
+		$gArt3dPaintLastArtisanOperation = `eval $cmd`;
+	}
+}
+
+// =======================================================
+// Main Procedure.
+// =======================================================
+global proc art3dPaintValues(
+	string 	$toolName
+)
+{
+	string 	  $parent = (`toolPropertyWindow -q -location` + "|art3dPaint");
+	setParent $parent;
+
+	string $icon	= "art3dPaint.xpm";
+	string $helpTag	= "3DPaintTool";
+	toolPropertySetCommon $toolName $icon $helpTag;
+
+	string $artCommand = "art3dPaintCtx";	
+
+	// Save all of the brush or profile settings for this paint mode
+	//
+	saveBrushSettings( $artCommand );
+
+	// Brush frameLayout values.
+	art3dBrushValues( $artCommand );
+
+	// Color framelayout values.
+	art3dColorValues( $artCommand );
+
+	// Color framelayout values.
+	art3dFloodValues( $artCommand );
+
+	// Paint operation framelayout values.
+	art3dOperationValues( $artCommand );
+
+	// File texture framelayout values.
+	art3dFileTextureValues( $artCommand );
+
+	// File texture framelayout values.
+	art3dStrokeValues( $artCommand );
+
+	// File texture framelayout values.
+	art3dPressureValues( $artCommand );
+
+	// File texture framelayout values.
+	art3dDisplayValues( $artCommand );
+
+	toolPropertySelect art3dPaint;
+}
+
+
+// ==============================================================
+// Assigning Textures. 
+// ==============================================================
+global proc art3dPaintDimPaintableAttr(
+    string $artCommand
+)
+{
+    // Get an array of common paintable attributes
+    string  $attrArray[];
+    string  $attrNames = eval("art3dPaintCtx -q -commonattr `currentCtx`");
+    int     $numbAttr  = `tokenize $attrNames $attrArray`;
+
+    // For each menuItem find its status.
+    if ( `menuItem -exists art3dPaintAttrMenuItem0` ) {
+        int $found = 0;
+        for ( $cAttr in $attrArray ) {
+            if ( $cAttr == "color" ) { $found = 1; break; }
+        }
+        if ( $found ) menuItem -e -enable true art3dPaintAttrMenuItem0;
+        else  menuItem -e -enable false art3dPaintAttrMenuItem0;
+    }
+
+    if ( `menuItem -exists art3dPaintAttrMenuItem1` ) {
+        int $found = 0;
+        for ( $cAttr in $attrArray ) {
+            if ( $cAttr == "transparency" ) { $found = 1; break; }
+        }
+        if ( $found ) menuItem -e -enable true art3dPaintAttrMenuItem1;
+        else  menuItem -e -enable false art3dPaintAttrMenuItem1;
+    }
+
+    if ( `menuItem -exists art3dPaintAttrMenuItem2` ) {
+        int $found = 0;
+        for ( $cAttr in $attrArray ) {
+            if ( $cAttr == "incandescence" ) { $found = 1; break; }
+        }
+        if ( $found ) menuItem -e -enable true art3dPaintAttrMenuItem2;
+        else  menuItem -e -enable false art3dPaintAttrMenuItem2;
+    }
+
+    if ( `menuItem -exists art3dPaintAttrMenuItem3` ) {
+        int $found = 0;
+        for ( $cAttr in $attrArray ) {
+            if ( $cAttr == "normalCamera" ) { $found = 1; break; }
+        }
+        if ( $found ) menuItem -e -enable true art3dPaintAttrMenuItem3;
+        else  menuItem -e -enable false art3dPaintAttrMenuItem3;
+    }
+
+    if ( `menuItem -exists art3dPaintAttrMenuItem4` ) {
+        int $found = 0;
+        for ( $cAttr in $attrArray ) {
+            if ( $cAttr == "specularColor" ) { $found = 1; break; }
+        }
+        if ( $found ) menuItem -e -enable true art3dPaintAttrMenuItem4;
+        else  menuItem -e -enable false art3dPaintAttrMenuItem4;
+    }
+
+    if ( `menuItem -exists art3dPaintAttrMenuItem5` ) {
+        $found = 0;
+        for ( $cAttr in $attrArray ) {
+            if ( $cAttr == "reflectivity" ) { $found = 1; break; }
+        }
+        if ( $found ) menuItem -e -enable true  art3dPaintAttrMenuItem5;
+        else  menuItem -e -enable false art3dPaintAttrMenuItem5;
+    }
+
+    if ( `menuItem -exists art3dPaintAttrMenuItem6` ) {
+        int $found = 0;
+        for ( $cAttr in $attrArray ) {
+            if ( $cAttr == "ambientColor" ) { $found = 1; break; }
+        }
+        if ( $found ) menuItem -e -enable true art3dPaintAttrMenuItem6;
+        else  menuItem -e -enable false art3dPaintAttrMenuItem6;
+    }
+
+    if ( `menuItem -exists art3dPaintAttrMenuItem7` ) {
+        int $found = 0;
+        for ( $cAttr in $attrArray ) {
+            if ( $cAttr == "diffuse" ) { $found = 1; break; }
+        }
+        if ( $found ) menuItem -e -enable true art3dPaintAttrMenuItem7;
+        else  menuItem -e -enable false art3dPaintAttrMenuItem7;
+    }
+
+    if ( `menuItem -exists art3dPaintAttrMenuItem8` ) {
+        int $found = 0;
+        for ( $cAttr in $attrArray ) {
+            if ( $cAttr == "translucence" ) { $found = 1; break; }
+        }
+        if ( $found ) menuItem -e -enable true art3dPaintAttrMenuItem8;
+        else  menuItem -e -enable false art3dPaintAttrMenuItem8;
+    }
+
+    if ( `menuItem -exists art3dPaintAttrMenuItem9` ) {
+        int $found = 0;
+        for ( $cAttr in $attrArray ) {
+            if ( $cAttr == "reflectedColor" ) { $found = 1; break; }
+        }
+        if ( $found ) menuItem -e -enable true art3dPaintAttrMenuItem9;
+        else  menuItem -e -enable false art3dPaintAttrMenuItem9;
+    }
+
+	if ( `menuItem -exists art3dPaintAttrMenuItem10` ) {
+        int $found = 0;
+        for ( $cAttr in $attrArray ) {
+            if ( $cAttr == "displacement" ) { $found = 1; break; }
+        }
+        if ( $found ) menuItem -e -enable true art3dPaintAttrMenuItem10;
+        else  menuItem -e -enable false art3dPaintAttrMenuItem10;
+    }
+}

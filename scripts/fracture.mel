@@ -1,0 +1,97 @@
+global proc qhullw(string $filename)
+{
+  int $fileId = fopen($filename, "w");
+  if ( $fileId == 0 )
+      error($filename + " can't be opened for writing!");
+  string $selected[] = `ls -sl -l`;
+  fprint($fileId, "3\n"); // dimension
+  float $vtxs[];
+  int $num = 0;
+  string $obj;
+  string $array[];
+  int $i = 0;
+  int $ai = 0;
+  for ($obj in $selected) 
+    {
+      string $nt = `nodeType $obj`;
+      if ( $nt == "mesh" || $nt == "particle" )
+	{
+	  if ( $nt == "mesh" ) 
+	    $vtxs = `xform -q -ws -t ($obj + ".vtx[*]")`;
+	  else if ( $nt == "particle" ) 
+	    $vtxs = `xform -q -ws -t ($obj + ".pt[*]")`;
+	  else
+	    error("Unknown nodeType, " + $nt);
+	  $num += size($vtxs) / 3; // inc the count for every 3 of these
+	  while ( $i < size($vtxs) )
+	    {
+	      $array[$ai] = $vtxs[$i];
+	      $ai ++;
+	      $i ++;
+	    }
+	}
+      else
+	{
+	  $vtxs = `xform -q -ws -t $obj`;
+	  $num += 1;
+	  $i = 0;
+	  while ( $i < size($vtxs) )
+	    {
+	      $array[$ai] = $vtxs[$i];
+	      $ai ++;
+	      $i ++;
+	    }
+	}
+    }
+
+  string $a;
+  fprint($fileId, (size($array)/3 + "\n")); // number of points
+  for ( $a in $array )
+    {
+      fprint ($fileId, $a + " ");
+      if ( $i % 3 == 2 )
+	fprint($fileId, "\n"); // newline every 3 vertices
+      $i ++;
+   }
+  fclose($fileId);
+}
+
+global proc qhullr(string $filename)
+{
+  int $fileId = fopen($filename, "r");
+  if ( $fileId == 0 )
+    {
+      error($filename + " can't be opened for writing!");
+    }
+  // stores the built polyCreateFacet command string
+  string $pcfCmd;
+  // stores the built vertex locations for $pcfCmd
+  string $pcfPoints = "";
+  // get past first 2 lines
+  string $nextLine = `fgetline $fileId`;
+  $nextLine = `fgetline $fileId`;
+  $nextLine = `fgetline $fileId`;
+  int $dimension;
+  string $vtxArray[];
+  while ( `size $nextLine` > 0 )
+    {
+        $dimension = `tokenize $nextLine " " $vtxArray`; 
+	if ( $dimension == 2 )
+	  $pcfPoints += (" -p " + $nextLine + " 0");
+	else
+	  $pcfPoints += (" -p " + $nextLine);
+	$nextLine = `fgetline $fileId`;
+    }
+  fclose($fileId);
+  string $meshName = "qhullMesh";
+//  print($pcfPoints);
+//  print("\n");
+  $pcfCmd = ( "polyCreateFacet -n " + $meshName + "-ch off -tx 1 -s 1"
+	     + $pcfPoints );
+  eval $pcfCmd;
+}
+
+global proc fracture(string $filename)
+{
+
+}

@@ -1,0 +1,257 @@
+proc int methodDialogDirBrowseCB( string $dirFieldCtrl, string $initialDir, string $newDir, string $type )
+{
+    if( ! `filetest -d $newDir` )
+        return 0;
+
+    textField -edit -text $newDir $dirFieldCtrl;
+    return 1;
+}
+
+proc int methodDialogFileBrowseCB( string $dirFieldCtrl, string $initialFile, string $newFile, string $type )
+{
+    if( ! `filetest -r $newFile` )
+        return 0;
+
+    textField -edit -text $newFile $dirFieldCtrl;
+    return 1;
+}
+proc methodDialogDirBrowse( string $dirFieldCtrl )
+{
+    string $initialDir = `textField -q -text $dirFieldCtrl`;
+    string $curDir     = `workspace -q -fn`;
+
+    int $reset = 0; 
+    if( `filetest -d $initialDir` ) {
+        workspace -dir $initialDir;
+        $reset = 0; 
+    }
+
+    fileBrowser( "methodDialogDirBrowseCB \"" + $dirFieldCtrl + "\" \"" + $initialDir + "\" ", "Select", "", 4 );
+
+    if( $reset ) {
+        workspace -dir $curDir; 
+    }
+}
+
+proc methodDialogFileBrowse( string $dirFieldCtrl )
+{
+    string $initialFile = `textField -q -text $dirFieldCtrl`;
+    string $curDir  = `workspace -q -fn`;
+    int $reset = 0; 
+    string $fileDir = `dirname($initialFile)`;
+    if( `filetest -d $fileDir` ) {
+        workspace -dir $fileDir;
+        $reset = 1; 
+    }
+
+    fileBrowser( "methodDialogFileBrowseCB \"" + $dirFieldCtrl + "\" \"" + $initialFile + "\" ", "Select", "", 2 );
+
+    if( $reset ) {
+        workspace -dir $curDir ; 
+    }
+}
+
+proc string getTransform( string $shape )
+{
+   string $transform = "";
+
+   if ( "transform" != `nodeType $shape`)
+   // If given node is already a transform, just pass on through
+   {
+      string $parents[] = `listRelatives -fullPath -parent $shape`;
+      $transform = $parents[0];
+   }
+
+   return $transform;
+}
+
+proc deleteWindow()
+{
+global string $mExportCamWindow;
+	if( `window -exists $mExportCamWindow` ) {
+		deleteUI -window $mExportCamWindow;
+	}
+}
+
+proc chanFile()
+{
+global string $mChanFile;
+global string $mExportCamSel;
+global string $wrkspc;
+global string $sceneName;
+string $camSel = `optionMenu -q -value $mExportCamSel`;
+$wrkspc = `workspace -q -fn`;
+$wrkspc = $wrkspc + "/data/" + $sceneName + "_" + $camSel + "_cam.chan";
+textField -edit -fi $wrkspc $mChanFile;
+}
+
+global proc ExportCam2Chan()
+{
+global string $mExportCamWindow;
+global string $mExportCamSel;
+global string $mCamStart;
+global string $mCamEnd;
+global string $mChanFile;
+global string $mExportCamSel;
+global string $wrkspc;
+global string $sceneName;
+string $mChanFileData[] = `fileInfo -q "__mCamChanFile"`; 
+
+deleteWindow();
+$sceneName = `file -q -sn`;
+$sceneName =  basename($sceneName, ".mb");
+$wrkspc = `workspace -q -fn`;
+
+string $win = `window -h 120 -w 600 -title "ExportCam2Chan" $mExportCamWindow`;
+	string $topForm = `formLayout`;
+		string $contents = `columnLayout -adj true`;
+			rowLayout -nc 2 -cw 1 100 -cal 1 "both" -cal 2 "left" -adj 2;
+				text -label "Camera" -font "boldLabelFont";
+				$mExportCamSel = `optionMenu -label "" -cc "chanFile"`;
+					string $camList[] = `listCameras -p`;
+					string $cam;
+						for( $cam in $camList ) {
+							if ("transform" != `nodeType $cam`)
+								menuItem -label `getTransform($cam)`;
+							else
+								menuItem -label $cam;
+						}
+		
+			setParent ..;
+
+			rowLayout -nc 3 -cw2 150 200 -cal 1 "left" -cal 2 "left" -adj 2;
+				text -label "Output File" -font "boldLabelFont";
+				string $data[] = `fileInfo -q "__mCamChanFile"`;
+				if( size( $data ) > 0 ){
+					$previousFile = $data[0];
+					$mChanFile = `textField -text $previousFile -w 220 -editable true`;
+					}
+				else{
+					string $camSel = `optionMenu -q -value $mExportCamSel`;
+					$wrkspc = $wrkspc + "/data/" + $sceneName + "_" + $camSel + "_cam.chan";
+					$mChanFile = `textField -text $wrkspc -w 220 -editable true`;
+				}
+
+				string $FileBrowseBtn = `iconTextButton -image1 "navButtonBrowse.xpm" -width 30 -height 24`;
+
+				iconTextButton -edit -command ("methodDialogFileBrowse(\"" + $mChanFile + "\")") $FileBrowseBtn;
+			setParent ..;
+
+
+			rowLayout -nc 3 -cw 1 80 -cw 2 80 -cw 3 80 -cal 1 "left" -cal 2 "left" -cal 3 "left";
+				text -label "FrameRange" -font "boldLabelFont";
+				$mCamStart = `floatField -width 80 -pre 0`;
+				$mCamEnd   = `floatField -width 80 -pre 0`;
+
+				floatField -edit -value `getAttr "defaultRenderGlobals.startFrame"` $mCamStart;
+				floatField -edit -value `getAttr "defaultRenderGlobals.endFrame"` $mCamEnd;
+
+			setParent ..; 
+
+			
+
+
+		setParent ..;
+
+			$saveButton = `button -label "Save" -width 100 -align "center" -command ("ExportCam();deleteWindow();")`;
+			$cancelButton = `button -label "Close"  -width 100 -align "center" -command ("deleteWindow()")`;
+					formLayout -edit
+			-attachForm $contents "top" 2
+			-attachForm $contents "left" 2
+			-attachForm $contents "right"  2
+			-attachPosition $cancelButton "left"  2 50
+			-attachForm $cancelButton "right"  2
+			-attachControl $saveButton "top"  2 $contents
+			-attachControl $saveButton "right"  2 $cancelButton
+			-attachForm $saveButton "left"  2
+			-attachControl $cancelButton "top"  2 $contents
+			-attachForm $cancelButton "bottom"  2
+			-attachForm $saveButton "bottom"  2
+			$topForm;	
+
+	setParent ..;
+showWindow $mExportCamWindow;
+}
+
+
+global proc ExportCam()
+{
+global string $mExportCamWindow;
+global string $mExportCamSel;
+global string $mCamStart;
+global string $mCamEnd;
+global string $mChanFile;
+
+string $cameraName = `optionMenu -q -value $mExportCamSel`;
+string $fileName = `textField -q -text $mChanFile`;
+int $startFrame =`floatField -q -value $mCamStart`;
+int $endFrame = `floatField -q -value $mCamEnd`;
+
+      $trsGrp = `spaceLocator -p 0 0 0`;
+      pointConstraint -offset 0 0 0 -weight 1 $cameraName $trsGrp;
+      scaleConstraint -offset 1 1 1 -weight 1 $cameraName $trsGrp;
+
+      int $fileId;
+      $fileId = `fopen $fileName "w"`;
+
+      //file header
+      fprint $fileId ("OBJECT: camera\n");
+      fprint $fileId ("NAME: " + $cameraName + "\n");
+      fprint $fileId ("FORMAT: frame posx posy posz rotx roty rotz sclx scly sclz foc hapt\n");
+
+      //file data
+      fprint $fileId ("DATA:\n");
+	string $currentFile = `textField -q -text $mChanFile`;
+	fileInfo "__mCamChanFile"  $currentFile;
+      int $i;
+      float $trans[], $fl;
+
+      for ($i = $startFrame; $i <= $endFrame; $i++)
+      {
+              currentTime $i;
+
+              $pos = `xform -worldSpace -query -translation $trsGrp`;
+              $rot = `xform -worldSpace -query -rotation $cameraName`;
+              $scl = `xform -relative -objectSpace -query -scale $trsGrp`;
+
+              //$focal = `getAttr ($cameraName + ".focalLength")`;
+              //$focal = `getAttr ($cameraName + ".vrayCameraPhysicalFocalLength")`;
+
+              //Try Vray Camera Info First
+              if ( catchQuiet( $focal = `getAttr ($cameraName + ".vrayCameraPhysicalFocalLength")` ) ) {
+                  // Get Maya Camera Info
+                  print ("Trying Maya Camera\n");
+                  $focal = `getAttr ($cameraName + ".focalLength")`;
+              }
+
+
+              //$aperture = `getAttr ($cameraName + ".horizontalFilmAperture")`;
+
+              //Try Vray Camera Info First
+              if ( catchQuiet( $aperture = `getAttr ($cameraName + ".vrayCameraPhysicalFilmWidth")` ) ) {
+                  // Get Maya Camera Info
+                  print ("Trying Maya Camera\n");
+                  $aperture = `getAttr ($cameraName + ".horizontalFilmAperture")`;
+              }
+
+              fprint $fileId ($i + " ");
+
+              fprint $fileId ($pos[0] + " " + $pos[1] + " " + $pos[2] + " " +
+                              $rot[0] + " " + $rot[1] + " " + $rot[2] + " " +
+                              $scl[0] + " " + $scl[1] + " " + $scl[2] + " ");
+              fprint $fileId ($focal + " " + $aperture);
+              fprint $fileId "\n";
+      }
+
+      fclose $fileId;
+
+      delete $trsGrp;
+
+
+      print ("\n\nExportCam2Chan: DONE\n\n");
+}
+ExportObj2Chan();
+
+
+
+

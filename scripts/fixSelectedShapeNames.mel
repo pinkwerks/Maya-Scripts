@@ -1,0 +1,13 @@
+global proc
+fixSelectedShapeNames()
+{
+    string $me = "fixSelectedShapeNames";
+    string $selected[] = `ls -sl -l`;
+    string $selectedShapes[] = `listRelatives -s -f $selected`;
+    int $sizeOfShapes = `size $selectedShapes`;
+
+    if ( $sizeOfShapes == 0 )
+    	error($me + " : No valid selection!");
+
+    fixShapeName($selectedShapes);
+}

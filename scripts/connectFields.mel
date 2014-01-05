@@ -1,0 +1,16 @@
+global proc
+connectFields()
+{
+	string $selected[] = `ls -sl -fl -l`;
+	string $particles = $selected[0];
+	int $i = 0;
+
+	for ( $field in $selected ) {
+		if ( $i == 0 ) {
+		    $i++;
+		    continue;
+		}
+
+		connectDynamic -f $field $particles; 
+	}
+}

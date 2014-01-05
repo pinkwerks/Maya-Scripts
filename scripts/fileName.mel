@@ -1,0 +1,101 @@
+// fileName
+//
+// version : 20051216
+// author  : pink
+
+global proc string fileName(string $part)
+{
+    string $fileQuery = `workspace -q -sn`;
+    string $me = "fileName";
+    string $nameArray[];
+    string $nameArray2[];
+    string $output = "";
+    int $i = 0;
+
+    if ($fileQuery == "") return "Untitled";
+
+	switch ( $part )
+	{
+		case "all":
+			$output = $fileQuery;
+			break;
+	
+		case "ext":
+			$numTokens = `tokenize $fileQuery "." $nameArray`;
+			$output = $nameArray[$numTokens-1];
+			break;
+
+		case "name":
+			$numTokens = `tokenize $fileQuery "//" $nameArray`;
+			$output = $nameArray[$numTokens-1];
+			break;
+
+		case "path":
+			$numTokens = `tokenize $fileQuery "//" $nameArray`;
+			for (; $i < $numTokens - 1; $i++) {
+				$output += ("/" + $nameArray[$i]);
+			}
+			break;
+
+		case "root":
+			$numTokens = `tokenize $fileQuery "//" $nameArray`;
+			$numTokens2 = `tokenize $nameArray[$numTokens-1] "." $nameArray2`;
+			$output = $nameArray2[0];
+			break;
+
+		case "shot":
+			$numTokens = `tokenize $fileQuery "//" $nameArray`;
+			if ($nameArray[0] == "hosts")
+				$output = ("/" + $nameArray[7]);
+			else
+				$output = ("/" + $nameArray[5]);
+			$output = `substitute "/" $output ""`;
+			if ($output == "Untitled")
+				$output = `getenv SHOT`;
+			break;
+
+		case "shotpath":
+			$numTokens = `tokenize $fileQuery "//" $nameArray`;
+			for (; $i < 6; $i++) {
+				$output += ("/" + $nameArray[$i]);
+			}
+			break;
+		
+		case "shotspath":
+			$numTokens = `tokenize $fileQuery "//" $nameArray`;
+			for (; $i < 4; $i++) {
+				$output += ("/" + $nameArray[$i]);
+			}
+			break;
+		
+		case "show":
+		case "proj":
+		case "project":
+			$numTokens = `tokenize $fileQuery "//" $nameArray`;
+			$output = $nameArray[2];
+			break;
+
+		case "showpath":
+		case "projpath":
+		case "projectpath":
+		case "jobpath":
+			$numTokens = `tokenize $fileQuery "//" $nameArray`;
+			for (; $i < 3; $i++) {
+				$output += ("/" + $nameArray[$i]);
+			}
+			break;
+
+		case "spotpath":
+			$numTokens = `tokenize $fileQuery "//" $nameArray`;
+			for (; $i < 4; $i++) {
+				$output += ("/" + $nameArray[$i]);
+			}
+			break;
+
+		default:
+			error ("usage : "+ $me +" <show|shot|shotpath|path|full|root|ext|all>");
+			break;
+	}
+	return $output;
+}
+

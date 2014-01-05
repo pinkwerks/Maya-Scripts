@@ -1,0 +1,283 @@
+//
+// v20041215 pinkelton wicham
+// basic maya to renderman shader converter for app_srf
+//
+
+global int $__pinkundefF = -420;
+global int $__pinkundefV = <<420,69,42>>;
+
+global proc string[] getMayaShaders()
+{
+  string $sel[] = `ls -sl`;
+  string $list[];
+  float $s = `size $sel`;
+  int $i = 0;
+  int $j = 0;
+  for ( $i; $i < $s; $i++ ) {
+    $nt = `nodeType $sel[$i]`;
+    if ( $nt == "blinn" || $nt == "lambert"
+	|| $nt == "phong" || $nt == "surfaceShader"
+    ) {
+      $list[$j] = $sel[$i];
+      $j++;
+    } else {
+      warning("Unsupported nodeType : " + $nt + "(" + $sel[$i] + ")");
+    }
+  }
+  return $list;
+}
+
+global proc string[]
+getMayaTypes(string $nodes[])
+{
+  string $list[];
+  float $size = `size $nodes`;
+  int $i = 0;
+  int $j = 0;
+  for ( $i; $i < $size; $i++ ) {
+    $nt = `nodeType $nodes[$i]`;
+    $list[$i] = $nt;
+  }
+  return $list;
+}
+
+global proc vector[]
+getMayaShaderValsV(string $shaders[], string $type)
+{
+  global int $__pinkundefV;
+  string $shader;
+  vector $vals[];
+  int $i = 0;
+  for ( $shader in $shaders ) {
+    if ( `attributeExists $type $shader` ) {
+      $vals[$i] = `getAttr ($shader + "." + $type)`;
+    } else {
+      $vals[$i] = $__pinkundefV;
+    }
+    $i++;
+  }
+  return $vals;
+}
+
+global proc float[]
+getMayaShaderValsF(string $shaders[], string $type)
+{
+  global int $__pinkundefF;
+  string $shader;
+  float $vals[];
+  int $i = 0;
+  for ( $shader in $shaders ) {
+    if ( `attributeExists $type $shader` ) {
+      $vals[$i] = `getAttr ($shader + "." + $type)`;
+    } else {
+      $vals[$i] = $__pinkundefF;
+    }
+    $i++;
+  }
+  return $vals;
+}
+
+global proc
+mshd2rmanEngine()
+{
+    global int $__pinkundefF;
+    global int $__pinkundefV;
+
+    // get list of selected maya shaders in hypergraph
+    string $mayaShaders[] = getMayaShaders();
+    if ( `size $mayaShaders` == 0 ) {
+      error("Select at least one material in the hypershade!");
+    }
+
+    // populate our arrays
+    string $mayaTypes[] = getMayaTypes($mayaShaders);
+    vector $mayaTrans[] = getMayaShaderValsV($mayaShaders, "transparency");
+    float  $mayaDiffuse[] = getMayaShaderValsF($mayaShaders, "diffuse");
+    vector $mayaColor[] = getMayaShaderValsV($mayaShaders, "color");
+    vector $mayaSpecC[] = getMayaShaderValsV($mayaShaders, "specularColor");
+    vector $mayaAmb[] = getMayaShaderValsV($mayaShaders, "ambientColor");
+    vector $mayaOutC[] = getMayaShaderValsV($mayaShaders, "outColor");
+
+    // create a new palette
+    $palette = `slimcmd slim CreatePalette -new -edit`;
+    //print("Palette = " + $palette + "\n");
+
+    string $mayaShader;
+    int $i = 0;
+    for ( $mayaShader in $mayaShaders ) {
+	$app = `slimcmd $palette CreateInstance -file "/asylum/cg/common/shaders/prman/uberTex_srf_dev.slo"`;
+	slimcmd $palette UpdateEditor;
+	$appID = `slimcmd $app GetID`;
+	$appLabel = $mayaShader;
+	slimcmd $app SetLabel $appLabel;
+	string $propIDsList = `slimcmd $app GetProperties`;
+	string $propIDs[];
+	tokenize $propIDsList $propIDs;
+	string $propID;
+	// go through an apperances properties and find/act
+	// on those we're looking for.
+	for ( $propID in $propIDs ) {
+	    string $propLabel = `slimcmd $propID GetLabel`;
+	    string $propName = `slimcmd $propID GetName`;
+
+	    if ( $propID == "" ) {
+		continue;
+	    }
+
+	    if ( $propLabel == "Render Pass" ) {
+		if ( $mayaTypes[$i] == "surfaceShader" ) {
+		  $v = "constant";
+		  slimcmd $propID SetValue ("\"" + $v + "\"");
+		}
+	    }
+
+	    if ( $propLabel == "Opacity" ) {
+		$v = $mayaTrans[$i];
+		if ( $v != $__pinkundefV ) {
+		  $v = 1 - $v;
+		  slimcmd $propID SetValue ("\"" + $v + "\"");
+		}
+	    }
+
+	    if ( $propLabel == "Kd" ) {
+		float $f = $mayaDiffuse[$i];
+		if ( $f != $__pinkundefF ) {
+		  slimcmd $propID SetValue ("\"" + $f + "\"");
+		}
+	    }
+
+	    if ( $propLabel == "Color" ) {
+		vector $v;
+		if ( $mayaTypes[$i] == "surfaceShader" ) {
+		  $v = $mayaOutC[$i];
+		} else {
+		  $v = $mayaColor[$i];
+		}
+		slimcmd $propID SetValue ("\"" + $v + "\"");
+	    }
+
+	    if ( $propLabel == "Ambient" ) {
+		$v = $mayaAmb[$i];
+		if ( $v != $__pinkundefV ) {
+		  slimcmd $propID SetValue ("\"" + $v + "\"");
+		}
+	    }
+
+	    if ( $propLabel == "Specular Color" ) {
+		$v = $mayaSpecC[$i];
+		if ( $mayaTypes[$i] == "blinn" ) {
+		  slimcmd $propID SetValue ("\"" + $v + "\"");
+		}
+	    }
+
+	    if ( $propLabel == "Ks" ) {
+		if (
+		    $mayaTypes[$i] == "lambert" 
+		    || $mayaTypes[$i] == "surfaceShader"
+		) {
+		  $v = 0;
+		  slimcmd $propID SetValue ("\"" + $v + "\"");
+		} else {
+		  $v = 1;
+		  slimcmd $propID SetValue ("\"" + $v + "\"");
+		}
+	    }
+
+	}
+	$i++;
+	string $connects[] = `listConnections -et on $mayaShader`;
+	string $SG;
+	for ( $c in $connects ) {
+	    if ( `nodeType $c` == "shadingEngine" )
+	      $SG = $c;
+	}
+	/*
+        string $assigned[] = `listConnections ($SG + ".dagSetMembers")`;
+	select $assigned;
+	*/
+	select -ne $SG;
+	if ( $appLabel != "lambert1" )
+	  mtor control attach surface $appID;
+    }
+}
+
+global proc mshd2rman() {
+    string $procName = "mshd2rman";
+    global int $GMIN;
+    global int $GMAX;
+
+    if ( `window -exists $procName` ) {
+        showWindow $procName;
+        return;
+    }
+
+    // build the controls
+    window -rtf on -ret -t $procName $procName;
+    columnLayout ;
+    textFieldGrp -label "Destination Attribute" srcD;
+    floatFieldGrp -v1 2 -label "Delay Spacing" delay;
+    checkBox -al "right" -l "Add seed()" seed;
+    rowLayout -numberOfColumns 3
+    	-columnAlign  1 "center"
+    	-columnAlign  2 "center"
+    	-columnAlign  3 "center"
+    	-columnAttach 1 "both" 	0
+    	-columnAttach 2 "both"  0
+    	-columnAttach 3 "both"  0
+    ;
+    button -label "Apply" -c mshd2rmanPrep;
+    button -label "Hide" -c ("window -e -vis 0 " + $procName);
+    button -label "Close" -c ("deleteUI -wnd " + $procName);
+
+    showWindow $procName;
+}
+
+global proc
+mshd2rmanPrep()
+{
+    /* grab the values from the UI and call the engine */
+    string $sel[] = `ls -sl -fl -l`;
+    string $leader;
+    if ( `size $sel` != 0 ) {
+	$leader = $sel[`size $sel` - 1];
+    } else {
+    	error("passenger : Select one or more objects to be affected, then select a driver.");
+    }
+
+    // see if we need to add some seed() code for calling random, etc.
+    int $addSeed = `checkBox -q -v seed`;
+
+    string $srcD = `textFieldGrp -q -tx srcD`; 
+    float $delay = `floatFieldGrp -q -v1 delay`;
+
+    if ( $srcD == "" )
+    	error("Please specify a destination attribute!");
+
+    /*
+    print(
+	"passengerEngine "
+	+"\""+$leader+"\" "
+	+"\""+$srcA+"\" "
+	+"\""+$srcD+"\" "
+	+"\""+$delay+"\" "
+	+"\""+$amt+"\" "
+	+"\""+$offset+"\" "
+	+"\""+$xoff+"\" "
+	+"\""+$yoff+"\" "
+	+"\""+$zoff+"\" "
+	+"\""+$freq+"\" "
+	+"\""+$namp+"\" "
+	+"\""+$ramp+"\" "
+	+"\""+$xmask+"\" "
+	+"\""+$ymask+"\" "
+	+"\""+$zmask+"\" "
+	+"\""+$extraMath+"\" "
+	+"\""+$addSeed+"\" "
+	+"\n"
+    );
+    */
+
+    /*
+    passengerEngine($leader, $srcA, $srcD, $delay, $amt, $offset, $xoff, $yoff, $zoff, $freq, $namp, $ramp, $xmask, $ymask, $zmask, $extraMath, $addSeed);
+    */
+}

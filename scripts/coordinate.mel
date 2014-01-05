@@ -1,0 +1,26 @@
+// reference http://en.wikipedia.org/wiki/List_of_canonical_coordinate_transformations#To_Cartesian_coordinates
+
+global proc float[] toSphereFromCartesian(float $x, float $y, float $z)
+{
+	float $x2 = $x * $x;
+	float $y2 = $y * $y;
+	float $z2 = $z * $z;
+	float $rho = sqrt($x2 + $y2 + $z2);
+	float $phi;
+	float $theta;
+	float $r[];
+
+	if ( $z != 0 )
+		$phi = atan(sqrt($x2 + $y2) / $z);
+	else
+		$phi = 0;
+
+	if ( $x != 0 )
+		$theta = atan($y / $x);
+	else
+		$theta = 0;
+
+	$r = {$rho, $phi, $theta};
+	return $r;
+}
+

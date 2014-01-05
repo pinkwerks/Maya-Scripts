@@ -1,0 +1,13 @@
+global proc toggleThumbnailUpdates()
+{
+  if ( `renderThumbnailUpdate -q` == 1 )
+    {
+      warning("Thumbnail updates are now OFF.");
+      renderThumbnailUpdate 0;
+    }
+  else
+    {
+      warning("Thumbnail updates are now ON.");
+      renderThumbnailUpdate 1;
+    }
+}

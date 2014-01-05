@@ -1,0 +1,13 @@
+// --pink
+global proc bindPlace2dTextureTranslateToCoverage()
+{
+	string $things[] = `ls -sl -type place2dTexture`;
+	string $thing;
+	string $exp;
+	for ($thing in $things) {
+		$exp = ($thing+".translateFrameU = (coverageU-1)/-2;\n");
+		$exp += ($thing+".translateFrameV = (coverageV-1)/-2;\n");
+		expression -s $exp -o $thing -ae 1 -uc all -n bindTranslateToCoverage;
+	}
+}
+

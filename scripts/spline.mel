@@ -1,0 +1,70 @@
+//
+// spline.mel v1.0 10/27/98 pinkwerks <pinkwerks@netscape.net> 
+// 
+// usage: spline(float parameter, float knot[]);
+//
+// info: implements a catmull-rom type spline
+//
+// notes: ripped from Darwyn Peachey,
+//        "texturing and modeling - a procedural approach"
+
+global proc float
+spline(float $x, float $knot[])
+{
+    int $nknots = size($knot); 
+
+    //
+    // Coefficients of basis matrix.
+    // sure would be nice if maya had #defines...
+    float $CR00 = -0.5;
+    float $CR01 = 1.5;
+    float $CR02 = -1.5;
+    float $CR03 = 0.5;
+    float $CR10 = 1.0;
+    float $CR11 = -2.5;
+    float $CR12 = 2.0;
+    float $CR13 = -0.5;
+    float $CR20 = -0.5;
+    float $CR21 = 0.0;
+    float $CR22 = 0.5;
+    float $CR23 = 0.0;
+    float $CR30 = 0.0;
+    float $CR31 = 1.0;
+    float $CR32 = 0.0;
+    float $CR33 = 0.0;
+
+    // end
+
+    int $span;
+    int $nspans = $nknots - 3;
+    float $c0, $c1, $c2, $c3;	/* coefficients of the cubic.*/
+
+    if ($nspans < 1) {  /* illegal */
+        print("spline : knot array has less than 4 values.\n");
+        return(0);
+    }
+
+    // speed things up
+    // from "texturing and modeling 1st Ed." - p.30
+    if ($x <= 0) return($knot[1]);
+
+    // Find the appropriate 4-point span of the spline.
+    $x = clamp(0, 1, $x) * $nspans;
+
+    $span = (int)$x; // MEL can cast!
+
+    if ($span >= $nknots - 3) $span = $nknots - 3;
+    $x -= $span;
+
+    /* Evaluate the span cubic at x using Horner's rule. */
+    $c3 = $CR00 * $knot[0 + $span] + $CR01 * $knot[1 + $span]
+        + $CR02 * $knot[2 + $span] + $CR03 * $knot[3 + $span];
+    $c2 = $CR10 * $knot[0 + $span] + $CR11 * $knot[1 + $span]
+        + $CR12 * $knot[2 + $span] + $CR13 * $knot[3 + $span];
+    $c1 = $CR20 * $knot[0 + $span] + $CR21 * $knot[1 + $span]
+        + $CR22 * $knot[2 + $span] + $CR23 * $knot[3 + $span];
+    $c0 = $CR30 * $knot[0 + $span] + $CR31 * $knot[1 + $span]
+        + $CR32 * $knot[2 + $span] + $CR33 * $knot[3 + $span];
+
+    return((($c3 * $x + $c2) * $x + $c1) * $x + $c0);
+}

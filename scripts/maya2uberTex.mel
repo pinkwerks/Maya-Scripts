@@ -1,0 +1,345 @@
+//
+// v20050226 pinkelton wicham
+// basic maya to renderman shader converter for app_srf
+//
+
+
+global string  $__uberTexSlo = "//nas02/JOBS/DR_ISLAND/3D/sl/uberTex_v20051027.slo";
+global int $__pinkundefF = -420;
+global int $__pinkundefV = <<420,69,42>>;
+
+global proc string[]
+getMayaShaders()
+{
+  string $sel[] = `ls -sl`;
+  string $list[];
+  float $s = `size $sel`;
+  int $i = 0;
+  int $j = 0;
+  for ( $i; $i < $s; $i++ ) {
+    $nodeType = `nodeType $sel[$i]`;
+    if (/* We're dealing with legal Materials */
+      $nodeType == "blinn"
+      || $nodeType == "lambert"
+      || $nodeType == "phong"
+      || $nodeType == "phongE"
+      || $nodeType == "surfaceShader"
+    ) {
+      if (/* This is a Material we skip */
+	  $nodeType != "shaderGlow"
+	  /* This is a Material Name we skip */
+	  && $sel[$i] != "lambert1"
+	  && $sel[$i] != "particleCloud1"
+      ) {
+	$list[$j] = $sel[$i];
+	$j++;
+      } else {
+	warning("Skipping material : " + $sel[$i]);
+      }
+    } else {
+      warning("Unsupported nodeType : " + $nodeType + "(" + $sel[$i] + ")");
+    }
+  }
+  return $list;
+}
+
+global proc string[]
+getMayaTypes(string $nodes[])
+{
+  string $list[];
+  float $size = `size $nodes`;
+  int $i = 0;
+  int $j = 0;
+  for ( $i; $i < $size; $i++ ) {
+    $nodeType = `nodeType $nodes[$i]`;
+    $list[$i] = $nodeType;
+  }
+  return $list;
+}
+
+global proc string[]
+getMayaFileTexName(string $materials[], string $type)
+{
+  string $material;
+  string $vals[];
+  int $i = 0;
+  for ( $material in $materials ) {
+    if ( `attributeExists $type $material` ) {
+      string $connection = `connectionInfo -sfd ($material+"."+$type)`;
+      if ( $connection == "" ) {
+	$vals[$i] = "";
+      } else if ( `nodeType $connection` == "file" ) {
+	string $buffer[];
+	$num = `tokenize $connection "." $buffer`;
+	$vals[$i] = `getAttr ($buffer[0] + ".fileTextureName")`;
+      } else if ( `nodeType $connection` == "projection" ) {
+        print("//" + $material + "." + $type);
+      } else {
+	string $nodeType = `nodeType $connection`;
+      	warning("Unsupported nodeType : " + $connection + " " + $nodeType + " : try 'Convert to file texture'.\n");
+      }
+    }
+    $i++;
+  }
+  return $vals;
+}
+
+global proc vector[]
+getMayaShaderValsV(string $materials[], string $type)
+{
+  global int $__pinkundefV;
+  string $material;
+  vector $vals[];
+  int $i = 0;
+  for ( $material in $materials ) {
+    if ( `attributeExists $type $material` ) {
+      $vals[$i] = `getAttr ($material + "." + $type)`;
+    }
+    $i++;
+  }
+  return $vals;
+}
+
+global proc float[]
+getMayaShaderValsF(string $materials[], string $type)
+{
+  global int $__pinkundefF;
+  string $material;
+  float $vals[];
+  int $i = 0;
+  for ( $material in $materials ) {
+    if ( `attributeExists $type $material` ) {
+      $vals[$i] = `getAttr ($material + "." + $type)`;
+    } else {
+      $vals[$i] = $__pinkundefF;
+    }
+    $i++;
+  }
+  return $vals;
+}
+
+global proc
+maya2uberTexEngine(string $m2ut_context, int $link)
+{
+  global string $__uberTexSlo;
+    global int $__pinkundefF;
+    global int $__pinkundefV;
+    string $txargs = " -smode periodic -tmode periodic -resize down- ";
+    // get list of selected maya shaders in hypergraph
+    string $mayaShaders[] = getMayaShaders();
+    if ( `size $mayaShaders` == 0 ) {
+      error("Select at least one legal material in the hypershade!");
+    }
+    // populate our arrays
+    string $mayaTypes[] = getMayaTypes($mayaShaders);
+    vector $mayaTrans[] = getMayaShaderValsV($mayaShaders, "transparency");
+    float  $mayaDiffuse[] = getMayaShaderValsF($mayaShaders, "diffuse");
+    vector $mayaColor[] = getMayaShaderValsV($mayaShaders, "color");
+    vector $mayaSpecC[] = getMayaShaderValsV($mayaShaders, "specularColor");
+    vector $mayaAmb[] = getMayaShaderValsV($mayaShaders, "ambientColor");
+    vector $mayaOutC[] = getMayaShaderValsV($mayaShaders, "outColor");
+    string $mayaColorFile[] = getMayaFileTexName($mayaShaders, "color");
+    string $mayaOutColorFile[] = getMayaFileTexName($mayaShaders, "outColor");
+    string $mayaTransFile[] = getMayaFileTexName($mayaShaders, "transparency");
+    // create a new palette
+    $palette = `slimcmd slim CreatePalette -new -edit`;
+    //print("Palette = " + $palette + "\n");
+    string $mayaShader;
+    int $i = 0;
+  for ( $mayaShader in $mayaShaders ) {
+    $app = `slimcmd $palette CreateInstance -file $__uberTexSlo`;
+    slimcmd $palette UpdateEditor;
+    $appID = `slimcmd $app GetID`;
+    $appLabel = $mayaShader;
+    slimcmd $app SetLabel $appLabel;
+    string $propIDsList = `slimcmd $app GetProperties`;
+    string $propIDs[];
+    tokenize $propIDsList $propIDs;
+    string $propID;
+    // go through an apperances properties and find/act
+    // on those we're looking for.
+    for ( $propID in $propIDs ) {
+	string $propLabel = `slimcmd $propID GetLabel`;
+	string $propName = `slimcmd $propID GetName`;
+	if ( $propID == "" ) {
+	    continue;
+	}
+
+	if ( $propLabel == "Render Pass" ) {
+	    if ( $mayaTypes[$i] == "surfaceShader" ) {
+	      $v = "constant";
+	      slimcmd $propID SetValue ("\"" + $v + "\"");
+	    }
+	}
+
+	if ( $propLabel == "Opacity" ) {
+	    $v = $mayaTrans[$i];
+	    if ( $v != $__pinkundefV ) {
+	      if ( $link ) {
+		slimcmd $propID SetValueProvider expression;
+		slimcmd $propID SetExpression ("\"1 - \\\[mattr " + $appLabel + ".transparency \\\$f\\\]\"");
+	      } else {
+		$v = 1 - $v;
+		slimcmd $propID SetValue ("\"" + $v + "\"");
+	      }
+	    }
+	}
+
+	if ( $propLabel == "Kd" ) {
+	    float $f = $mayaDiffuse[$i];
+	    if ( $f != $__pinkundefF ) {
+	      if ( $link ) {
+		slimcmd $propID SetValueProvider expression;
+		slimcmd $propID SetExpression ("\"\\\[mattr " + $appLabel + ".diffuse \\\$f\\\]\"");
+	      } else {
+		slimcmd $propID SetValue ("\"" + $f + "\"");
+	      }
+	    }
+	}
+
+	if ( $propLabel == "Base Color Map" ) {
+	    if ( $mayaColorFile[$i] != "" ) {
+	      slimcmd $propID SetValue ("\"\\\[txmake " +$mayaColorFile[$i] + $txargs + "\\\]\"");
+	    } else if ( $mayaOutColorFile[$i] != "" ) {
+	      slimcmd $propID SetValue ("\"\\\[txmake " + $mayaOutColorFile[$i] + $txargs + "\\\]\"");
+	    }
+	}
+
+	if ( $propLabel == "Color" ) {
+	    vector $v;
+	    if ( $link ) {
+	      if ( $mayaTypes[$i] == "surfaceShader" ) {
+		slimcmd $propID SetValueProvider expression;
+		slimcmd $propID SetExpression ("\"\\\[mattr " + $appLabel + ".outColor \\\$f\\\]\"");
+	      } else {
+		slimcmd $propID SetValueProvider expression;
+		slimcmd $propID SetExpression ("\"\\\[mattr " + $appLabel + ".color \\\$f\\\]\"");
+	      }
+	    } else {
+	      if ( $mayaTypes[$i] == "surfaceShader" ) {
+		$v = $mayaOutC[$i];
+	      } else {
+		$v = $mayaColor[$i];
+	      }
+	      slimcmd $propID SetValue ("\"" + $v + "\"");
+	    }
+	}
+
+	if ( $propLabel == "Ambient" ) {
+	    $v = $mayaAmb[$i];
+	    if ( $v != $__pinkundefV ) {
+	      if ( $link ) {
+		  slimcmd $propID SetValueProvider expression;
+		  slimcmd $propID SetExpression ("\"\\\[mattr " + $appLabel + ".ambientColor \\\$f\\\]\"");
+	      } else {
+		slimcmd $propID SetValue ("\"" + $v + "\"");
+	      }
+	    }
+	}
+
+	if ( $propLabel == "Specular Color" ) {
+	  $v = $mayaSpecC[$i];
+	  if (
+	      $mayaTypes[$i] == "blinn"
+	      || $mayaTypes[$i] == "phong"
+	      || $mayaTypes[$i] == "phongE"
+	  ) {
+	    if ( $link ) {
+	      slimcmd $propID SetValueProvider expression;
+	      slimcmd $propID SetExpression ("\"\\\[mattr " + $appLabel + ".specularColor \\\$f\\\]\"");
+	    } else {
+	      slimcmd $propID SetValue ("\"" + $v + "\"");
+	    }
+	  }
+	}
+
+	if ( $propLabel == "Ks" ) {
+	    if (
+		$mayaTypes[$i] == "lambert" 
+		|| $mayaTypes[$i] == "surfaceShader"
+	    ) {
+	      $v = 0;
+	      slimcmd $propID SetValue ("\"" + $v + "\"");
+	    } else {
+	      $v = 1;
+	      slimcmd $propID SetValue ("\"" + $v + "\"");
+	    }
+	}
+    }
+    $i++;
+
+    // Sort out what we attach the appearance to.
+    if ( $m2ut_context != "None" ) {
+      // Find out our Shading Group that's attached to the material
+      string $connects[] = `listConnections -et on $mayaShader`;
+      string $SG;
+      for ( $c in $connects ) {
+	if ( `nodeType $c` == "shadingEngine" ) {
+	  $SG = $c;
+	}
+      }
+      if ( $m2ut_context == "Shading Group" ) {
+	select -ne $SG;
+	mtor control attach surface $appID;
+      } else if ( $m2ut_context == "Surface" ) {
+	string $assigned[] = `listConnections ($SG + ".dagSetMembers")`;
+	select $assigned;
+	mtor control attach surface $appID;
+      }
+    }
+  }
+}
+
+global proc
+maya2uberTexPrep()
+{
+    /* grab the values from the UI and call the engine */
+    string $m2ut_context = `optionMenuGrp -q -v m2ut_context`;
+    int $link = `checkBox -q -v linkValuesCheckBox`;
+    if ( $m2ut_context == "" ) {
+    	error("maya2uberTex(Prep): Strange, no m2ut_context!  Aborting.");
+    }
+    print(
+	"maya2uberTexEngine "
+	+"\""+ $m2ut_context+"\" "
+	+$link+""
+	+";\n"
+    );
+    maya2uberTexEngine($m2ut_context, $link);
+}
+
+global proc
+maya2uberTex()
+{
+    string $procName = "maya2uberTex";
+    if ( `window -exists $procName` ) {
+        showWindow $procName;
+        return;
+    }
+
+    window -rtf 1 -t $procName $procName;
+    columnLayout ;
+
+    optionMenuGrp -label "Shader Attachment" m2ut_context;
+	menuItem -label "None";
+	menuItem -label "Shading Group";
+	menuItem -label "Surface";
+    optionMenuGrp -e -sl 2 m2ut_context;
+
+    checkBox -label "Link Values" linkValuesCheckBox;
+    checkBox -label "Convert Textures" convertTexturesCheckBox;
+
+    rowLayout -numberOfColumns 3
+    	-columnAlign  1 "center"
+    	-columnAlign  2 "center"
+    	-columnAlign  3 "center"
+    	-columnAttach 1 "both" 	0
+    	-columnAttach 2 "both"  0
+    	-columnAttach 3 "both"  0
+    ;
+    button -label "Apply" -c maya2uberTexPrep;
+    button -label "Hide" -c ("window -e -vis 0 " + $procName);
+    button -label "Close" -c ("deleteUI -wnd " + $procName);
+
+    showWindow $procName;
+}

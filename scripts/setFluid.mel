@@ -1,0 +1,25 @@
+// v20070130 pinkwerks
+global proc
+setFluid(string $attr, vector $v)
+{
+	string $fluids[] = getSelectedShapeType("fluidShape");
+	string $fluid;
+	float $res[];
+	int $i = 0, $j, $k;
+	for ( $fluid in $fluids )
+	{
+		$res =`getAttr ($fluid +".resolution")`;
+		for ( $i = 0; $i < $res[0]; $i ++ )
+		{
+			for ( $j = 0; $j < $res[1]; $j ++ )
+			{
+				for ( $k = 0; $k < $res[2]; $k ++ )
+				{
+					setFluidAttr -at $attr -vv ($v.x) ($v.y) ($v.z) 
+						-xi $i -yi $j -zi $k $fluid;
+				}
+			}
+		}
+	}
+}
+

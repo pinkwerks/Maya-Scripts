@@ -1,0 +1,170 @@
+// duplicateUnique.mel
+//
+// Original Author: David Santiago
+// Version : 200400304 pink_At_asylumfx . com
+//
+// duplicate an object maintaining name correspondence to parent
+//
+// change pipe(|) to underscore(_)
+// system("sed -e y/\\|/_/ " + $fileName + " > " + $fileName + ".bak");
+
+global proc
+subRename(
+    string $search,
+    string $replace
+/*    ,*/
+/*    int $children,*/
+/*    int $all*/
+)
+{
+    string $name;
+    string $newName;
+
+    string $nodes[] = `ls -sl -l`;
+/*    string $nodes[] = listRelatives -ad -c `ls -sl -l`;*/
+    string $parts[];
+
+    int $numSelected = `size $nodes`;
+
+    /* XXX : currently never called */
+/*    if ( $children )*/
+/*	select -hi;*/
+
+    /* XXX : currently never called */
+/*    if ($all)*/
+/*    {*/
+/*	select -ado -hi;*/
+/*	$nodes = `ls -sl -l`;*/
+/*	$numSelected = `size $nodes`;*/
+/*    }*/
+
+/*    print $numSelected;*/
+/*    nl;*/
+
+    for ( $node in $nodes )
+    {
+	string $newPath = "";
+	string $object = $node;
+	string $path[];
+	int $pathSize =`tokenize $object "|" $path`-1;
+	$name = $path[$pathSize];
+
+	nl;
+	print($pathSize + " : pathSize\n");
+
+	for ( $i = 0; $i < $pathSize; $i++ )
+	{
+	    $newPath = ($newPath + "|" + $path[$i]);
+	}
+
+	print ("search = "+ $search); nl;
+	print ("name = "+ $name); nl;
+	print ("replace = "+ $replace); nl;
+
+	$newName = `substitute $search $name $replace`;
+
+	print ("newname = " + $newName); nl;
+
+	/* XXX
+	    this sux, gotta figure out a better way to deal
+	    with nested groups
+	*/
+/*	if ($newName != $name && $pathSize == 1)*/
+/*	{*/
+	    print ("// duplicateUnique : "+ $object +" -> "+ $newName); nl;
+	    catch(`rename $object $newName`);
+/*	}*/
+    }
+    select $replace;
+}
+
+global proc
+duplicateUnique()
+{
+    string $me = "duplicateUnique";
+    string $children[];
+    string $nodes[] = `ls -sl -l`;
+    string $path[];
+    string $copies[];
+    string $copy,$oldName,$newName;
+    int $pathSize;
+    int $stop;
+    int $numSelected = `size $nodes`;
+
+    if ( $numSelected < 1 )
+	error "Nothing selected to duplicate\n";
+
+    for ( $node in $nodes ) 
+    {
+	select $node;
+	$children =`listRelatives -c`;
+	for ( $child in $children )
+	{
+	    $pathSize = `tokenize $node "|" $path` - 1;
+	    $oldName = $path[$pathSize];
+	    $stop =`gmatch $child ($oldName+"*")`;
+
+	    if (!($stop))
+	    {
+		warning($me + " : Messy shape node name, fixing.");
+	    }
+	}
+	$copies =`duplicate -un -rr -st`;
+	$copy = $copies[0];
+
+	select $copy;
+/*	print("copy = " + $copy + "\n");*/
+
+	/* from /asylum/cg/common/maya/scripts/selectKids.mel */
+	selectKids;
+
+/*	select -hi $copy;*/
+/*	select -d $copy;*/
+	// XXX - strange maybe for object parented under objects???
+/*	catchQuiet(`select -d ($copy+"Shape")`);*/
+/*	select -d ($copy+"Shape");*/
+
+	$pathSize =`tokenize $node "|" $path`-1;
+	$oldName = $path[$pathSize];
+	$pathSize =`tokenize $copy "|" $path`-1;
+	$newName = $path[$pathSize];
+
+/*	subRename($oldName, $newName, 0, 0);*/
+	subRename($oldName, $newName);
+    }
+}
+
+global proc
+du_gui()
+{
+    int $numCopies;
+    float $offsetX, $offsetY, $offsetZ;
+    int $mirror, $option1, $option2;
+    string $old, $new;
+    string $window =`window -widthHeight 500 300 -title "Unique Duplicate" -mnb false -mxb false -mb true -rtf true`;
+
+	string $menuLabel = `menu -label "Options" -tearOff false -aob true`;
+	    menuItem -label "Quit" -command ("deleteUI -window " + $window);
+
+	menu -label "Help" -helpMenu true;
+	    menuItem -label "Duplicates objects creating uniquely named children";
+
+    //        menuItem -label "Docs" -command ("$helpWindow= `window -widthHeight 500 300 -title \"Unique Duplicate Help\" -mnb false -mxb false -mb true -rtf true`;columnLayout;text -label \"Duplicates objects creating uniquely named children\";showWindow $helpWindow");
+
+	    columnLayout -w 400;
+
+		text -label "Press ENTER after each entry to set the variable";
+
+		$numCopiesField =`intFieldGrp -numberOfFields 1 -label "Number of Copies" -value1 0 -en false -cc("$numCopies = `intFieldGrp -q -value1 $numCopiesField`")`;
+		$checkBoxGrpField =`checkBoxGrp -numberOfCheckBoxes 3 -labelArray3 "Mirror" "Option2" "Option3" -en false -cc1 ("$mirror=checkBoxGroup -q -value1 $checkBoxGrp`")`;
+		$offsetField=`floatFieldGrp -numberOfFields 3 -label "Cumulative Offset" -value1 0.0 -value2 0.0 -value3 0.00 -en false -cc("$offsetX = `floatFieldGrp -q -value1 $offsetField`;$offsetY = `floatFieldGrp -q -value2 $offsetField`;$offsetZ = `floatFieldGrp -q -value3 $offsetField`")`;
+
+    //	setParent ..;
+    //	rowLayout;
+
+	    button -label "Duplicate" -command ("du($old,$new)");
+
+	    button -label "Cancel" -command ("deleteUI -window " + $window);
+
+    showWindow $window;
+}

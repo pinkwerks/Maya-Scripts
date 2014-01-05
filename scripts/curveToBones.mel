@@ -1,0 +1,130 @@
+
+
+global proc curveToBones() {
+string $selection[] = `ls -sl`;
+for($crvi = 0; $crvi < size($selection); $crvi++) {
+string $curveName = $selection[$crvi];
+string $polypoints = "";
+string $pointlist = "";
+string $ps = "tmp_poly";
+
+int $numCV = `getAttr ($curveName+".degree")` + `getAttr ($curveName+".spans")`;
+int $origCV = 0;
+
+if ($numCV < 2) {
+	confirmDialog -title "Error" -message "Spline must have at least 3 points" -button "Thank you Sir, may I have another." -dismissString "Yes";
+	print "\n\nspline must have at least 3 points\n\n";
+	return;
+}
+
+$newcurveName = "N_" + $curveName;
+string $origcurveName = $curveName;
+
+if ($numCV == 2) {
+	duplicate -name $newcurveName $curveName;
+	$curveName = $newcurveName;
+	$numCV = 3;
+	$origCV = 2;
+	float $secondpoint[] = `xform -q -ws -translation ($newcurveName+".cv[1]")`;
+	$ycoord = $secondpoint[1] - 1;
+	print $secondpoint[0] ; print $ycoord ; print $secondpoint[2];
+	curve -ws -a -p $secondpoint[0] $ycoord $secondpoint[2] $newcurveName;
+}
+
+
+	
+
+for ($i = 0; $i < $numCV; $i++) {
+      float $point[] = `xform -q -ws -translation ($curveName+".cv["+$i+"]")`;
+      $pointlist = " -p " + $point[0] + " " + $point[1] + " " + $point[2] + " ";
+      $polypoints = $polypoints + $pointlist;
+}
+
+eval ("polyCreateFacet -ch on -tx 1 -s 1 " + $polypoints + "-n " + $ps);
+      
+string $loc1 = "tmp_skel_locator";
+string $loc2 = "tmp_skel_locator2";
+string $loc1n = $loc1 + "_normalConstraint1";
+
+string $jn[];
+string $psvt2[];
+for ($i = 0; $i < $numCV; $i++) {
+	int $k=$i + 1; 
+	if ($origCV == 2) {
+	$jn[$i] = ($origcurveName + "_j" + $k); 
+	} else {
+	$jn[$i] = ($curveName + "_j" + $k); 
+	}
+	$psvt2[$i] = $ps + ".vtx[" + $i + "]";
+}
+
+
+string $psvt = $curveName + ".cv[0]";
+float $move[] = `xform -q -ws -translation $psvt`;
+spaceLocator -name $loc1;
+xform -translation $move[0] $move[1] $move[2] $loc1;
+select -r $ps ;
+select -add $loc1 ;
+normalConstraint -weight 1 -aimVector 0 0 1 -upVector 0 1 0 -worldUpVector 0 1 0;
+select -r $loc1n;
+delete ;
+select -cl;
+
+
+duplicate -name $loc2 $loc1;
+select -r $ps ;
+select -add $loc2 ;
+parent;
+select -r $loc2 ;
+move -ls 1 0 0 ;
+move -ls 1 1 0 ;
+rotate 0 0 0 ;
+select -cl;
+
+float $ptpos[];
+
+for ($i = 0; $i < $numCV; $i++) {
+	string $tmpname = $psvt2[$i];
+	float $newmove[] = `xform -q -ws -translation $tmpname`;
+	int $mult = $i * 3;
+	$ptpos[$mult] = $newmove[0];
+	$ptpos[($mult+1)] = $newmove[1];
+	$ptpos[($mult+2)] = $newmove[2];
+}
+
+select -cl;
+
+joint -p $ptpos[0] $ptpos[1] $ptpos[2] -n $jn[0];
+for ($i = 1; $i < $numCV; $i++) {
+	int $kk = $i - 1;
+	int $mult = $i * 3;
+	joint -p $ptpos[$mult] $ptpos[($mult+1)] $ptpos[($mult+2)] -n $jn[$i];
+	joint -e  -zso -oj xyz $jn[$kk]; 
+}
+
+if ($origCV == 2) {
+	select -r $jn[2];
+	delete;
+	select -r $newcurveName;
+	delete;
+}
+select -r $jn[0] ;
+select -add $loc2 ;
+parent;
+select -r $loc1 ;
+select -add $loc2 ;
+pointConstraint -weight 1;
+orientConstraint -weight 1;
+select -r $jn[0] ;
+parent -world;
+select -r $loc2 ;
+delete;
+select -r $loc1 ;
+delete;
+
+
+
+}
+}
+
+curveToBones();

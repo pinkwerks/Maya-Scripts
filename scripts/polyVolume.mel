@@ -1,0 +1,5 @@
+global proc float polyVolume()
+{
+	float $b[] = `polyEvaluate -bc`;
+	return(($b[1]-$b[0])+($b[3]-$b[2])+($b[5]-$b[4]));
+}

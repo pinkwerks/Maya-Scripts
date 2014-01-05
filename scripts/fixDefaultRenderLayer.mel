@@ -1,0 +1,9 @@
+global proc
+fixDefaultRenderLayer()
+{
+	string $obj;
+	string $objs[] = `ls -l`;
+	for ($obj in $objs) {
+		catch(`connectAttr -f defaultRenderLayer.renderInfo ($obj+".renderLayerInfo[0]")`);
+	}
+}

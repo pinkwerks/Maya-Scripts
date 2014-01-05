@@ -1,0 +1,15 @@
+global proc
+lsRenderableCameras ()
+{
+    string $renderable = "";
+    $cameras = `ls -typ camera`;
+    for ( $camera in $cameras ) {
+	$attr = `getAttr ($camera + ".renderable")`;
+	if ($attr == 1) {
+	    print ($camera + "\n");
+	    $renderable = $camera; 
+	}
+    } if ($renderable == "") {
+	error ("you must have a renderable camera"); 
+    }
+}

@@ -1,0 +1,42 @@
+global proc
+vertexsToCurve()
+{
+  string $vtxs[] = `ls -sl -l -fl`;
+  string $numVtxs = `size $vtxs`;
+  int $degree;
+  string $vtx;
+  float $cvp[3];
+  float $cvs[];
+  int $i = 0;
+  string $crvCmd = "curve -d 3 ";
+  string $pts[];
+  string $pt;
+  // get vtx world positions
+  for ( $vtx in $vtxs )
+    {
+      $nodeType = `nodeType $vtx`;
+      if ( $nodeType == "mesh" )
+	{
+	  $cvp = `pointPosition $vtx`;
+	  $pts[$i] = ($cvp[0]+" "+$cvp[1]+" "+$cvp[2]);
+	  print($pts[$i]+"\n");
+	}
+      else
+	warning("vertexsToCurve : Node, "+$vtx+" is not a 'mesh', skipping.");
+      $i++;
+    }
+  print("pts = \n");
+  print($pts);
+  print("\n");
+  print("pts Sorted = \n");
+  print(`sort $pts`);
+  print("\n");
+  for ( $pt in $pts )
+    {
+      $crvCmd = ($crvCmd + "-p "+$pt+" ");
+    }
+  print("crvCmd = \n");
+  print($crvCmd);
+  print("\n");
+  eval $crvCmd;
+}

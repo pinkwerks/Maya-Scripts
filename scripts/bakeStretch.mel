@@ -1,0 +1,45 @@
+global proc
+bakeStretch( )
+{
+    string $skin = "torso_hi";
+    string $controls[] = {
+	"LASH_Main",
+	"L_ST6",
+	"L_ST7",
+	"L_ST8",
+	"L_ST9",
+	"L_ST10"
+    };
+
+    float $s = `size $controls`;
+    float $ty[$s];
+    float $tz[$s];
+    float $rx[$s];
+    float $ry[$s];
+    float $rz[$s];
+
+    for ( $c in $controls ) {
+         $ty = `getAttr ($c + ".ty")`;
+         $tz = `getAttr ($c + ".tz")`;
+         $rx = `getAttr ($c + ".rx")`;
+         $ry = `getAttr ($c + ".ry")`;
+         $rz = `getAttr ($c + ".rz")`;
+
+         setAttr ($c + ".ty") 0;
+         setAttr ($c + ".tz") 0;
+         setAttr ($c + ".rx") 0;
+         setAttr ($c + ".ry") 0;
+         setAttr ($c + ".rz") 0;
+    }
+
+    select $skin;
+    CreateTextureReferenceObject;
+
+    for ( $c in $controls ) {
+         setAttr ($c + ".ty") $ty;
+         setAttr ($c + ".tz") $tz;
+         setAttr ($c + ".rx") $rx;
+         setAttr ($c + ".ry") $ry;
+         setAttr ($c + ".rz") $rz;
+    }
+}

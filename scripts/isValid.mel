@@ -1,0 +1,36 @@
+global proc int 
+isValid(string $l, vector $pos) {
+    $locPosX = `getAttr($l + ".translateX")`;
+/*    $tmp = `getAttr ($l + ".scaleX")`;*/
+    $tmp = (`getAttr ($l + ".scaleX")` * .5);
+/*    $locPosXmin = $locPosX - ($tmp * .5);*/
+/*    $locPosXmax = $locPosX + ($tmp * .5);*/
+    $locPosXmin = $locPosX - $tmp;
+    $locPosXmax = $locPosX + $tmp;
+
+    $locPosY = `getAttr($l + ".translateY")`;
+/*    $tmp = `getAttr ($l + ".scaleX")`;*/
+    $tmp = (`getAttr ($l + ".scaleY")` * .5);
+/*    $locPosYmin = $locPosY - ($tmp * .5);*/
+/*    $locPosYmax = $locPosY + ($tmp * .5);*/
+    $locPosYmin = $locPosY - $tmp;
+    $locPosYmax = $locPosY + $tmp;
+
+    $locPosZ = `getAttr($l + ".translateZ")`;
+/*    $tmp = `getAttr ($l + ".scaleX")`;*/
+    $tmp = (`getAttr ($l + ".scaleZ")` * .5);
+/*    $locPosZmin = $locPosZ - ($tmp * .5);*/
+/*    $locPosZmax = $locPosZ + ($tmp * .5);*/
+    $locPosZmin = $locPosZ - $tmp;
+    $locPosZmax = $locPosZ + $tmp;
+
+    if (
+	$pos.x >= $locPosXmin && $pos.x <= $locPosXmax &&
+	$pos.y >= $locPosYmin && $pos.y <= $locPosYmax &&
+	$pos.z >= $locPosZmin && $pos.z <= $locPosZmax )
+    {
+	return(1);
+    }
+
+    return(0);
+};

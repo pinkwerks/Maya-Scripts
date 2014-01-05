@@ -1,0 +1,10 @@
+  source "/asylum/cg/sky_high/feature/shots/charmaster/bin/mel/skyRigTools.mel"; updateShelf("Bakescene","/asylum/cg/sky_high/feature/shots/charmaster/bin/mel/shelves/shelf_Scenebake.mel");
+
+ 
+
+
+ //scriptNode  -beforeScript  "  source \"/asylum/cg/sky_high/feature/shots/charmaster/bin/mel/skyRigTools.mel\"; updateShelf(\"Bakescene\",\"/asylum/cg/sky_high/feature/shots/charmaster/bin/mel/shelves/shelf_Scenebake.mel\");" -n 
+//skyHighBakeShelfScriptNode;
+// setAttr skyHighBakeShelfScriptNode.scriptType 2;
+// print("\n Bakescene shelf loaded and added to current scene");
+

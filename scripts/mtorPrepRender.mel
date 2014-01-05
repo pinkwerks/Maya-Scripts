@@ -1,0 +1,608 @@
+global proc string MSQ_returnFileName( string $part)
+{
+    string $fileQuery = `file -q -sn`;
+    string $me = "returnFileName";
+    string $nameArray[];
+    string $nameArray2[];
+    string $output = "";
+    int $i = 0;
+
+    if ($fileQuery == "") return "Untitled";
+
+    if ($part == "path") {
+	$numTokens = `tokenize $fileQuery "//" $nameArray`;
+	for (; $i < $numTokens - 1; $i++) {
+	    $output += ("/" + $nameArray[$i]);
+	}
+	return $output;
+    } else if ($part == "shotpath") {
+	$numTokens = `tokenize $fileQuery "//" $nameArray`;
+	for (; $i < 6; $i++) {
+	    $output += ("/" + $nameArray[$i]);
+	}
+	return $output;
+    } else if ($part == "shot") {
+	$numTokens = `tokenize $fileQuery "//" $nameArray`;
+	if ($nameArray[0] == "hosts")
+	    $output = ("/" + $nameArray[7]);
+	else
+	    $output = ("/" + $nameArray[5]);
+	$output = `substitute "/" $output ""`;
+	if ($output == "Untitled")
+		$output = `getenv SHOT`;
+	return $output;
+    } else if ($part == "full") {
+	$numTokens = `tokenize $fileQuery "//" $nameArray`;
+	return $nameArray[$numTokens-1];
+    } else if ($part == "root") {
+	$numTokens = `tokenize $fileQuery "//" $nameArray`;
+	$numTokens2 = `tokenize $nameArray[$numTokens-1] "." $nameArray2`;
+	return $nameArray2[0];
+    } else if ($part == "ext") {
+	$numTokens = `tokenize $fileQuery "." $nameArray`;
+	return $nameArray[$numTokens-1];
+    } else if ($part == "all") {
+	return $fileQuery;
+    } else 
+	error ("usage : "+ $me +" <shot|show|path|full|root|ext|all>");
+}
+
+global proc filenameCMD(string $s)
+{
+    string $file = `textFieldGrp -q -tx filename`;
+    if ( $s == "get" ) {
+	$file = `mtor control getvalue -rg dspyName`;
+	textFieldGrp -e -tx $file filename;
+    }
+    mtor control setvalue -rg dspyName -value $file;
+}
+
+global proc displayCMD(string $s)
+{
+    string $display = `optionMenuGrp -q -v display`;
+    if ( $s == "get" )
+	$display = `mtor control getvalue -rg dspyServer`;
+    if ( $display == "it" ) {
+	mtor control setvalue -rg dspyServer -value "it";
+	mtor control setvalue -rg dspyQuantizeMode -value "none";
+	if ( $s == "get" )
+	    optionMenuGrp -e -sl 1 display;
+    } else if ( $display == "tiff" ) {
+	mtor control setvalue -rg dspyServer -value "tiff";
+	mtor control setvalue -rg dspyQuantizeMode -value "rgba";
+	if ( $s == "get" )
+	    optionMenuGrp -e -sl 2 display;
+    }
+}
+
+global proc primaryCMD(string $s)
+{
+    float $primary = `checkBox -q -v primary`;
+    if ( $s == "get" ) {
+	$primary = `mtor control getvalue -rg dspyPrimaryOnly`;
+	checkBox -e -v $primary primary;
+    }
+    mtor control setvalue -rg dspyPrimaryOnly -value $primary;
+}
+
+global proc shutterAngleCMD(string $s)
+{
+    float $shutterAngle = `floatFieldGrp -q -v1 shutterAngle`;
+    if ( $s == "get" )
+	$shutterAngle = `mtor control getvalue -rg shutterAngle`; 
+    mtor control setvalue -rg shutterAngle -value $shutterAngle;
+}
+
+global proc bitDepthCMD(string $s)
+{
+    int $zero = 0;
+    int $one = 255;
+    int $min = 0;
+    int $max = 255;
+    float $dither = .5;
+    string $mode = "rgba";
+    string $display = `optionMenuGrp -q -v display`;
+    string $bitDepth = `optionMenuGrp -q -v bitDepth`;
+    if ( $s == "get" ) {
+	$mode = `mtor control getvalue -rg dspyQuantizeMode`;
+	$one = `mtor control getvalue -rg dspyQuantizeOne`;
+	$min = `mtor control getvalue -rg dspyQuantizeMin`;
+	$max = `mtor control getvalue -rg dspyQuantizeMax`;
+	$dither = `mtor control getvalue -rg dspyQuantizeDither`;
+    } else {
+	if ( $bitDepth == "8 Bit" ) {
+	    $mode = "none";
+	    $one = 255;
+	    $min = 0;
+	    $max = 255;
+	    $dither = .5;
+	}
+	if ( $bitDepth == "16 Bit" ) {
+	    $mode = "rgba";
+	    $one = 63335;
+	    $min = 0;
+	    $max = 65535;
+	    $dither = .5;
+	}
+	if ( $bitDepth == "Float" ) {
+	    $mode = "rgba";
+	    $one = 0;
+	    $min = 0;
+	    $max = 0;
+	    $dither = 0;
+	}
+	if ( $display == "it" ) {
+	    warning("mtorPrepRender : 'it' doesn't support " + $bitDepth + " turning off quantization.");
+	    $mode = "none";
+	    optionMenuGrp -e -sl 1 bitDepth;
+	}
+	mtor control setvalue -rg dspyQuantizeMode -value $mode;
+	mtor control setvalue -rg dspyQuantizeOne -value $one;
+	mtor control setvalue -rg dspyQuantizeMin -value $min;
+	mtor control setvalue -rg dspyQuantizeMax -value $max;
+	mtor control setvalue -rg dspyQuantizeDither -value $dither;
+    }
+}
+
+global proc planeCMD(string $s)
+{
+    string $plane = `optionMenuGrp -q -v plane`;
+    int $bp = 0;
+    int $fp = 0;
+    if ( $s == "get" ) {
+	$bp = `mtor control getvalue -rg backPlane`;
+	$fp = `mtor control getvalue -rg frontPlane`;
+	if ( $bp == 0 && $fp == 0 )
+	    optionMenuGrp -e -sl 1 plane;
+	if ( $bp == 1 && $fp == 0 )
+	    optionMenuGrp -e -sl 2 plane;
+	if ( $bp == 0 && $fp == 1 )
+	    optionMenuGrp -e -sl 3 plane;
+	if ( $bp == 1 && $fp == 1 )
+	    optionMenuGrp -e -sl 4 plane;
+    }
+    if ( $plane == "none" ) {
+	mtor control setvalue -rg backPlane -value "0";
+	mtor control setvalue -rg frontPlane -value "0";
+    }
+    if ( $plane == "backplane" ) {
+	mtor control setvalue -rg backPlane -value "1";
+	mtor control setvalue -rg frontPlane -value "0";
+    }
+    if ( $plane == "frontplane" ) {
+	mtor control setvalue -rg backPlane -value "0";
+	mtor control setvalue -rg frontPlane -value "1";
+    }
+    if ( $plane == "frontplane + backplane" ) {
+	mtor control setvalue -rg backPlane -value "1";
+	mtor control setvalue -rg frontPlane -value "1";
+    }
+}
+
+global proc motionBlurCMD(string $s)
+{
+    string $motionBlur = `optionMenuGrp -q -v motionBlur`;
+    if ( $s == "get" ) {
+	string $domb = `mtor control getvalue -rg doMotionBlur`;
+	string $cam = `mtor control getvalue -rg blurCamera`;
+	string $sub = `mtor control getvalue -rg blurSubframe`;
+	if ( $domb == "0" ) {
+	    $motionBlur = "none";
+	    optionMenuGrp -e -sl 1 motionBlur;
+	} else if ( $domb == "1" && $cam == "0" && $sub == "0" ) {
+	    $motionBlur = "object";
+	    optionMenuGrp -e -sl 4 motionBlur;
+	} else if ( $domb == "1" && $cam == "1" && $sub == "0" ) {
+	    $motionBlur = "camera";
+	    optionMenuGrp -e -sl 2 motionBlur;
+	} else if ( $domb == "1" && $cam == "1" && $sub == "1" ) {
+	    $motionBlur = "camera + subframe";
+	    optionMenuGrp -e -sl 3 motionBlur;
+	} else if ( $domb == "1" && $cam == "0" && $sub == "1" ) {
+	    $motionBlur = "object + subframe";
+	    optionMenuGrp -e -sl 5 motionBlur;
+	}
+    }
+    if ( $motionBlur == "none") {
+	mtor control setvalue -rg doMotionBlur -value "0";
+    }
+    if ( $motionBlur == "camera") {
+	mtor control setvalue -rg doMotionBlur -value "1";
+	mtor control setvalue -rg blurCamera -value "1";
+	mtor control setvalue -rg blurSubframe -value "0";
+    }
+    if ( $motionBlur == "camera + subframe") {
+	mtor control setvalue -rg doMotionBlur -value "1";
+	mtor control setvalue -rg blurCamera -value "1";
+	mtor control setvalue -rg blurSubframe -value "1";
+    }
+    if ( $motionBlur == "object") {
+	mtor control setvalue -rg doMotionBlur -value "1";
+	mtor control setvalue -rg blurCamera -value "0";
+	mtor control setvalue -rg blurSubframe -value "0";
+    }
+    if ( $motionBlur == "object + subframe") {
+	mtor control setvalue -rg doMotionBlur -value "1";
+	mtor control setvalue -rg blurCamera -value "0";
+	mtor control setvalue -rg blurSubframe -value "1";
+    }
+}
+
+global proc filteringCMD(string $s)
+{
+    string $filtering = `optionMenuGrp -q -v filtering`;
+    if ( $filtering == "none" ) {
+	mtor control setvalue -rg pixelFilter -value "box";
+	mtor control setvalue -rg filterWidthX -value "1";
+	mtor control setvalue -rg filterWidthY -value "1";
+    }
+    if ( $filtering == "normal" ) {
+	mtor control setvalue -rg pixelFilter -value "separable-catmull-rom";
+	mtor control setvalue -rg filterWidthX -value "2";
+	mtor control setvalue -rg filterWidthY -value "2";
+    }
+    if ( $filtering == "sharp" ) {
+	mtor control setvalue -rg pixelFilter -value "sinc";
+	mtor control setvalue -rg filterWidthX -value "4";
+	mtor control setvalue -rg filterWidthY -value "4";
+    }
+}
+
+global proc shadingRateCMD(string $s)
+{
+    string $shadingRate = `optionMenuGrp -q -v shadingRate`;
+    mtor control setvalue -rg shadingRate -value $shadingRate;
+}
+
+
+global proc pixelSamplesCMD(string $s)
+{
+    if ( $s == "get" ) {
+	string $v = `mtor control getvalue -rg pixelSamplesX`;
+	if ( $v == "1" )
+	    optionMenuGrp -e -sl 1 pixelSamples;
+	if ( $v == "3" )
+	    optionMenuGrp -e -sl 2 pixelSamples;
+	if ( $v == "5" )
+	    optionMenuGrp -e -sl 3 pixelSamples;
+	if ( $v == "7" )
+	    optionMenuGrp -e -sl 4 pixelSamples;
+	if ( $v == "9" )
+	    optionMenuGrp -e -sl 5 pixelSamples;
+	if ( $v == "11" )
+	    optionMenuGrp -e -sl 6 pixelSamples;
+    } else {
+	string $pixelSamples = `optionMenuGrp -q -v pixelSamples`;
+	mtor control setvalue -rg pixelSamplesX -value $pixelSamples;
+	mtor control setvalue -rg pixelSamplesY -value $pixelSamples;
+    }
+}
+
+global proc cropCMD(string $s)
+{
+    string $crop = `optionMenuGrp -q -v crop`;
+    string $crowWin = "0 0 0 0";
+    if ( $s == "get" ) {
+	$crop = `mtor control getvalue -rg doCrop`;
+	$cropWin = `mtor control getvalue -rg cropWin`;
+	if ( $crop == "0" ) {
+	    $crop = "none";
+	    optionMenuGrp -e -sl 1 crop;
+	} else {
+/*
+	if ( $cropWin == "0 1 .21 .79" ) {
+*/
+	    optionMenuGrp -e -sl 2 crop;
+	}
+    } else if ( $crop == "none" ) {
+	mtor control setvalue -rg doCrop -value "0";
+    } else if ( $crop == "2.35 Safe" ) {
+	mtor control setvalue -rg doCrop -value "1";
+	mtor control setvalue -rg cropWin -value "0 1 .21 .79";
+    }
+}
+
+global proc rayTraceCMD(string $s)
+{
+    float $rayTrace = `checkBox -q -v rayTrace`;
+    if ( $s == "get" ) {
+	$rayTrace = `mtor control getvalue -rg rayTrace`;
+	checkBox -e -v $rayTrace rayTrace;
+    }
+    mtor control setvalue -rg rayTrace -value $rayTrace;
+}
+
+global proc maxErrorCMD(string $s)
+{
+    float $maxError = `floatFieldGrp -q -v1 maxError`;
+    mtor control setvalue -rg irradianceMaxError -value $maxError;
+}
+
+global proc maxpdCMD(string $s)
+{
+    float $maxpd = `floatFieldGrp -q -v1 maxpd`;
+    mtor control setvalue -rg irradianceMaxPixelDist -value $maxpd;
+}
+
+global proc animationCMD(string $s)
+{
+    float $animation = `checkBox -q -v animation`;
+    if ( $s == "get" ) {
+	$animation = `mtor control getvalue -rg doAnim`;
+	if ( $animation )
+	    checkBox -e -v 1 animation;
+	else
+	    checkBox -e -v 0 animation;
+    } else {
+	if ( $animation ) {
+	    mtor control setvalue -rg doAnim -value 1;
+	    mtor control setvalue -rg alfNRMMin -value 1;
+	    mtor control setvalue -rg alfNRMMax -value 1;
+	    checkBox -e -v 1 netRender; 
+	    mtor control setvalue -rg renderer -value "NetRender";
+	} else {
+	    mtor control setvalue -rg doAnim -value 0;
+	    mtor control setvalue -rg alfNRMMin -value 1;
+	    mtor control setvalue -rg alfNRMMax -value 3;
+	}
+    }
+}
+
+global proc optimizeCMD(string $s)
+{
+    float $optimize = `checkBox -q -v optimize`;
+    if ( $optimize ) {
+	mtor control setvalue -rg dspyBucketX -value 64;
+	mtor control setvalue -rg dspyBucketY -value 64;
+	mtor control setvalue -rg RIBFormat -value "binarygzip";
+    } else {
+	mtor control setvalue -rg dspyBucketX -value 0;
+	mtor control setvalue -rg dspyBucketY -value 0;
+    }
+}
+
+global proc cleanupCMD(string $s)
+{
+    float $cleanup = `checkBox -q -v cleanup`;
+    if ( $cleanup ) {
+	mtor control setvalue -rg jobCleanup -value "rib map tex jmap jtex";
+    } else {
+	mtor control setvalue -rg jobCleanup -value "jmap jtex";
+    }
+}
+
+global proc netRenderCMD(string $s)
+{
+    float $netRender = `checkBox -q -v netRender`;
+    if ( $netRender ) {
+	mtor control setvalue -rg renderer -value "NetRender";
+    } else {
+	mtor control setvalue -rg renderer -value "PRman";
+    }
+}
+
+global proc resolutionCMD(string $s)
+{
+    string $resolution = `optionMenuGrp -q -v resolution`;
+    if ( $s == "get" ) {
+	string $r = `mtor control getvalue -rg dspyRez`;
+	if ( $r == "320 243" )
+	    $resolution = "320 x 243";
+	else if ( $r == "512 389" )
+	    $resolution = "512 x 389";
+	else if ( $r == "640 486" )
+	    $resolution = "640 x 486";
+	else if ( $r == "720 486" )
+	    $resolution = "720 x 486";
+	else if ( $r == "1024 778" )
+	    $resolution = "1024 x 778";
+	else if ( $r == "2048 1556" )
+	    $resolution = "2048 x 1556";
+	else
+	    warning("mtorPrepRender : Can't figure out custom display resolution.  Resetting.  If you need this talk to pink.");
+    }
+
+    if ( $resolution == "720 x 486" ) {
+	mtor control setvalue -rg dspyRez -value "720 486";
+	mtor control setvalue -rg pixelRatio -value ".9";
+	if ( $s == "get" )
+	    optionMenuGrp -e -sl 4 resolution;
+    } else {
+	mtor control setvalue -rg pixelRatio -value "1";
+    }
+    if ($resolution == "320 x 243") {
+	mtor control setvalue -rg dspyRez -value "320 243";
+	if ( $s == "get" )
+	    optionMenuGrp -e -sl 1 resolution;
+    }
+    if ($resolution == "512 x 389") {
+	mtor control setvalue -rg dspyRez -value "512 389";
+	if ( $s == "get" )
+	    optionMenuGrp -e -sl 2 resolution;
+    }
+    if ($resolution == "640 x 486") {
+	mtor control setvalue -rg dspyRez -value "640 486";
+	if ( $s == "get" )
+	    optionMenuGrp -e -sl 3 resolution;
+    }
+    if ($resolution == "1024 x 778") {
+	mtor control setvalue -rg dspyRez -value "1024 778";
+	if ( $s == "get" )
+	    optionMenuGrp -e -sl 5 resolution;
+    }
+    if ($resolution == "2048 x 1556") {
+	mtor control setvalue -rg dspyRez -value "2048 1556";
+	if ( $s == "get" )
+	    optionMenuGrp -e -sl 6 resolution;
+    }
+}
+
+global proc rangeCMD(string $s)
+{
+    int $f[] = `intFieldGrp -q -v range`;
+    mtor control setvalue -rg computeStart -value $f[0];
+    mtor control setvalue -rg computeStop -value $f[1];
+    mtor control setvalue -rg computeBy -value $f[2];
+}
+
+global proc applyGlobals()
+{
+    filenameCMD set;
+    displayCMD set;
+    cropCMD set;
+    bitDepthCMD set;
+    resolutionCMD set;
+    motionBlurCMD set;
+    shutterAngleCMD set;
+    planeCMD set;
+    shadingRateCMD set;
+    pixelSamplesCMD set;
+    filteringCMD set;
+    rayTraceCMD set;
+    animationCMD set;
+    rangeCMD set;
+    optimizeCMD set;
+    cleanupCMD set;
+    netRenderCMD set;
+}
+
+global proc loadGlobals()
+{
+    filenameCMD get;
+    displayCMD get;
+    cropCMD get;
+    bitDepthCMD get;
+    resolutionCMD get;
+    motionBlurCMD get;
+    shutterAngleCMD get;
+    planeCMD get;
+    shadingRateCMD get;
+    pixelSamplesCMD get;
+    filteringCMD get;
+    rayTraceCMD get;
+    animationCMD get;
+    rangeCMD get;
+    optimizeCMD get;
+    cleanupCMD get;
+    netRenderCMD get;
+}
+
+global proc getSceneFileNameCMD()
+{
+    string $filename = `MSQ_returnFileName root`;
+    textFieldGrp -e -text $filename filename;
+    filenameCMD set;
+}
+
+global proc mtorPrepRender()
+{
+    string $procName = "mtorPrepRender";
+    float $fs = `playbackOptions -q -min`;
+    float $fe = `playbackOptions -q -max`;
+
+    if ( `window -exists $procName` ) {
+   	deleteUI -window $procName;     
+    }
+
+    window -menuBar 1 -rtf on -ret -t "MTOR Prep Render" $procName;
+
+    menu -label "Presets";
+	menuItem -label "Final --- this is BROKAN";
+
+    columnLayout;
+
+    //text -label "___DISPLAY___";
+
+    button -label "Get Name from scene file." -c getSceneFileNameCMD;
+    textFieldGrp -label "Display Name" -cc "filenameCMD set" filename;
+
+    optionMenuGrp -label "Render output to : " -cc "displayCMD set" display;
+	menuItem -label "it";
+	menuItem -label "tiff";
+
+    checkBox -label "Primary Display Only" -v 0 -cc "primaryCMD set" primary;
+
+    optionMenuGrp -label "Crop" -cc "cropCMD set" crop; 
+	menuItem -label "none";
+	menuItem -label "2.35 Safe";
+
+    optionMenuGrp -label "Bit Depth" -cc "bitDepthCMD set" bitDepth; 
+	menuItem -label "8 Bit";
+	menuItem -label "16 Bit";
+	menuItem -label "Float";
+
+    optionMenuGrp -label "Resolution" -cc "resolutionCMD set" resolution;
+	menuItem -label "320 x 243";
+	menuItem -label "512 x 389";
+	menuItem -label "640 x 486";
+	menuItem -label "720 x 486";
+	menuItem -label "1024 x 778";
+	menuItem -label "2048 x 1556";
+    optionMenuGrp -e -select 2 resolution;
+
+    //text -label "___CAMERA___";
+
+    optionMenuGrp -label "Motion Blur" -cc "motionBlurCMD set" motionBlur;
+	menuItem -label "none";
+	menuItem -label "camera";
+	menuItem -label "camera + subframe";
+	menuItem -label "object";
+	menuItem -label "object + subframe";
+
+    floatFieldGrp -l "Shutter Angle" -v1 180 -cc "shadingRateCMD set" shutterAngle;
+
+    optionMenuGrp -label "Insert Geometry Plane" -cc "planeCMD set" plane;
+	menuItem -label "none";
+	menuItem -label "backplane";
+	menuItem -label "frontplane";
+	menuItem -label "frontplane + backplane";
+
+    //text -label "___REYES___";
+
+    optionMenuGrp -label "Shading Rate" -cc "shadingRateCMD set" shadingRate;
+	menuItem -label ".5";
+	menuItem -label "1";
+	menuItem -label "5";
+	menuItem -label "10";
+    optionMenuGrp -e -select 2 shadingRate;
+
+    optionMenuGrp -label "Pixel Samples" -cc "pixelSamplesCMD set" pixelSamples;
+	menuItem -label "1";
+	menuItem -label "3";
+	menuItem -label "5";
+	menuItem -label "7";
+	menuItem -label "9";
+	menuItem -label "11";
+    optionMenuGrp -e -select 2 pixelSamples;
+
+    optionMenuGrp -label "Filtering" -cc "filenameCMD set" filtering;
+	menuItem -label "none";
+	menuItem -label "normal";
+	menuItem -label "sharp";
+    optionMenuGrp -e -select 2 filtering;
+
+//    text -label "___RAYS___";
+    checkBox -label "Raytracing" -v 0 -cc "rayTraceCMD set" rayTrace;
+    floatFieldGrp -l "Irradiance Max Error" -v1 -1.0 -cc "maxErrorCMD set" maxError;
+    floatFieldGrp -l "Irradiance Max Pixel Dist." -v1 -1.0 -cc "maxpdCMD set" maxpd;
+
+    //text -label "___ANIMATION___";
+    checkBox -v 0 -label "Animation" -cc "animationCMD set" animation; 
+    intFieldGrp -l "Frame Range" -nf 3 -v1 $fs -v2 $fe -v3 1 -cc "rangeCMD set" range;
+
+    //text -label "___OTHER___";
+    checkBox -v 1 -label "Optimize IO" -cc "optimizeCMD set" optimize; 
+    checkBox -v 1 -label "Clean-Up" -cc "cleanupCMD set" cleanup; 
+    checkBox -v 1 -label "Net Render" -cc "netRenderCMD set" netRender; 
+
+/*
+    button -label "Apply" -c applyGlobals;
+    button -label "Hide" -c ("deleteUI -window " + $procName);
+    button -label "Close" -c ("window -e -vis 0 " + $procName);
+*/
+
+    mtor control getvalue -sync;
+    loadGlobals;
+
+    showWindow $procName;
+}

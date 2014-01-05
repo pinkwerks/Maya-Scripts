@@ -1,0 +1,42 @@
+global proc connectToChan(string $type) {
+	string $sel[] = `ls -sl`;
+	int $sizeSel = `size $sel`;
+	string $exp;
+
+	if ( $sizeSel != 2 )
+	{
+	    error("connectToChan : select chan node, then thing!");
+	}
+
+	string $node = $sel[0];
+	string $obj = $sel[1];
+	string $objS = ($obj + "Shape");
+
+	if ( $type == "camera" )
+	{
+	    connectAttr -f ($node + ".channel_1") ($obj + ".translateX");
+	    connectAttr -f ($node + ".channel_2") ($obj + ".translateY");
+	    connectAttr -f ($node + ".channel_3") ($obj + ".translateZ");
+	    connectAttr -f ($node + ".channel_4") ($obj + ".rotateX");
+	    connectAttr -f ($node + ".channel_5") ($obj + ".rotateY");
+	    connectAttr -f ($node + ".channel_6") ($obj + ".rotateZ");
+	    connectAttr -f ($node + ".channel_7") ($objS + ".focalLength");
+
+	    connectAttr -f ($node + ".channel_9") ($obj + "Shape.horizontalFilmAperture");
+
+	    $exp = ("float $v = `getAttr " + $objS + ".horizontalFilmAperture` / " + $node + ".channel_8;\n");
+	    $exp += ("verticalFilmAperture = $v;\n");
+
+	    expression -s ($exp) -o $objS -ae 1 -uc all;
+
+	    connectAttr -f ($node + ".channel_10") ($obj + "Shape.nearClipPlane");
+	    connectAttr -f ($node + ".channel_11") ($obj + "Shape.farClipPlane");
+	}
+	else if ( $type == "object" )
+	{
+	}
+	else
+	{
+	    error("connectToChan : Unkown type : " + $type);
+	}
+}

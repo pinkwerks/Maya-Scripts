@@ -1,0 +1,183 @@
+// fix motionblur for HW render in maya 2.5
+// note : first create a float array in this case, fuckYouMitch[]
+
+// CREATION
+$freq = 1;
+$lifeMag = 1;
+$lifeMin = 0;
+$lifeMax = $lifeMag;
+fuckYouMitch = clamp($minLife, $lifeMax, abs(noise(position * $freq)) * $lifeMag);
+lifespanPP = 10000; // some big arbitrary number
+
+// RUNTIME
+if (age < fuckYouMitch) {
+	// linear interp from 1.0 to .5 over the lifespan of the particle
+	opacityPP = lerp(1.0, .5, age/fuckYouMitch);
+} else {
+	// shut off the visiblilty of the particle
+	// however it's memory will live on...
+	opacityPP = 0;
+}
+
+//------------------------- CUT HERE -------------------------//
+
+// radial field about a point - non scaled
+// drop "unit()" to add magnitude from the epicenter
+$cx = epicenter.translateX;
+$cy = epicenter.translateY;
+$cz = epicenter.translateZ;
+velocity = unit(position - <<$cx, $cy, $cz>>);
+
+//------------------------- CUT HERE -------------------------//
+
+global vector $rfTriggerPos;
+global float $rfTriggerScale;
+if (frame >= 2 && frame <= 53) {
+$width = 0.3 + 1.2 * linstep(8, 13, frame);
+$pos = lo_hu_cans17_G1PARTShape.worldPosition;
+$d = mag($rfTriggerPos - $pos);
+if (abs($d - $rfTriggerScale) < $width) {
+        $rgb = lo_hu_cans17_G1PARTShape.rgbPP;
+        for ($i=0; $i<1; $i++) {
+                $p = $pos + sphrand(0.3);
+                $life = abs(noise($p * 2.303)) * 1;
+                emit -o reform -position ($p.x) ($p.y) ($p.z)                                -at lifespanPP -fv $life
+                        -at rgbPP -vv ($rgb.x) ($rgb.y) ($rgb.z);        }
+        lo_hu_cans17_G1PARTShape.opacityPP = 1;
+} else {
+        lo_hu_cans17_G1PARTShape.opacityPP = 0;
+}
+} else {
+        lo_hu_cans17_G1PARTShape.opacityPP = 0;
+}
+
+//------------------------- CUT HERE -------------------------//
+
+$myLife = 0;
+$allGood = 0;
+$velMult = 1;
+$phase = 0;
+$lifespanOffset = 0;
+$scale = 1;
+$freq = 3;
+$lifespanMult = 3;
+$locs = `ls -tr "validityLocator*"`;
+
+for ($loc in $locs) {
+    if (isValid($loc, position)) {
+	$allGood ++;
+    }
+}
+
+if ($allGood) {
+    $myLife = ((noise((position * $freq + $phase) * $scale) + 1) * .5) * $lifespanMult + $lifespanOffset;
+}
+
+lifespanPP = $myLife;
+spriteScaleXPP = 1;
+spriteScaleYPP = spriteScaleXPP;
+velocity += (velocity * $myLife) * $velMult;
+rgbPP = 0;
+opacityPP = 1;
+
+// CREATION END
+//
+
+//
+// RUNTIME START
+
+$c = linstep(0, 3.1, age); // 3.1 is 1 * $lifespanMult + $lifespanOffset - change as necissary.
+rgbPP = <<$c * 0, $c, $c * 0>>;
+opacityPP = 1 - linstep(0, lifespanPP, age);
+spriteScaleXPP = 1 - linstep(0, 3.1, age);
+spriteScaleYPP = 1 - linstep(0, 3.1, age);
+
+// RUNTIME END
+//
+
+//------------------------- CUT HERE -------------------------//
+
+int $i, $j;
+float $minDistance = 0.5;//your minimum cutoff value here
+float $seedAdjuster = 1;
+int $sizeParticles = `getAttr particleShape1.count`;
+string $tempString;
+
+seed((frame * $seedAdjuster));
+
+for ($i = 0; $i < $sizeParticles; $i++)
+{
+
+	$rand1 =  rand(-10,10);
+	$rand2 =  rand(-10,10);
+	$rand3 =  rand(-10,10);
+
+	$tempString = ("particle -e -or " + $i + " -at velocity -vv " + $rand1 + " " + $rand2 + " " + $rand3 + " particleShape1");
+	print "rand : ";
+	print $tempString;
+	print "\n\n";
+	eval $tempString;
+}
+
+for ($i = 0; $i < $sizeParticles; $i++)
+{
+	select -r particleShape1.pt[$i];
+	float $partPos1[] = `getParticleAttr -at position particleShape1`;
+	float $partVel1[] = `getParticleAttr -at velocity particleShape1`;
+
+	for ($j = 0; $j < $sizeParticles; $j++)
+	{
+                	select -r particleShape1.pt[$j];
+		float $partPos2[] = `getParticleAttr -at position particleShape1`;
+		float $partVel2[] = `getParticleAttr -at velocity particleShape1`;
+
+                	float $temp1 = $partPos1[0];
+                	float $temp2 = $partPos1[1];
+                	float $temp3 = $partPos1[2];
+                	float $temp4 = $partPos2[0];
+                	float $temp5 = $partPos2[1];
+                	float $temp6 = $partPos2[2];
+
+                	//vector math
+                	float $pos1 = pow($temp4 - $temp1, 2);
+                	float $pos2 = pow($temp5 - $temp2, 2);
+                	float $pos3 = pow($temp6 - $temp3, 2);
+
+                	float $pos4 = $pos1 + $pos2 + $pos3;
+                	float $pos5 = sqrt($pos4);
+
+		if ($pos5 < $minDistance)
+		{
+			float $rand3 = rand(-10,10);
+			float $rand4 = rand(-10,10);
+			float $rand5 = rand(-10,10);
+
+			$tempString = ("particle -e -or " + $i + " -at velocity -vv " + $rand3 + " " + $rand4 + " " + $rand5 + " particleShape1");
+			eval $tempString;
+		}
+
+		else
+			continue;
+	}
+}
+
+//------------------------- CUT HERE ------------------------------//
+
+// turn a ZXY rotation into a -1,1 space vector
+
+vector $point = <<0,0,-1>>;
+$point = rot($point, <<0,1,0>>, deg_to_rad(mainWind.rotateY));
+$newAxis = rot(<<1,0,0>>, <<0,1,0>>, deg_to_rad(mainWind.rotateY));
+$point = rot($point, $newAxis, deg_to_rad(mainWind.rotateX));
+mainWindField.directionX = $point.x;
+mainWindField.directionY = $point.y;
+mainWindField.directionZ = $point.z;
+
+
+
+//------------------------- CUT HERE ------------------------------//
+// rotation based on speed and circumfrance
+float $radius = 4.2;
+if ( frame <= 1 )
+	golfball_mesh.rotateZ = 0;
+golfball_mesh.rotateZ += gball_transform.speed * 360 / (2 * 3.1415 * $radius);

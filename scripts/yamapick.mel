@@ -1,0 +1,97 @@
+/*
+ * yamapick v.9 20020207 <pinkwerks@netscape.net>
+ *
+ * yama broke his arm and had no way to hold down modifiers
+ * for selecting dselecting things... sooo this should help
+ * out his handicaped ass
+ *
+ */
+
+global string $yp_List[];
+
+global proc
+yp_Select() {
+    global string $yp_List[];
+    select $yp_List;
+}
+
+global proc
+yp_Clear() {
+    global string $yp_List[];
+    clear $yp_List;
+    select -cl;
+    warning "List Cleared";
+}
+
+global proc
+yp_Add() {
+    global string $yp_List[];
+    string $sel[] = `ls -sl -l`;
+    $yp_List = `stringArrayCatenate $yp_List $sel`;
+    $yp_List = `stringArrayRemoveDuplicates $yp_List`;
+}
+
+
+global proc
+yp_Remove() {
+    global string $yp_List[];
+    string $sel[] = `ls -sl -l`;
+    $yp_List = ` stringArrayRemove $sel $yp_List`;
+}
+
+global proc
+yamapick()
+{
+    global string $yp_List[];
+    string $procName = "yamapick";
+    string $sel[];
+
+    if (`window -exists $procName`) {
+        showWindow $procName;
+        return;
+    }
+
+    string $window = `window -t "Yama Picker" $procName`;
+
+    string $form = `formLayout -numberOfDivisions 5`;
+
+    string $addB = `button -label "Add Selected" -c "yp_Add"`;
+    string $remB = `button -label "Remove Selected" -c "yp_Remove"`;
+    string $selB = `button -label "Select List" -c "yp_Select"`;
+    string $clrB = `button -label "Clear List" -c "yp_Clear"`;
+    string $clsB = `button -label "Close" -c ("yp_Select ; deleteUI -window " + $procName)`;
+
+    formLayout -edit
+    	-attachForm     $addB	"top" 0
+    	-attachForm     $addB	"left" 0
+    	-attachForm     $addB	"right" 0
+    	-ap		$addB	"bottom"   0 1
+
+    	-ap		$remB	"top"	0 1
+    	-attachForm     $remB	"left"	0
+    	-attachForm     $remB	"right"	0
+    	-ap		$remB	"bottom"   0 2
+
+    	-ap		$selB	"top"	0 2
+    	-attachForm     $selB	"left"	0
+    	-attachForm     $selB	"right"	0
+    	-attachControl	$selB	"bottom" 0 $clrB
+    	-ap		$selB	"bottom" 0 3 
+
+    	-ap		$clrB	"top" 0 3
+    	-attachForm     $clrB	"left" 0
+    	-attachForm     $clrB	"right"	0
+    	-ap		$clrB	"bottom" 0 4
+
+    	-ap		$clsB	"top" 0 4
+    	-attachForm     $clsB	"left" 0
+    	-attachForm     $clsB	"right"	0
+    	-attachForm     $clsB	"bottom" 0
+    $form;
+
+    showWindow $procName;
+
+    if (`size $yp_List` > 0) {
+    	warning "Pick list has members!";
+    }
+}

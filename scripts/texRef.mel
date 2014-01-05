@@ -1,0 +1,31 @@
+// v20060315 pink
+// connect or disconnect texture reference objects.
+//
+global proc
+texRef(string $mode)
+{
+  string $sel[] = `ls -sl -l`;
+  int $ssel = `size $sel`;
+  if ( $ssel != 2 )
+    error("connectReferenceShapes : select source then destination shape!");
+  string $type = `nodeType $sel[0]`;
+  if ( `nodeType $sel[1]` == $type )
+    {
+      switch ($type) {
+	case "mesh":
+	  if ( $mode == "connect" )
+	    connectAttr -f ($sel[0]+".message") ($sel[1]+".referenceObject");
+	  else if ( $mode == "disconnect" )
+	    disconnectAttr ($sel[0]+".message") ($sel[1]+".referenceObject");
+	  else
+	    error("connectReferenceShapes : don't know how to"+$mode);
+	break;
+	default:
+	  error("connectReferenceShapes : don't know how to "+$mode+" "+$type+" nodes.");
+      }
+    }
+  else
+    {
+      error("connectReferenceShapes : nodeTypes differ, aborting.");
+    }
+}

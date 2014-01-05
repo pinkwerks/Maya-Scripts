@@ -1,0 +1,38 @@
+global proc string[] lsSingleChannelFileTextures()
+{
+	string $ft[] = `ls -l -type file`;
+	string $t;
+	string $cmd0 = "shake ";
+	string $cmd1 = " -info 2>&1 | awk -F: '{if(NR==3)print $3}'";
+	string $result;
+	string $fileName;
+	string $ftn;
+	string $proj = `workspace -q -fn`;
+	string $singles[];
+	waitCursor -st 1;
+	for ( $t in $ft )
+	{
+		$ftn = `getAttr ($t +".ftn")`;
+		$ftn = `strip $ftn`;
+		if ( `filetest -r $ftn` )
+		{
+			$result = system($cmd0 + $ftn + $cmd1);
+			$result = `strip $result`;
+//			print ("// "+ $t +" "+ $ftn +" is type "+ $result +".\n");
+		}
+		else if ( `filetest -r ($proj + $ftn)` )
+		{
+			$result = system($cmd0 + $proj + $ftn + $cmd1);
+			$result = `strip $result`;
+//			print ("// "+ $t +" "+ $proj + $ftn +" is type "+ $result +".\n");
+		}
+		else
+		{
+//			print ("// "+ $t +" is unreadable.\n");
+		}
+		if ( $result == "BW" )
+			$singles[`size $singles`] = $t;
+	}
+	waitCursor -st 0;
+	return $singles;
+}

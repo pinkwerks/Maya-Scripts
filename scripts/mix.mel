@@ -1,0 +1,9 @@
+global proc vector
+mix(vector $v0, vector $v1, float $val)
+{
+    float $x = lerp($v0.x, $v1.x, $val);
+    float $y = lerp($v0.y, $v1.y, $val);
+    float $z = lerp($v0.z, $v1.z, $val);
+    return <<$x, $y, $z>>;
+}
+

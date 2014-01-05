@@ -1,0 +1,780 @@
+//exportaDiscreet.mel
+//Ver. 1.2 Dec 4 2000
+//Ollin Studio - Mexico City
+//www.ollinstudio.com
+//
+//------------
+//Maya2Discreet mel, the camera animation is translated into
+//an action setup that can be used with flint or flame versions 
+//6.x and 7.0, as well as inferno versions 3.x and 4.0.
+//Older versions not yet tested but it should work.
+//
+//Some libraries from Maya Live that I have changed for work
+//with any camera
+//It's quite easy to change it to work with objects or layers... I
+//Just need time...    
+//
+//I know it's not that clean as it should be, if you have any question
+//please send me an e-mail
+//CI - Oct 2000
+//--------------
+//We have now made the mel camera translation script more
+//user-friendly. 
+//
+//Regarding the FFI to maya camera translator... we will get around 
+//to doing this one day, for we do realise how useful it can be to the 
+//whole FFI community.
+//
+//New Features:
+//
+//-User input of frame size and aspect ratio (these get written to the 
+//action file and have nothing to do with your maya rendering 
+//parameters)
+//-If a camera is selected, it is automatically used. If not, the user 
+//is prompted to chose one from a list.
+//-The date problem that had to be edited by hand has been solved
+//
+//Known issues:
+//
+//-Since units in maya and units in FFI are different, the camera 
+//movements are really small in FFI-space (about 100 times!)
+//-The action template that was originally used to generate the 
+//script contains some empty layers. These can be deleted from 
+//the layer-list in action if they stand in your way in the channel 
+//animation window. They will be taken away in a future 
+//release - whenever we get around to doing it
+//
+//Usage Tip:
+//
+//When placing objects/images within FFI space which are going 
+//to interact with your maya render it is a good idea to get some 
+//reference xyz coordinates from maya so that you place things 
+//correctly (distance from camera). Otherwise it will be a tedious 
+//3d trial and error process.
+//
+//ES
+//--------
+//Built by Charlie Iturriaga                       citurriaga@ollinstudio.com
+//Thanks to Eric Schaechter "chester"    eschaechter@ollinstudio.com
+//With help of Felipe Esquivel                   fesquivel@ollinstudio.com
+//--------
+//
+//
+//
+//
+//Use:
+//Just Select a camera and place the time line in the last frame of
+//the camera animation (else a pop-up window appear), then execute the mel. 
+//A file browser will open for you to select the path and the name of the file.
+//Don't forget to name it <whatever>.action
+//Then open it in inferno...
+//Easy ah? 
+
+global int $endFrame = 1;
+global int $startFrame = 1;
+global int $opSys = 1; // (1) Irix or (2) Windows NT
+global int $Width = 720;
+global int $Height = 486;
+global float $Aspect = 1.333;
+
+global proc mlComputeVerticalFOV( string $dst )
+{
+    // work in degrees
+    string $currAngleUnit = `currentUnit -q -angle`;
+    currentUnit -angle deg;
+
+    // add the vertical field of view attribute if it hasn't been
+    // already
+    //
+    string $attr[] = `listAttr -st "verticalFieldOfView" $dst`;
+    if( $attr[0] == "" ) {
+	addAttr -sn "vfov" -ln "verticalFieldOfView"
+		-attributeType "doubleAngle" $dst;
+    } else {
+	// remove any keys that are there
+	cutKey -time ":" -clear ($dst + ".verticalFieldOfView");
+    }
+
+    // foreach focal length keyframe, add a key to the vfov attribute
+    int $nKeys = `keyframe -q -keyframeCount ($dst +".focalLength")`;
+    int $index;
+    string $srcAttr = ($dst + ".focalLength");
+    string $dstAttr = ($dst + ".verticalFieldOfView");
+    float $fov, $fl[], $time[];
+    // convert vfa to millimeters
+    float $vfa = `getAttr ($dst + ".verticalFilmAperture")` * 25.4;
+
+    if( $nKeys <= 1 ) {
+	$fl[0]  = `getAttr $srcAttr`;
+	$fov = 2 * ( atan2d( ($vfa / 2), $fl[0] ) );
+
+	setAttr $dstAttr $fov;
+
+    } else {
+	// convert all keys on focal length in case there are keys
+	// outside the range controlling the shape of the curve and I
+	// don't want to sample the curve yet
+	//
+	for( $index = 0; $index < $nKeys; $index++ ) {
+	    $time = `keyframe -in $index -q -tc $srcAttr`;
+	    $fl   = `keyframe -in $index -q -vc $srcAttr`;
+
+	    $fov = 2 * ( atan2d( ($vfa / 2), $fl[0] ) );
+
+	    setKeyframe -t $time[0] -at "vfov" -v $fov $dst;
+	}
+    }
+
+    // restore angle units
+    currentUnit -angle $currAngleUnit;
+}
+
+
+global proc
+mlCopyCurve( string $sourceObj, string $sourceAttr, 
+             string $destObj, string $destAttr )
+{
+    setAttr ($destObj+"."+$destAttr)
+            `getAttr -t 0 ($sourceObj+"."+$sourceAttr)`;
+    if( `copyKey -time ":" -attribute $sourceAttr $sourceObj` > 0 ) {
+        pasteKey -option "replaceCompletely"
+                 -attribute $destAttr $destObj;
+    }
+}
+
+global proc string [] convierteCamara2Nodos( string $srcCam )
+{
+    global int $startFrame;
+    global int $endFrame;
+    string $ret[];
+
+
+    ///////////////////////////////////
+    // get list of selected objects
+    string $origSelectionSet[];
+
+    $origSelectionSet = `ls -selection`;
+
+    // - now get the selected objects again
+    string $selectionSet[] = `ls -selection`;
+
+    // - create and initialize a new camera
+    // string $camera[] = `camera`;
+
+    camera -centerOfInterest 10 -orthographic 0 -orthographicWidth 30;
+    cameraMakeNode 2 "";
+
+    // get the camera shape and interest
+    string $sel[] = `ls -selection`;
+    string $camTransform = $sel[0];
+    string $interest     = $sel[1];
+
+    string $camera[] = `listRelatives -parent $sel[0]`; // group
+    string $group = $camera[0];
+
+    string $shape[] = `listRelatives -shapes $camTransform`;
+    $camShape = $shape[0];
+
+    // - copy translate and focal length attributes
+    string $src = $srcCam;
+    string $dst = $camTransform;
+
+    mlCopyCurve $src "translateX"	$dst "translateX";
+    mlCopyCurve $src "translateY"	$dst "translateY";
+    mlCopyCurve $src "translateZ"	$dst "translateZ";
+
+    // - copy shape attributes
+    $shape = `listRelatives -shapes $srcCam`;
+
+    $src = $shape[0];
+    $dst = $camShape;
+
+    mlCopyCurve $src "focalLength"	    	$dst "focalLength";
+
+    setAttr ($dst + ".horizontalFilmAperture") `getAttr ($src + ".horizontalFilmAperture")`;
+    setAttr ($dst + ".verticalFilmAperture")   `getAttr ($src + ".verticalFilmAperture")`;
+
+    // 2.0
+    setAttr ($dst + ".lensSqueezeRatio")       `getAttr ($src + ".lensSqueezeRatio")`;
+    // 1.5 setAttr ($dst + ".squeezeRatio")    `getAttr ($src + ".squeezeRatio")`;
+
+    // create a vertical field of view attribute in case that is
+    // needed for the export format
+    //
+    mlComputeVerticalFOV( $dst );
+
+
+    // now the interesting part - the interest point and the twist
+    //
+    // get the world space location of the interest by
+    // multiplying (0, 0, -10) through camera transform.
+    //
+
+    // work in cm and degrees
+    string $currLinUnit = `currentUnit -q -linear`;
+    currentUnit -linear cm;
+    string $currAngleUnit = `currentUnit -q -angle`;
+    currentUnit -angle deg;
+
+    int $fr;
+    float $flt[];
+    vector $vForward, $vSideways, $vSideO;
+    vector $vYPos = << 0, 1, 0 >>;
+    float $mW[];
+    float $twist;
+    int $progIncr = ($endFrame - $startFrame + 1) / 20.0;
+
+    for( $fr = $startFrame; $fr <= $endFrame; $fr++ ) {
+
+
+
+	// get vectors from the camera transform matrix
+	//
+	$mW = `getAttr -t $fr ($srcCam +".wm")`;
+	$vForward  = << $mW[8],  $mW[9],  $mW[10] >>;
+	$vSideways = << $mW[0],  $mW[1],  $mW[2] >>;
+
+	$flt[0] = $mW[12] - 10 * $mW[8];
+	$flt[1] = $mW[13] - 10 * $mW[9];
+	$flt[2] = $mW[14] - 10 * $mW[10];
+
+	// set the location of the interest
+	//
+	setKeyframe -t $fr -at "tx" -v $flt[0] $interest;
+	setKeyframe -t $fr -at "ty" -v $flt[1] $interest;
+	setKeyframe -t $fr -at "tz" -v $flt[2] $interest;
+
+	// compute the twist
+
+	// ask Greg!
+	$vSideO = unit( cross( $vForward, $vYPos ) );
+
+	$twist = asind( dot( unit( $vForward ), cross( $vSideways, $vSideO ) ) );
+
+	setKeyframe -t $fr -at "twist" -v $twist $group;
+    }
+
+    ////////////////////
+    // restore selection
+    select -replace $origSelectionSet;
+
+    // restore units
+    currentUnit -linear $currLinUnit;
+    currentUnit -angle  $currAngleUnit;
+
+    return { $group, $camTransform, $camShape, $interest };
+}
+
+
+// Basic structure of animated camera action file
+// - prolog
+// 	      - image size
+// 	      - scene settings: start, end, interlaced
+//
+// - node database
+//	      - Node Group
+//	      - Node Axis     - node holding all points
+//	      - Node Axis     - node holding single point
+//	      	  ...
+//
+// - layers
+//	      - ???
+//
+// - camera channels
+//	      - Channel position/x, y, z
+//	      - Channel interest/x, y, z
+//	      - Channel roll
+//	      - Channel fov
+//	      - Channel near, far
+
+
+proc outputProlog( int $file, string $creation )
+{
+
+    
+    global int $startFrame, $endFrame, $Width, $Height;
+    global float $Aspect;
+    int $size[] = {$Width, $Height};
+
+    fprint( $file, "Module Action\n" );
+    fprint( $file, "Program inferno\n" );
+    fprint( $file, "Version 1.4.1IR\n" );
+    fprint( $file, "CreationDate " +$creation +"\n\n" );
+
+    fprint( $file, "FrameHeight " +$size[0] +"\n" );
+    fprint( $file, "FrameWidth "  +$size[1] +"\n" );
+    fprint( $file, "FrameAspectRatio " + $Aspect);
+
+    fprint( $file, "\tCurrentFrame " + $startFrame + "\n" );
+    fprint( $file, "\tMaxFrames " + ($endFrame - $startFrame + 1) + "\n" );
+    fprint( $file, "\tFieldRenderingMode no\n" );
+    fprint( $file, "\tShadingMode no\n" );
+    fprint( $file, "\tTextureMode no\n" );
+    fprint( $file, "\tWireframeMode no\n" );
+    fprint( $file, "\tZBufferMode yes\n" );
+    fprint( $file, "\tLinetestMode no\n" );
+    fprint( $file, "\tCurrentCamera 0\n" );
+    fprint( $file, "\tGridMode 0\n" );
+    fprint( $file, "\tPlayLockMode yes\n" );
+    fprint( $file, "\tSafeActionMode no\n" );
+    fprint( $file, "\tSafeTitleMode no\n" );
+    fprint( $file, "\tQuickResolution 6\n" );
+    fprint( $file, "\tAntiAliasingLevel 0\n" );
+    fprint( $file, "\tAntiAliasingSoftness 1\n" );
+    fprint( $file, "\tMotionBlurMode no\n" );
+    fprint( $file, "\tMotionBlurShutter 1\n" );
+    fprint( $file, "\tMotionBlurSamples 5\n" );
+    fprint( $file, "End\n\n" );
+}
+
+proc outputChannel( int $file, string $prefix,
+		    string $mayaAttr, string $discAttr, float $globalScale )
+{
+    global int $endFrame, $startFrame;
+    string $curves[];
+
+    fprint( $file, $prefix+"Channel " +$discAttr +"\n" );
+
+    if( $mayaAttr != "" ) {
+	fprint( $file, $prefix+"\tValue " + (`getAttr $mayaAttr` * $globalScale)
+		+ "\n" );
+
+	$curves = `listConnections -s true -d false $mayaAttr`;
+
+	if( size( $curves ) > 0 ) {
+	    // has an anim curve
+
+	    int $fr;
+	    int $key = 0;
+
+	    fprint( $file, $prefix+"\tSize " + ($endFrame - $startFrame + 1) +"\n" );
+	    for( $fr = $startFrame; $fr <= $endFrame; $fr++ ) {
+		fprint( $file, $prefix+"\tKey " + ($key++) +"\n" );
+		fprint( $file, $prefix+"\t\tFrame " + $fr +"\n" );
+		fprint( $file, $prefix+"\t\tValue "
+			+ (`getAttr -t $fr $mayaAttr` * $globalScale) +"\n" );
+		fprint( $file, $prefix+"\t\tEnd\n" );
+	    }
+	}
+    }
+    fprint( $file, $prefix+"\tEnd\n" );
+}
+
+// this should be just outputChannel but in the object tracking case
+// we can't figure out that a particular attribute is animated
+// (connected, actually) if the parent. Eg. compose.translate is
+// connected to object1.translate and object1.tx doesn't know it is
+// connected. So assume it's animated and output it frame by frame.
+//
+proc outputAnimChannel( int $file, string $prefix,
+		    string $mayaAttr, string $discAttr, float $globalScale )
+{
+    global int $startFrame, $endFrame;
+    string $curves[];
+
+    fprint( $file, $prefix+"Channel " +$discAttr +"\n" );
+
+    if( $mayaAttr != "" ) {
+	fprint( $file, $prefix+"\tValue " + (`getAttr $mayaAttr` * $globalScale)
+		+ "\n" );
+	int $fr;
+	int $key = 0;
+	fprint( $file, $prefix+"\tSize " + ($endFrame - $startFrame + 1) +"\n" );
+	for( $fr = $startFrame; $fr <= $endFrame; $fr++ ) {
+	    fprint( $file, $prefix+"\tKey " + ($key++) +"\n" );
+	    fprint( $file, $prefix+"\t\tFrame " + $fr +"\n" );
+	    fprint( $file, $prefix+"\t\tValue "
+		    + (`getAttr -t $fr $mayaAttr` * $globalScale) +"\n" );
+	    fprint( $file, $prefix+"\t\tEnd\n" );
+	}
+    }
+    fprint( $file, $prefix+"\tEnd\n" );
+}
+
+
+proc outputChannelValue( int $file, string $prefix, float $value,
+			 string $discAttr, float $globalScale )
+{
+    fprint( $file, $prefix+"Channel " +$discAttr +"\n" );
+    fprint( $file, $prefix+"\tValue " + ($value * $globalScale) + "\n" );
+    fprint( $file, $prefix+"\tEnd\n" );
+}
+
+
+proc outputStaticChannel( int $file, string $prefix, string $mayaAttr,
+			  string $discAttr, float $globalScale )
+{
+    float $value = `getAttr $mayaAttr`;
+    outputChannelValue( $file, $prefix, $value, $discAttr, $globalScale );
+}
+
+
+
+    // - node database
+    //	      - Node Group
+    //	      - Node Axis     - node holding all points
+    //	      - Node Axis     - node holding single point
+    //	      	  ...
+    //
+proc outputStaticGroup( int $file, int $numPoints )
+{
+    global int $endFrame;
+
+    fprint( $file, "Node Group\n" );
+    fprint( $file, "\tName scene\n" );
+    fprint( $file, "\tNumber 0\n" );
+    fprint( $file, "\tChild 1\n" );
+    fprint( $file, "\tPosX 0\n" );
+    fprint( $file, "\tPosY 0\n" );
+    fprint( $file, "\tFlags HIDDEN&SCHEMATIC_HIDDEN\n" );
+    fprint( $file, "\tSpecifics\n" );
+    fprint( $file, "\t{\n" );
+    fprint( $file, "\t}\n" );
+    fprint( $file, "End\n" );
+    fprint( $file, "Node Axis\n" );
+    fprint( $file, "\tName Points-ML\n" );
+    fprint( $file, "\tNumber 1\n" );
+    int $i;
+    for( $i = 2; $i < $numPoints + 2; $i++ ) {
+	fprint( $file, "\tChild " + $i + "\n" );
+    }
+    fprint( $file, "\tMotionPath no\n" );
+    fprint( $file, "\tPosX 100\n" );
+    fprint( $file, "\tPosY -50\n" );
+    fprint( $file, "\tSpecifics\n\t{\n" );
+
+    outputChannel( $file, "\t\t", "", "position/x", 1.0 );
+    outputChannel( $file, "\t\t", "", "position/y", 1.0 );
+    outputChannel( $file, "\t\t", "", "position/z", 1.0 );
+    outputChannel( $file, "\t\t", "", "rotation/x", 1.0 );
+    outputChannel( $file, "\t\t", "", "rotation/y", 1.0 );
+    outputChannel( $file, "\t\t", "", "rotation/z", 1.0 );
+    outputChannel( $file, "\t\t", "", "position/speed", 1.0 );
+    outputChannel( $file, "\t\t", "", "scaling/x", 1.0 );
+    outputChannel( $file, "\t\t", "", "scaling/y", 1.0 );
+    outputChannel( $file, "\t\t", "", "scaling/z", 1.0 );
+    outputChannel( $file, "\t\t", "", "shearing/x", 1.0 );
+    outputChannel( $file, "\t\t", "", "shearing/y", 1.0 );
+    outputChannel( $file, "\t\t", "", "shearing/z", 1.0 );
+
+    fprint( $file, "\t\tChannelEnd\n" );
+
+    fprint( $file, "\t\tPath position\n" );
+    fprint( $file, "\t\t\tDimension 3\n" );
+    fprint( $file, "\t\t\tClosed no\n" );
+    fprint( $file, "\t\t\tSize 0\n" );
+    fprint( $file, "\t\t\tEnd\n" );
+
+    fprint( $file, "\t}\n" );
+
+    fprint( $file, "End\n" );
+
+}
+
+proc outputAnimatedGroup( int $file, int $numPoints, string $group,
+			  float $globalScale )
+{
+    global int $startFrame, $endFrame;
+
+    fprint( $file, "Node Group\n" );
+    fprint( $file, "\tName scene\n" );
+    fprint( $file, "\tNumber 0\n" );
+    fprint( $file, "\tChild 1\n" );
+    fprint( $file, "\tPosX 0\n" );
+    fprint( $file, "\tPosY 0\n" );
+    fprint( $file, "\tFlags HIDDEN&SCHEMATIC_HIDDEN\n" );
+    fprint( $file, "\tSpecifics\n" );
+    fprint( $file, "\t{\n" );
+    fprint( $file, "\t}\n" );
+    fprint( $file, "End\n" );
+    fprint( $file, "Node Axis\n" );
+    fprint( $file, "\tName Objetoso\n" );
+    fprint( $file, "\tNumber 1\n" );
+    int $i;
+    for( $i = 2; $i < $numPoints + 2; $i++ ) {
+	fprint( $file, "\tChild " + $i + "\n" );
+    }
+    fprint( $file, "\tMotionPath no\n" );
+    fprint( $file, "\tPosX 100\n" );
+    fprint( $file, "\tPosY -50\n" );
+    fprint( $file, "\tSpecifics\n\t{\n" );
+
+    // assume these channels are animated
+    //
+    outputAnimChannel( $file, "\t\t", ($group +".translateX"), "position/x", $globalScale );
+    outputAnimChannel( $file, "\t\t", ($group +".translateY"), "position/y", $globalScale );
+    outputAnimChannel( $file, "\t\t", ($group +".translateZ"), "position/z", $globalScale );
+    // output a speed of 0 - 100 ???
+
+    fprint( $file, "\t\tChannel position/speed\n" );
+    fprint( $file, "\t\t\tValue 0\n" );
+    fprint( $file, "\t\t\tSize 2\n" );
+
+    fprint( $file, "\t\t\tKey 0\n" );
+    fprint( $file, ("\t\t\t\tFrame "+ $startFrame + "\n") );
+    fprint( $file, "\t\t\t\tValue 0\n" );
+    fprint( $file, "\t\t\t\tValueLock yes\n" );
+    fprint( $file, "\t\t\t\tEnd\n" );
+
+    fprint( $file, "\t\t\tKey 1\n" );
+    fprint( $file, ("\t\t\t\tFrame "+ $endFrame + "\n") );
+    fprint( $file, "\t\t\t\tValue 100\n" );
+    fprint( $file, "\t\t\t\tValueLock yes\n" );
+    fprint( $file, "\t\t\t\tEnd\n" );
+
+    fprint( $file, "\t\t\tEnd\n" );
+
+    outputAnimChannel( $file, "\t\t", ($group +".rotateX"), "rotation/x", 1.0 );
+    updateProgressPercentDone( 40 );
+    outputAnimChannel( $file, "\t\t", ($group +".rotateY"), "rotation/y", 1.0 );
+    updateProgressPercentDone( 50 );
+    outputAnimChannel( $file, "\t\t", ($group +".rotateZ"), "rotation/z", 1.0 );
+    updateProgressPercentDone( 60 );
+    outputChannel( $file, "\t\t", "", "scaling/x", 1.0 );
+    outputChannel( $file, "\t\t", "", "scaling/y", 1.0 );
+    outputChannel( $file, "\t\t", "", "scaling/z", 1.0 );
+    outputChannel( $file, "\t\t", "", "shearing/x", 1.0 );
+    outputChannel( $file, "\t\t", "", "shearing/y", 1.0 );
+    outputChannel( $file, "\t\t", "", "shearing/z", 1.0 );
+    fprint( $file, "\t\tChannelEnd\n" );
+    fprint( $file, "\t\tPath position\n" );
+    fprint( $file, "\t\t\tDimension 3\n" );
+    fprint( $file, "\t\t\tClosed no\n" );
+    fprint( $file, "\t\t\tSize 0\n" );
+    fprint( $file, "\t\t\tEnd\n" );
+    fprint( $file, "\t}\n" );
+    fprint( $file, "End\n" );
+}
+
+proc outputPoint( int $file, string $group, int $objNum, float $globalScale )
+{
+    global int $endFrame;
+
+    fprint( $file, "Node Axis\n" );
+    fprint( $file, "\tName "+ $group +"\n" );
+    fprint( $file, "\tNumber "+$objNum+"\n" );
+    fprint( $file, "\tMotionPath no\n" );
+    fprint( $file, "\tPosX "+ (($objNum - 1) * 100) +"\n" );
+    fprint( $file, "\tPosY -150\n" );
+    fprint( $file, "\tSpecifics\n\t{\n" );
+    outputStaticChannel( $file, "\t\t", ($group +".locationX"), "position/x", $globalScale );
+    outputStaticChannel( $file, "\t\t", ($group +".locationY"), "position/y", $globalScale );
+    outputStaticChannel( $file, "\t\t", ($group +".locationZ"), "position/z", $globalScale );
+    fprint( $file, "\t\tChannel position/speed\n" );
+    fprint( $file, "\t\t\tValue 0\n" );
+    fprint( $file, "\t\t\tSize 1\n" );
+    fprint( $file, "\t\t\tKey 0\n" );
+    fprint( $file, "\t\t\t\tFrame 1\n" );
+    fprint( $file, "\t\t\t\tValue 0\n" );
+    fprint( $file, "\t\t\t\tValueLock yes\n" );
+    fprint( $file, "\t\t\t\tEnd\n" );
+    fprint( $file, "\t\t\tEnd\n" );
+    outputChannel( $file, "\t\t", "", "rotation/x", 1.0 );
+    outputChannel( $file, "\t\t", "", "rotation/y", 1.0 );
+    outputChannel( $file, "\t\t", "", "rotation/z", 1.0 );
+    outputChannel( $file, "\t\t", "", "scaling/x", 1.0 );
+    outputChannel( $file, "\t\t", "", "scaling/y", 1.0 );
+    outputChannel( $file, "\t\t", "", "scaling/z", 1.0 );
+    outputChannel( $file, "\t\t", "", "shearing/x", 1.0 );
+    outputChannel( $file, "\t\t", "", "shearing/y", 1.0 );
+    outputChannel( $file, "\t\t", "", "shearing/z", 1.0 );
+    fprint( $file, "\t\tChannelEnd\n" );
+    fprint( $file, "\t\tPath position\n" );
+    fprint( $file, "\t\t\tDimension 3\n" );
+    fprint( $file, "\t\t\tClosed no\n" );
+    fprint( $file, "\t\t\tSize 0\n" );
+    fprint( $file, "\t\t\tEnd\n" );
+    fprint( $file, "\t}\n" );
+    fprint( $file, "End\n" );
+}
+
+    // - layers
+    //	      - ???
+
+proc outputLayers( int $file )
+{
+    int $i;
+
+    fprint( $file, "BackClipSlip 0\n" );
+    fprint( $file, "LayerCount 2\n\n" );
+    for( $i = 0; $i < 2; $i++ ) {
+	fprint( $file, "Layer " + $i + "\n\tEnd\n" );
+    }
+    fprint( $file, "LayerEnd\n\n" );
+}
+
+
+
+global proc int exportaaDiscreetScalado( string $filename, float $globalScale )
+{
+    global int $startFrame, $endFrame, $opSys;
+    string $creationDate;
+ 
+
+    string $origSelectionSet[];
+
+    ///////////////////////////////////
+    // get list of selected objects
+    $origSelectionSet = `ls -selection`;
+
+    // - now get the selected objects again
+    string $selectionSet[] = `ls -selection`;
+
+    // - get scene name for naming points and camera
+    string $sceneName = `file -q -sn`;
+
+    ///////////////////////////////////
+    // copy shot camera to an exportable camera
+
+    string $currShotCamera = $origSelectionSet[0];
+    string $currShotCameraShape[] = `listRelatives -shapes $currShotCamera`;
+
+    /////////////////////////////////////////////////////////////////////
+    // Sucess of $creationDate depends on the OS we are working, so we
+    // need to choose the system instruction between Irix and Windows NT.
+    // The date _must_ be formated to test the NT result
+
+    if ($opSys == 1) $creationDate = `system "date '+%A %B %e %T %Y'"`; // Irix
+    else $creationDate = `system "date /t"`;                            // NT
+
+    currentTime -edit $startFrame;
+
+    int $file = fopen( $filename, "w" );
+    if ( $file == 0 ) {
+        print( "failed to open file "+$filename+" for writing\n" );
+        return -1;
+    }
+
+    outputProlog( $file, $creationDate );
+    fprint( $file, "#\n# node database\n#\n" );
+    fprint( $file, "ConcreteFileVersion 1.0\n" );
+    fprint( $file, "CreationDate " +$creationDate +"\n\n" );
+    
+    string $group = "nurbsEsf";
+
+	// outputAnimatedGroup( $file, 1, $group, $globalScale );
+	// outputPoint( $file,  $group, 1, $globalScale );
+
+
+    fprint( $file, "#\n# layers\n#\n" );
+    fprint( $file, "ActionLayerFileVersion 1.0\n" );
+    fprint( $file, "CreationDate " +$creationDate +"\n\n" );
+    
+    outputLayers( $file );
+
+    fprint( $file, "#\n# camera channels\n#\n" );
+    fprint( $file, "ChannelFileVersion 1.4\n" );
+    fprint( $file, "CreationDate " +$creationDate +"\n\n" );
+
+   
+    // output an animated two-node camera 
+    string $conv[] = `convierteCamara2Nodos $currShotCamera`;
+    // [0] group node with twist
+    // [1] camera with tx, ty, tz
+    // [2] cameraShape node with vfov
+    // [3] interest (locator) with tx, ty, tz
+
+
+    outputChannel( $file , "", ($conv[1] +".tx"), "position/x", $globalScale );
+    outputChannel( $file, "", ($conv[1] +".ty"), "position/y", $globalScale );
+    outputChannel( $file, "", ($conv[1] +".tz"), "position/z", $globalScale );
+    outputChannel( $file, "", ($conv[3] +".tx"), "interest/x", $globalScale );
+    outputChannel( $file, "", ($conv[3] +".ty"), "interest/y", $globalScale );
+    outputChannel( $file, "", ($conv[3] +".tz"), "interest/z", $globalScale );
+    outputChannel( $file, "", ($conv[0] +".twist"), "roll", 1.0 );
+
+    // output vertical field of view in degrees
+    outputChannel( $file, "", ($conv[2] +".vfov"), "fov", 1.0 );
+    delete $conv;
+    outputChannel( $file, "", "", "near", 1.0 );
+    outputChannel( $file, "", "", "far", 1.0 );
+    fprint( $file, "ChannelEnd\n" );
+
+    fprint( $file, "ConcreteEnd\n" );
+
+    fclose $file;
+    return 1;
+}
+
+global proc GetInfo()
+{
+ global int $startFrame;
+ global int $endFrame;
+ global float $Aspect;
+ global int $Width;
+ global int $Height;
+ global int $opSys;
+
+ ///////////////////////
+ // get the input values
+ 
+ $startFrame = `intFieldGrp -query -value1 WindowInfo|columnLayout|StartFrame`;
+ $endFrame = `intFieldGrp -query -value1 WindowInfo|columnLayout|EndFrame`;
+ $Aspect = `floatFieldGrp -query -value1 WindowInfo|columnLayout|AspectFrame`;
+ $Width = `intFieldGrp -query -value1 WindowInfo|columnLayout|WidthFrame`;
+ $Height = `intFieldGrp -query -value1 WindowInfo|columnLayout|HeightFrame`;
+ $opSys = `radioButtonGrp -query -select WindowInfo|columnLayout|opsystem`;
+ deleteUI -window WindowInfo;
+
+ ///////////////////////////////////////
+ // Open Sesame, we need the output file
+
+ fileBrowser exporta "Export" "Text" 1;
+}
+
+global proc cameraWindow(){
+    int $actualFrame = `currentTime -q`; // Set the actual frame as...
+
+    ///////////////////////////////////
+    // Show me an input window, please!
+
+    if ((`window -ex WindowInfo`) == true) deleteUI WindowInfo;
+    window -rtf 1 -title "Export Info" WindowInfo;
+    columnLayout -columnAttach "left" 5 -rowSpacing 10 -columnWidth 80 columnLayout;
+      intFieldGrp -label "Start Frame" -value1 1 StartFrame;
+      intFieldGrp -label "End Frame" -value1 $actualFrame EndFrame; // ...the last one
+      intFieldGrp -label "Width" -value1 720 WidthFrame;
+      intFieldGrp -label "Height" -value1 486 HeightFrame;
+      floatFieldGrp -label "Frame Aspect" -pre 3 -value1 1.333 AspectFrame;
+      radioButtonGrp -numberOfRadioButtons 2 -select 1 -label "OS" -labelArray2 "Irix" "NT" opsystem;
+      rowLayout -cw2  150 180  -numberOfColumns 2 rowLayout;
+      button -width 100 -label "OK" -command "GetInfo" Listo;
+      button -width 100 -label "Close" -command "deleteUI WindowInfo";
+    showWindow WindowInfo;
+}
+
+///////////////////////////
+//Just the first Main stuff
+
+global proc exportaDiscreet()
+{
+ string $selectionSet[] = `ls -selection`;    // Is a camera selected?
+ int $contador = 1;     
+ string $instruccion[20] = `listCameras -p`;  // Allow _only_ 20 cameras on scene (including ortogonals)
+ int $tam = `size $selectionSet`;
+ global string $temporalVar = "";             // I need to fix this, -command expects global variables
+
+ if ($tam < 1)                                // If no camera is selected...
+  {                                           // ...display a window and then ask wich camera use
+   if ((`window -ex PickCamera`) == true) deleteUI PickCamera;
+      window -width 270 -height 165 -title "Ups!, no camera selected" PickCamera;
+       columnLayout -columnAttach "both" 50 -columnWidth 250 -rowSpacing 5 columnLayout;
+       for($contador = 0; $contador < size($instruccion); $contador++){
+         $temporalVar = "select -r " + $instruccion[$contador] + "; deleteUI PickCamera; cameraWindow";
+         button -width 100 -label $instruccion[$contador] -command $temporalVar;
+       }
+      showWindow PickCamera;
+   }
+   else                                       // Just ask the output format
+   {
+    cameraWindow; // window with the output format
+   }
+}
+//////////
+//End Main
+
+global proc int exporta( string $exportFile, string $fileType )
+{
+    exportaaDiscreetScalado $exportFile 1.0;
+    return 1;
+}

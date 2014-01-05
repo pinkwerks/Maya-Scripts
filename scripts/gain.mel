@@ -1,0 +1,9 @@
+global proc float
+gain(float $g, float $x)
+{
+	if ($x < 0.5)
+		return bias(1 - $g, 2 * $x) / 2;
+	else
+		return 1 - bias(1 - $g, 2 - 2 * $x) / 2;
+}
+

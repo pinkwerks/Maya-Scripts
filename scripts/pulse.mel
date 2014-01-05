@@ -1,0 +1,12 @@
+global proc float
+pulse(
+    float $a,
+    float $b,
+    float $fuzz,
+    float $x
+) {
+    return(
+    	smoothstep(($a)-($fuzz),($a),($x))
+	- smoothstep(($b)-($fuzz),($b),($x))
+    );
+}

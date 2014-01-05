@@ -1,0 +1,38 @@
+//
+// v20050514 pinkelton wicham
+//
+
+global proc
+mtorShaders(string $mode)
+{
+    string $procName = "mtorShaders";
+    string $propsL;
+    string $props[];
+    string $apps = `slimcmd slim GetAppearances -selected 1`;
+    string $selectedAppearances[];
+    string $app;
+    string $appLabel;
+    string $appID;
+
+    if ( $apps == "" )
+    	error($procName + " : No Appearances selected in any palette!");
+    tokenize $apps $selectedAppearances;
+    print("//\n//\n// Writing MEL script for : \n");
+    select -cl;
+    print("select -cl;\n");
+    for ( $app in $selectedAppearances )
+    {
+	$appLabel = `slimcmd $app GetLabel`;
+	$appID = `slimcmd $app GetID`;
+	print("// Appearance Name ==\t" + $appLabel +"\n");
+	// pick objects with the suface shader attached
+	mtor control pickobjects $appID;
+	string $objects[] = `ls -sl -fl -l`;
+	for ( $obj in $objects )
+	{
+	    print("select -add " + $obj + ";\n");
+	}
+	print("//mtor control attach surface $derivedAppID\n");
+	select -cl;
+    }
+}

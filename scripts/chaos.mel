@@ -1,0 +1,417 @@
+//
+//
+//  info:
+//	chaos - v1.61 Dec. 6, 2002 pink
+//
+//  discription:
+//	Applies various, random transformations to selected object(s).
+//
+//  usage:
+//	chaos <chaosType> <typeMask> <octaves> <min> <max> <posFreqScale> <vMask>
+//
+//  where:
+//	chaosType 	rand | noise | dnoise
+//	typeMask	(t|T)ranslate, (r|R)otate, (s|S)cale, (a|A)bsolute, (v|V)erbose
+//	octaves		Controls fractal noise loops, 3 is a good start value.
+//	min		Minumum value returned.
+//	max		Maximum value returned.
+//	posFreqScale	Scale sampling frequency of world space positional data.
+//	vMask		A post multiplier used to scale (ie limit/expand) xyz influence.
+//
+//  notes:
+//	- The order of 'T' & 'R' in <typeMask> are considered, ie traslate before rotate.
+//	- <octaves> is ignored where <chaosType> = rand | noise | dnoise
+//
+//  examples:
+//	chaos rand trA 0 0 2 <<1,1,1>> <<1,1,1>>;
+//	chaos turb sv 3 0 2 <<1,1,1>> <<1,0,0>>;
+//
+//  curio:
+//	Is overloading of <typeMask> possible? ex: `chaos rand tt ...`
+//
+//  bugs:
+//	maya seems to be able to only handel around 1000 objs before crapping out....
+//	removed fractal noise loops turb3f and fNoise.... for simplicity
+//	may reimplement later - basically octaves is useless
+//
+//
+
+global proc vector 
+localvMult(vector $v1, vector $v2)
+{
+	return(<<$v1.x * $v2.x, $v1.y * $v2.y, $v1.z * $v2.z>>);
+}
+
+global proc int
+chaosEngine(
+    string $chaosType,
+    string $typeMask,
+    float $octaves,
+    float $min,
+    float $max,
+    vector $posFreqScale,
+    vector $vMask
+)
+{
+    global string $gMainProgressBar; // This is defined on maya startup
+
+    string $procName = "chaosEngine";
+
+    int $verbose = 0;
+    if (`gmatch $typeMask "*[vV]*"` == 1) $verbose = 1;
+    if (`gmatch $typeMask "*[uU]*"` == 1) $uniformity = 1;
+
+    $objs = `ls -sl -fl -l`;
+    $originalSelection = $objs;
+    $sobjs = size($objs);
+
+    if ($sobjs < 1) {
+	error($procName + " : Select at least one object you dumb motherfucker!");
+    }
+
+    // relative or absolute?
+    // XXX maybe this should be a more string of options passed?
+    string $rel = "-r";
+    if (`gmatch $typeMask "*[aA]*"` == 1) $rel = "-a";
+
+    if ($verbose) {
+	print("chaosType = " + $chaosType + "\n");
+	print("typeMask = " + $typeMask + "\n");
+	print("octaves = " + $octaves + "\n");
+	print("min = " + $min + "\n");
+	print("max = " + $max + "\n");
+	print("posFreqScale = " + $posFreqScale + "\n");
+	print("vMask = " + $vMask + "\n");
+	print("rel = " + $rel + "\n");
+	print("verbose = " + $verbose + "\n");
+	print("uniformity = " + $uniformity + "\n");
+    }
+
+    // Figure out how many time we should loop to 
+    // populate our xyz values for each object.  Basically, 
+    // generate a diff xyz for more than one thing ie translate & scale.
+    int $loopNum = 0;
+    int $numLoops = 0;
+
+    // add a loop for translation?
+    if (`gmatch $typeMask "*[tT]*"` == 1) $numLoops++;
+    if ($verbose) print("adding T loop, numLoops = "+ $numLoops +"\n");
+
+    // add a loop for rotation?
+    if (`gmatch $typeMask "*[rR]*"` == 1) $numLoops++;
+    if ($verbose) print("adding R loop, numLoops = "+ $numLoops +"\n");
+
+    // add a loop for scaling?
+    if (`gmatch $typeMask "*[sS]*"` == 1) $numLoops++;
+    if ($verbose) print("adding S loop, numLoops = "+ $numLoops +"\n");
+
+    // error checking
+    if ($numLoops == 0) error($procName + "<typeMask> - nothing to do!  RTFM, bitch.");
+
+    select -cl;
+
+    float $f = 0;
+    vector $v = <<0,0,0>>;
+    int $zero = 0;
+    float $wsp[];
+    vector $position = <<0,0,0>>;
+    float $x = 0;
+    float $y = 0;
+    float $z = 0; 
+    int $seenT = 0;
+    int $seenR = 0;
+    int $seenS = 0;
+
+    int $count = 0;
+
+/*    progressBar*/
+/*	  -beginProgress*/
+/*          -isInterruptable true*/
+/*          -status "Setting up..."*/
+/*	  -maxValue ($sobjs)*/
+/*	  $gMainProgressBar;*/
+
+    if ($verbose) print("Things to deal with : "+ $objs +"\n");
+
+    for ($obj in $objs) {
+	// Check if the dialog has been cancelled
+/*	if ( `progressBar -query -isCancelled $gMainProgressBar` ) {*/
+/*	    progressBar -edit -endProgress $gMainProgressBar;*/
+/*	    error ("Chaos Chilled!");*/
+/*	}*/
+
+    	select -r $obj;
+    	if ( $verbose ) print ("looping $objs ...\n");
+
+	// lil error checking speed-up.
+
+	// here we explicitly define the allowable transform types
+	if (nodeType($obj) != "transform") {
+	    if (nodeType($obj) == "place3dTexture") {
+	    	// do nothing, ugly hack to work with p3deez.
+	    } else if (nodeType($obj) == "nurbsSurface") {
+	    	// do nothing, ugly hack to work with cv's.
+	    } else if (nodeType($obj) == "mesh") {
+	    	// do nothing, ugly hack to work with cv's.
+	    } else if (nodeType($obj) == "lattice") {
+	    	// do nothing, ugly hack to work with cv's.
+	    } else if (nodeType($obj) == "nurbsCurve") {
+	    	// do nothing, ugly hack to work with cv's.
+	    } else if (nodeType($obj) == "ikHandle") {
+	    	// do nothing, ugly hack to work with ik handles.
+	    } else if (nodeType($obj) == "pointEmitter") {
+	    	// do nothing, ugly hack to work with ik handles.
+	    } else {
+		warning("Skipping " + $obj + " - not a transform - search for 'ugly hack' in code...");
+		continue;
+	    }
+	}
+
+	for ($loopNum = 1; $loopNum <= $numLoops; $loopNum++) {
+	    if ( $verbose ) print ("looping $numLoops...\n");
+	    // get the world space position
+	    $wsp = `xform -q -ws -t $obj`; 
+	    $position = <<$wsp[0],$wsp[1],$wsp[2]>>;
+
+	    if ( $verbose ) print ("determing chaosType in $numLoops...\n");
+	    $zero = 0;
+	    if ( $chaosType == "rand" ) {
+		$v = sphrand(1);
+		$zero = -1;
+	    } else if ( $chaosType == "dnoise" ) {
+		$v = dnoise((vector)localvMult($position, $posFreqScale));
+		$zero = -1;
+	    } else if ($chaosType == "noise") {
+		$f = noise((vector)localvMult($position, $posFreqScale));
+		$zero = -1;
+	    } else {
+		error($procName + " : valid <chaosType>'s, rand|noise|dnoise");
+	    }
+
+/*	    $x = 0;*/
+/*	    $y = 0;*/
+/*	    $z = 0; */
+
+	    if ( $verbose ) print ("vectors in $numLoops?...\n");
+	    // Are we dealing with vector return types?
+	    if ( $chaosType == "rand" || $chaosType == "dnoise" ) {
+		$x = remap($v.x, $zero, 1, $min, $max) * $vMask.x;
+		$y = remap($v.y, $zero, 1, $min, $max) * $vMask.y;
+		$z = remap($v.z, $zero, 1, $min, $max) * $vMask.z;
+	    } else {
+		$x = remap($f, $zero, 1, $min, $max) * $vMask.x;
+		$y = remap($f, $zero, 1, $min, $max) * $vMask.y;
+		$z = remap($f, $zero, 1, $min, $max) * $vMask.z;
+	    }
+
+	    $seenT = 0;
+	    $seenR = 0;
+	    $seenS = 0;
+
+	    // sort out if we are currently doing t|r|s
+	    // XXX this is a little fucked but it handles the 
+	    // Translate before Rotate problem
+
+	    if ( $verbose ) print ("top not gmatch in $numLoops...\n");
+
+	    if ( `gmatch $typeMask "*[rR]*"` == 1 ) {
+		if ( $verbose ) {
+		    print ("In rotate in $numLoops...\n");
+		    print("rotating " + $obj + " " + $x + " " + $y + " " + $z +"\n");
+		}
+		if ( $uniformity ) {
+		    rotate $rel $x $x $x $obj;
+		} else {
+		    rotate $rel $x $y $z $obj;
+		}
+	    }
+	    if (`gmatch $typeMask "*[tT]*"` == 1 ) {
+		if ( $verbose ) {
+		    print ("In translate in $numLoops...\n");
+		    print("moving " + $obj + " " + $x + " " + $y + " " + $z + "\n");
+		}
+		if ( $uniformity ) {
+		    move $rel $x $x $x $obj;
+		} else {
+		    move $rel $x $y $z $obj;
+		}
+		if ( $verbose )  print("Done moving.\n");
+	    }
+	    if (`gmatch $typeMask "*[sS]*"` == 1 ) {
+		if ( $verbose ) {
+		    print ("In scale in $numLoops...\n");
+		    print("scaling  " + $obj + " " + $x + " " + $y + " " + $z + "\n");
+		}
+		if ( $uniformity ) {
+		    scale $rel $x $x $x $obj;
+		} else {
+		    scale $rel $x $y $z $obj;
+		}
+	    }
+	    if ( $verbose ) print ("bottom not gmatch in $numLoops...\n");
+	    if ( $verbose ) print ("finished a $numLoops loop ...\n");
+	}
+
+    	if ( $verbose ) print ("finished an $objs loop ...\n");
+
+	// update our "progress"
+/*	progressBar -edit -step 1 $gMainProgressBar;*/
+    }
+
+/*    progressBar -edit -endProgress $gMainProgressBar;*/
+
+    select $originalSelection;
+
+    return(0);
+};
+
+global proc
+applyChaos()
+{
+    string $chaosType = `optionMenuGrp -q -v chaosType`;
+    string $typeMask = `radioButtonGrp -q -sl typeMask`;
+    string $relative = `radioButtonGrp -q -sl relative`;
+
+    int $octaves = `intSliderGrp -q -v octaves`;
+    float $min = `floatSliderGrp -q -v min`;
+    float $max = `floatSliderGrp -q -v max`;
+
+    float $pfsx = `floatFieldGrp -q -v1 posFreqScale`;
+    float $pfsy = `floatFieldGrp -q -v2 posFreqScale`;
+    float $pfsz = `floatFieldGrp -q -v3 posFreqScale`;
+    vector $posFreqScale = <<$pfsx, $pfsy, $pfsz>>;
+
+    float $vmx = `floatSliderGrp -q -v vMaskX`;
+    float $vmy = `floatSliderGrp -q -v vMaskY`;
+    float $vmz = `floatSliderGrp -q -v vMaskZ`;
+
+    // cause the interface reports things in the range of 1-100
+    vector $vMask = <<$vmx * .01, $vmy * .01, $vmz * .01>>;
+
+    if ($chaosType == "Random") $chaosType = "rand";
+    if ($chaosType == "Noise") $chaosType = "noise";
+    if ($chaosType == "d Noise") $chaosType = "dnoise";
+
+    if ($typeMask == "1") $typeMask = "t";
+    if ($typeMask == "2") $typeMask = "r";
+    if ($typeMask == "3") $typeMask = "s";
+
+    if ($relative == "Absolute") $typeMask = ($typeMask + "a");
+    
+    if (`checkBox -q -v verbose` == 1) $typeMask = ($typeMask + "v"); 
+    if (`checkBox -q -v uniformity` == 1) $typeMask = ($typeMask + "u"); 
+
+    chaosEngine $chaosType $typeMask $octaves $min $max $posFreqScale $vMask;
+    print(
+	"chaos" +
+	" " +
+	$chaosType +
+	" " +
+	$typeMask +
+	" " +
+	$octaves +
+	" " +
+	$min +
+	" " +
+	$max +
+	" " +
+	"<<"+$posFreqScale.x+","+$posFreqScale.y+","+$posFreqScale.z+">> " +
+	"<<"+$vMask.x+","+$vMask.y+","+$vMask.z+">>;"
+    );
+}
+
+global proc
+modifyTypeChange()
+{
+    string $typeMask = `radioButtonGrp -q -sl typeMask`;
+
+    if ($typeMask == "1") {
+	checkBox -e -enable on uniformity;
+	floatSliderGrp -e -v -1 min;
+	floatSliderGrp -e -v 1 max;
+    }
+
+    if ($typeMask == "2") {
+	checkBox -e -enable on uniformity;
+	floatSliderGrp -e -v -360 min;
+	floatSliderGrp -e -v 360 max;
+    }
+
+    if ($typeMask == "3") {
+	checkBox -e -enable on uniformity;
+	floatSliderGrp -e -v 0 min;
+	floatSliderGrp -e -v 1 max;
+    }
+}
+
+global proc
+chaosTypeChange()
+{
+    string $chaosType = `optionMenuGrp -q -v chaosType`;
+
+    if ($chaosType == "fNoise" || $chaosType == "Turbulence" ) {
+	intSliderGrp -edit -enable true octaves;
+    } else {
+	intSliderGrp -edit -enable false octaves;
+    }
+
+    if ($chaosType == "Random") {
+	floatFieldGrp -edit -enable false posFreqScale;
+    } else {
+	floatFieldGrp -edit -enable true posFreqScale;
+    }
+}
+
+global proc
+chaos()
+{
+    string $procName = "chaos";
+
+    if ( `window -exists $procName` ) {
+        showWindow $procName;
+        return;
+    }
+
+    window -ret -t "Chaos" $procName;
+
+    columnLayout;
+
+    optionMenuGrp -label "Random Model" -cc chaosTypeChange chaosType;
+	menuItem -label "Random";
+	menuItem -label "Noise";
+	menuItem -label "d Noise";
+
+    radioButtonGrp -numberOfRadioButtons 2 -sl 1
+    	-label "Mode" -labelArray2 "Relative" "Absolute" relative;
+
+    radioButtonGrp -numberOfRadioButtons 3 -sl 1
+	-cc modifyTypeChange
+    	-label "Modify" -labelArray3 "Translate" "Rotate" "Scale" typeMask;
+
+    checkBox -enable on -label "Make X = Y = Z" uniformity; 
+
+    intSliderGrp -label "Octaves" 
+	-enable 0 -field true -min 1 -max 32 -value 3 octaves;
+
+    floatSliderGrp -label "Min" -field true
+	-min -360 -max 360 -fmn (-100000) -fmx (100000) -pre 4 -v -1 min;
+
+    floatSliderGrp -label "Max" -field true 
+	-min -360 -max 360 -fmn (-100000) -fmx (100000) -pre 4 -v 1 max;
+
+    floatFieldGrp -numberOfFields 3 -pre 4 -enable 0
+    	-label "Frequency Scale" -v1 1 -v2 1 -v3 1
+	posFreqScale;
+
+    floatSliderGrp -label "X Influence" -field true -min 0 -max 100 -value 100 vMaskX;
+    floatSliderGrp -label "Y Influence" -field true -min 0 -max 100 -value 100 vMaskY;
+    floatSliderGrp -label "Z Influence" -field true -min 0 -max 100 -value 100 vMaskZ;
+
+    checkBox -label "Verbose" verbose; 
+
+    button -label "Apply Chaos" -c "applyChaos";
+    button -label "Undo" -c "undo";
+    button -label "Close" -c ("window -e -vis 0 " + $procName);
+
+    showWindow $procName;
+}

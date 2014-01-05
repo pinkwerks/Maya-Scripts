@@ -1,0 +1,21 @@
+global proc
+string namedPathPiece(string $query)
+{
+    string $tokens[];
+    string $filename = `file -q -sn`;
+    int $numTokens = `tokenize $filename "//" $tokens`;
+//    if ( $numTokens < 5 )
+//     {
+//	warning("namedPathPiece : Bad path : "+$filename+", is the project set correctly?  Do you have a valid file open?");
+//     }
+    if ( $query == "root" )
+      return $tokens[0];
+    else if ( $query == "projs" )
+      return $tokens[1];
+    else if ( $query == "proj" )
+      return $tokens[2];
+    else if ( $query == "shots" )
+      return $tokens[3];
+    else if ( $query == "shot" )
+      return $tokens[4];
+}

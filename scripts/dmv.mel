@@ -1,0 +1,129 @@
+// dmv - list selected things drivers and drivens....
+// v.01 pink@asylumfx.XXX
+//
+
+global proc
+dmv ()
+{
+    int $i = 0;
+    int $j = 0;
+    int $skip = 0;
+
+    float $drivenArray[];
+    float $driverArray[];
+
+    string $newDriver;
+    string $dnAttr;
+    string $drAttr;
+    string $obj;
+    string $driver;
+    string $driven;
+
+    string $drivens[];
+    string $drivers[];
+    string $objs[] = `ls -sl -fl -l`;
+    string $buffer[];
+    string $buffer2[];
+    string $tmpS[];
+
+    int $sobjs = size($objs);
+
+    if ( $sobjs > 2 || $sobjs < 1 )
+    	error("dmv : you must select at least two objects!");
+    else if ( $sobjs == 2 ) 
+    {
+	for ( $obj in $objs )
+	{
+	    if ( $skip == 0 )
+	    {
+		$newDriver = $obj;
+		$skip = 1;
+		continue;
+	    }
+
+	    print("\n Processing " + $obj + " :\n\n");
+
+	    $drivenAttrs = `setDrivenKeyframe -q -dn $obj`;
+/*	    print("Driven Attributes :\n");*/
+/*	    print($drivenAttrs);*/
+/*	    print("\n");*/
+
+	    for ( $dnAttr in $drivenAttrs )
+	    {
+		tokenize $dnAttr "." $buffer;
+		$dnAttr = $buffer[1];
+		print("\tDriven :\t" + $dnAttr + "\n");
+
+		/* Get driver name from driven attribute */
+		$tmpS = `setDrivenKeyframe -q -cd ($obj+"."+$dnAttr)`;
+		tokenize $tmpS[0] "." $buffer;
+		$oldDriverShort = $buffer[0];
+		$drAttr = $buffer[1];
+
+		/* sort out old driver name long form */
+		$tmpS = `ls -fl -l ("*"+$oldDriverShort)`;
+		string $diff[] = stringArrayRemove({$newDriver}, $tmpS);
+		$oldDriver = ($diff[0] + $drAttr);
+		string $diff[] = stringArrayRemove({$oldDriver}, $tmpS);
+
+		print("\tOld Driver :\t"+$oldDriver+"."+$drAttr+"\n");
+		print("\tNew Driver :\t"+$newDriver+"."+$drAttr+"\n");
+
+		print("\n");
+		setDrivenKeyframe -cd ($newDriver+"."+$drAttr) ($obj + "." + $drAttr);
+	    }
+	}
+    }
+    else
+    {
+	for ( $obj in $objs )
+	{
+	    $drivens = `setDrivenKeyframe -q -driven $obj`;
+	    $drivers = `setDrivenKeyframe -q -driver $obj`;
+
+	    if ( $drivens[0] == "No driven attributes found on the selected item." )
+	    	error("dmv : No driven attributes found on selected object!");
+
+	    for ( $driven in $drivens )
+	    {
+		$tmp3 = `getAttr $driven`;
+		$drivenArray[$i] = $tmp3;
+		$i++;
+	    }
+
+	    for ( $driver in $drivers )
+	    {
+		float $tmp2[] = `getAttr $driver`;
+		$driverArray[$j] = $tmp2[0];
+		$j++;
+	    }
+
+	    int $k = 0;
+	    while ( $k < $i )
+	    {
+		print(
+		    $drivens[$k]
+		    + " -> "
+		    + $drivers[$k]
+		    + " ("
+		    + $drivenArray[$k]
+		    + ", "
+		    + $driverArray[$k]
+		    + ")"
+		    + "\n"
+		);
+
+		$k++;
+	    }
+	}
+    }
+
+    clear $drivenArray;
+    clear $driverArray;
+    clear $drivens;
+    clear $drivers;
+    clear $objs;
+    clear $buffer;
+    clear $buffer2;
+    clear $tmpS;
+}

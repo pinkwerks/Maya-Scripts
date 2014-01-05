@@ -1,0 +1,29 @@
+global proc
+hideAnnoyingStuff()
+{
+    toggle 
+	-state off
+	-below
+	-boundary
+	-boundingBox
+	-controlVertex
+	-editPoint
+	-extent
+	-facet
+	-hull
+	-localAxis
+	-latticePoint
+	-latticeShape
+	-normal
+	-origin
+	-pointDisplay
+	-pointFacet
+	-point
+	-rotatePivot
+	-surfaceFace
+	-scalePivot
+	-uvCoords
+	-vertex
+	;
+}
+

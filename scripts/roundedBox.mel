@@ -1,0 +1,736 @@
+//
+//  Alias|Wavefront Script File
+//  MODIFY THIS AT YOUR OWN RISK
+//
+//
+//  Creation Date:  Sept 1998
+//  Author:         Duncan Brinsmead
+//
+//  Procedure Name:
+//      roundedBox
+//
+//  Description:
+//
+//  Input Arguments: None
+//
+//  Return Value:
+//      None.
+//
+
+
+
+global proc
+roundedBox(
+    float $bevel
+    float $sx
+    float $sy
+    float $sz
+    int $controls
+)
+{
+	int $history;
+	string $surf[], $rBox, $sp, $s1, $s2, $s3, $s4, $s5, $s6, $s7;
+	string $l1, $l2, $l3, $l4, $l5, $l6, $l7, $l8, $l9, $l10, $l11, $l12;
+	string $b1, $b2, $b3, $b4, $b5, $b6;
+
+	if( $controls > 0 )
+	{
+		$history = 1;
+	}
+
+	// Create a default sphere
+	$surf = `sphere -p 0 0 0 -ax 0 1 0 -ssw 0 -esw 360 
+			-r 1 -d 3 -ut 0 -tol 0.01 -s 8 -nsp 4 -ch 0`;
+	$sp = $surf[0];
+
+
+	// Cut the sphere into 8 sections using detach
+
+	$surf = `detachSurface -ch 0 -rpo 1 ($sp + ".v[2]") ($sp + ".v[6]")`;
+	$s1 = $surf[0];
+
+	$surf = `detachSurface -ch 0 -rpo 1 ($sp + ".u[2]")`;
+	$s2 = $surf[0];
+
+	$surf = `detachSurface -ch 0 -rpo 1 ($s1 + ".u[2]")`;
+	$s3 = $surf[0];
+
+	$surf = `detachSurface -ch 0 -rpo 1 ($s3 + ".v[4]")`;
+	$s4 = $surf[0];
+
+	$surf = `detachSurface -ch 0 -rpo 1 ($s1 + ".v[4]")`;
+	$s5 = $surf[0];
+
+	$surf = `detachSurface -ch 0 -rpo 1 ($s2 + ".v[1]")`;
+	$s6 = $surf[0];
+
+	$surf = `detachSurface -ch 0 -rpo 1 ($sp + ".v[1]")`;
+	$s7 = $surf[0];
+
+	// Position the scale pivot for each section at the
+	// nearest cube corner
+	move  1 1 1 ( $s6 + ".scalePivot" );
+	move  -1 1 1 ( $s3 + ".scalePivot" );
+	move  -1 1 -1 ( $s4 + ".scalePivot" );
+	move  -1 -1 -1 ( $s5 + ".scalePivot" );
+	move  -1 -1 1 ( $s1 + ".scalePivot" );
+	move  1 -1 1 ( $s7 + ".scalePivot" );
+	move  1 -1 -1 ( $sp + ".scalePivot" );
+	move  1 1 -1 ( $s2 + ".scalePivot" );
+
+	$sx = $sx/2.0;
+	$sy = $sy/2.0;
+	$sz = $sz/2.0;
+	if( $bevel > $sx )
+		$bevel = $sx;
+	if( $bevel > $sy )
+		$bevel = $sy;
+	if( $bevel > $sz )
+		$bevel = $sz;
+
+	// We determine the coord system so we can 
+	// offset the cube to sit on the groundplane
+	string $isitYup = `upAxis -q -ax`;
+	int $isYup =  ("y" == $isitYup) ;
+
+	float $yoff, $zoff;
+	if( $isYup )
+	{
+		$yoff = $sy;
+		$zoff = 0;
+	}
+	else
+	{
+		$yoff = 0;
+		$zoff = $sz;
+	}
+	$sx = $sx-1.0;
+	$sy = $sy-1.0;
+	$sz = $sz-1.0;
+
+	// we scale the 8 corner sections about their new axis
+	scale  $bevel $bevel $bevel $sp $s1 $s2 $s3 $s4 $s5 $s6 $s7;
+	
+	// we move the 8 corner sections to the defined corners of the box 
+	move -r $sx 0 0 $s6 $s7 $s2 $sp;
+	move -r 0 ($yoff + $sy) 0 $s6 $s3 $s4 $s2; 
+	move -r 0 0 ($zoff + $sz) $s6 $s3 $s1 $s7; 
+	
+	move -r (-$sx) 0 0 $s3 $s4 $s5 $s1;
+	move -r 0 ($yoff - $sy) 0 $s5 $s1 $s7 $sp; 
+	move -r 0 0 ($zoff -$sz) $s4 $s5 $sp $s2; 
+
+
+	// We join all the edges with lofts, creating the rounded edges 
+
+	$surf = `loft -ch $history -u 1 -c 0 -ar 1 -d 3 -rn 0 -po 0 
+					($s3 +".u[2]") ($s1 +".u[2]")`;
+	$l1 = $surf[0];
+	
+	$surf = `loft -ch $history -u 1 -c 0 -ar 1 -d 3 -rn 0 -po 0 
+					($s6 +".u[2]") ($s7 +".u[2]")`;
+	$l2 = $surf[0];
+	
+	$surf = `loft -ch $history -u 1 -c 0 -ar 1 -d 3 -rn 0 -po 0 
+					($s2 +".u[2]") ($sp +".u[2]")`;
+	$l3 = $surf[0];
+	
+	$surf = `loft -ch $history -u 1 -c 0 -ar 1 -d 3 -rn 0 -po 0 
+					($s4 +".u[2]") ($s5 +".u[2]")`;
+	$l4 = $surf[0];
+	
+	$surf = `loft -ch $history -u 1 -c 0 -ar 1 -d 3 -rn 0 -po 0 
+				($s2 +".v[0]") ($s4 +".v[6]")`;
+	$l5 = $surf[0];
+
+	$surf = `loft -ch $history -u 1 -c 0 -ar 1 -d 3 -rn 0 -po 0 
+				($s4 +".v[4]") ($s3 +".v[4]")`;
+	$l6 = $surf[0];
+
+	$surf = `loft -ch $history -u 1 -c 0 -ar 1 -d 3 -rn 0 -po 0 
+				($s3 +".v[2]") ($s6 +".v[2]")`;
+	$l7 = $surf[0];
+
+	$surf = `loft -ch $history -u 1 -c 0 -ar 1 -d 3 -rn 0 -po 0 
+				($s6 +".v[1]") ($s2 +".v[1]")`;
+	$l8 = $surf[0];
+
+	$surf = `loft -ch $history -u 1 -c 0 -ar 1 -d 3 -rn 0 -po 0 
+				($s7 +".v[1]") ($sp +".v[1]")`;
+	$l9 = $surf[0];
+
+	$surf = `loft -ch $history -u 1 -c 0 -ar 1 -d 3 -rn 0 -po 0 
+				($sp+".v[0]") ($s5 +".v[6]")`;
+	$l10 = $surf[0];
+
+	$surf = `loft -ch $history -u 1 -c 0 -ar 1 -d 3 -rn 0 -po 0 
+				($s5+".v[4]") ($s1 +".v[4]")`;
+	$l11 = $surf[0];
+
+	$surf = `loft -ch $history -u 1 -c 0 -ar 1 -d 3 -rn 0 -po 0 
+				($s1+".v[2]") ($s7 +".v[2]")`;
+	$l12 = $surf[0];
+
+
+	// Now fill in the faces of the box using boundary
+	$surf = `boundary -ch $history -or 0 -ep 0 -rn 0 -po 0 -ept 0.01 
+	($l5 +".v[4]") ($l8 + ".v[4]") ($l7 + ".v[4]") ($l6 +".v[4]")`;
+	$b1 = $surf[0];
+
+	$surf = `boundary -ch $history -or 0 -ep 0 -rn 0 -po 0 -ept 0.01 
+	($l11 +".v[0]") ($l12 + ".v[0]") ($l9 + ".v[0]") ($l10 +".v[0]")`;
+	$b2 = $surf[0];
+
+	$surf = `boundary -ch $history -or 0 -ep 0 -rn 0 -po 0 -ept 0.01 
+	($l1 +".v[2]") ($l7 + ".v[2]") ($l2 + ".v[2]") ($l12 +".v[2]")`;
+	$b3 = $surf[0];
+
+	$surf = `boundary -ch $history -or 0 -ep 0 -rn 0 -po 0 -ept 0.01 
+	($l2 +".v[1]") ($l8 + ".v[2]") ($l3 + ".v[1]") ($l9 +".v[2]")`;
+	$b4 = $surf[0];
+
+	$surf = `boundary -ch $history -or 0 -ep 0 -rn 0 -po 0 -ept 0.01 
+	($l3 +".v[0]") ($l5 + ".v[2]") ($l4 + ".v[6]") ($l10 +".v[2]")`;
+	$b5 = $surf[0];
+
+	$surf = `boundary -ch $history -or 0 -ep 0 -rn 0 -po 0 -ept 0.01 
+	($l4 +".v[4]") ($l6 + ".v[2]") ($l1 + ".v[4]") ($l11 +".v[2]")`;
+	$b6 = $surf[0];
+
+	// Put all the surfaces into a grouped object
+	$rBox = `group -n "roundedBox" $sp $s1 $s2 $s3 $s4 $s5 $s6 $s7 
+		$l1 $l2 $l3 $l4 $l5 $l6 $l7 $l8 $l9 $l10 $l11 $l12 
+		$b1 $b2 $b3 $b4 $b5 $b6`;
+
+
+	if( $controls > 1 )
+	{
+		// Add control attributes to the grouped object
+
+    	addAttr -sn bv -ln bevel  -dv $bevel -min 0 -max 100 $rBox;
+    	setAttr -keyable on ($rBox + ".bevel");
+    	addAttr -sn xs -ln xsize  -dv (($sx+1)*2) -min 0 -max 100 $rBox;
+    	setAttr -keyable on ($rBox + ".xsize");
+    	addAttr -sn ys -ln ysize  -dv (($sy+1)*2) -min 0 -max 100 $rBox;
+    	setAttr -keyable on ($rBox + ".ysize");
+    	addAttr -sn zs -ln zsize  -dv (($sz+1)*2) -min 0 -max 100 $rBox;
+    	setAttr -keyable on ($rBox + ".zsize");
+
+		// Create an expression to drive the position and
+		// scale of the box corners using the control attributes
+		expression -s ("$bevel = "+$rBox+".bevel;\n"
+					+ "$sx = "+$rBox+".xsize/2;\n"
+					+ "$sy = "+$rBox+".ysize/2;\n"
+					+ "$sz = "+$rBox+".zsize/2;\n"
+					+ "if( $bevel > $sx ) {$bevel = $sx;}\n"
+					+ "if( $bevel > $sy ) {$bevel = $sy;}\n"
+					+ "if( $bevel > $sz ) {$bevel = $sz;}\n"
+					+ "$yoff = $sy * " + $isYup + ";\n"
+					+ "$zoff = $sz * " + (!$isYup) + ";\n"
+					+ "$sx = $sx - 1;\n"
+					+ "$sy = $sy - 1;\n"
+					+ "$sz = $sz - 1;\n"
+					+ $sp +".sx = $bevel;\n"
+					+ $sp +".sy = $bevel;\n"
+					+ $sp +".sz = $bevel;\n"
+
+					+ $s1 +".sx = $bevel;\n"
+					+ $s1 +".sy = $bevel;\n"
+					+ $s1 +".sz = $bevel;\n"
+
+					+ $s2 +".sx = $bevel;\n"
+					+ $s2 +".sy = $bevel;\n"
+					+ $s2 +".sz = $bevel;\n"
+
+					+ $s3 +".sx = $bevel;\n"
+					+ $s3 +".sy = $bevel;\n"
+					+ $s3 +".sz = $bevel;\n"
+
+					+ $s4 +".sx = $bevel;\n"
+					+ $s4 +".sy = $bevel;\n"
+					+ $s4 +".sz = $bevel;\n"
+
+					+ $s5 +".sx = $bevel;\n"
+					+ $s5 +".sy = $bevel;\n"
+					+ $s5 +".sz = $bevel;\n"
+
+					+ $s6 +".sx = $bevel;\n"
+					+ $s6 +".sy = $bevel;\n"
+					+ $s6 +".sz = $bevel;\n"
+
+					+ $s7 +".sx = $bevel;\n"
+					+ $s7 +".sy = $bevel;\n"
+					+ $s7 +".sz = $bevel;\n"
+
+					+ $sp +".tx = $sx;\n"
+					+ $sp +".ty = $yoff-$sy;\n"
+					+ $sp +".tz = $zoff-$sz;\n"
+
+					+ $s1 +".tx = -$sx;\n"
+					+ $s1 +".ty = $yoff-$sy;\n"
+					+ $s1 +".tz = $zoff+$sz;\n"
+
+					+ $s2 +".tx = $sx;\n"
+					+ $s2 +".ty = $yoff +$sy;\n"
+					+ $s2 +".tz = $zoff -$sz;\n"
+
+					+ $s3 +".tx = -$sx;\n"
+					+ $s3 +".ty = $yoff + $sy;\n"
+					+ $s3 +".tz = $zoff + $sz;\n"
+
+					+ $s4 +".tx = -$sx;\n"
+					+ $s4 +".ty = $yoff + $sy;\n"
+					+ $s4 +".tz = $zoff - $sz;\n"
+
+					+ $s5 +".tx = -$sx;\n"
+					+ $s5 +".ty = $yoff - $sy;\n"
+					+ $s5 +".tz = $zoff - $sz;\n"
+
+					+ $s6 +".tx = $sx;\n"
+					+ $s6 +".ty = $yoff + $sy;\n"
+					+ $s6 +".tz = $zoff + $sz;\n"
+
+					+ $s7 +".tx = $sx;\n"
+					+ $s7 +".ty = $yoff - $sy;\n"
+					+ $s7 +".tz = $zoff + $sz;\n" );
+
+	}
+}
+X-Zm-Content-Name: performRoundedBox.mel
+Content-Description: Text
+Content-Type: text/plain ; name="performRoundedBox.mel" ; charset=us-ascii
+
+//
+//  Alias|Wavefront Script File
+//  MODIFY THIS AT YOUR OWN RISK
+//
+//  Creation Date: Oct 1988 
+//  Author:        Duncan Brinsmead 
+//
+//  Description:
+//	This script defines the option box for the roundedBox menu item.
+//
+
+//
+//  Procedure Name:
+//      setOptionVars
+//
+//  Description:
+//		Initialize the option values.
+//
+//  Input Arguments:
+//		Whether to set the options to default values.
+//
+//  Return Value:
+//      None.
+//
+proc setOptionVars(int $forceFactorySettings)
+{
+	if( $forceFactorySettings || !`optionVar -exists roundedBoxCreateControls`){
+		optionVar -intValue roundedBoxCreateControls false;
+	}
+
+	if ($forceFactorySettings ||  !`optionVar -exists roundedBoxBevelRadius`) {
+		optionVar -floatValue roundedBoxBevelRadius 0.05;
+	}
+
+	if ($forceFactorySettings ||  !`optionVar -exists roundedBoxSizeX`) {
+		optionVar -floatValue roundedBoxSizeX 1.0;
+	}
+	if ($forceFactorySettings ||  !`optionVar -exists roundedBoxSizeY`) {
+		optionVar -floatValue roundedBoxSizeY 1.0;
+	}
+	if ($forceFactorySettings ||  !`optionVar -exists roundedBoxSizeZ`) {
+		optionVar -floatValue roundedBoxSizeZ 1.0;
+	}
+}
+
+//
+//  Procedure Name:
+//      roundedBoxSetup
+//
+//  Description:
+//		Update the state of the option box UI to reflect the option values.
+//
+//  Input Arguments:
+//      parent               - Top level parent layout of the option box UI.
+//                             Required so that UI object names can be 
+//                             successfully resolved.
+//
+//	forceFactorySettings - Whether the option values should be set to
+//                             default values.
+//
+//  Return Value:
+//      None.
+//
+global proc roundedBoxSetup(string $parent, int $forceFactorySettings)
+{
+	//	Retrieve the option settings
+	//
+	setOptionVars($forceFactorySettings);
+
+	setParent $parent;
+
+	//	Query the optionVar's and set the values into the controls.
+
+
+	// Size 
+	//
+	floatSliderGrp -e
+		-v `optionVar -q roundedBoxSizeX`
+		roundedBoxSizeX;
+	floatSliderGrp -e
+		-v `optionVar -q roundedBoxSizeY`
+		roundedBoxSizeY;
+	floatSliderGrp -e
+		-v `optionVar -q roundedBoxSizeZ`
+		roundedBoxSizeZ;
+
+	// Bevel Radius
+	//
+	floatSliderGrp -e
+		-v `optionVar -q roundedBoxBevelRadius`
+		roundedBoxBevelRadius;
+
+	// CreateControls
+	checkBox -e
+		-v `optionVar -q roundedBoxCreateControls`
+		roundedBoxCreateControls;
+}
+
+//
+//  Procedure Name:
+//      roundedBoxCallback
+//
+//  Description:
+//		Update the option values with the current state of the option box UI.
+//
+//  Input Arguments:
+//      parent - Top level parent layout of the option box UI.  Required so
+//               that UI object names can be successfully resolved.
+//
+//	doIt   - Whether the command should execute.
+//
+//  Return Value:
+//      None.
+//
+global proc roundedBoxCallback(string $parent, int $doIt)
+{
+    setParent $parent;
+
+	//	Set the optionVar's from the control values, and then
+	//	perform the command.
+
+
+	// Size 
+	//
+	optionVar -floatValue roundedBoxSizeX
+		`floatSliderGrp -q -v roundedBoxSizeX`;
+	optionVar -floatValue roundedBoxSizeY
+		`floatSliderGrp -q -v roundedBoxSizeY`;
+	optionVar -floatValue roundedBoxSizeZ
+		`floatSliderGrp -q -v roundedBoxSizeZ`;
+
+	// Bevel Radius
+	//
+	optionVar -floatValue roundedBoxBevelRadius
+		`floatSliderGrp -q -v roundedBoxBevelRadius`;
+
+	// Create Controls 
+	//
+	optionVar -intValue roundedBoxCreateControls
+		`checkBox -q -v roundedBoxCreateControls`;
+
+	if ($doIt) {
+		performRoundedBox 0;
+	}
+}
+
+//
+//  Procedure Name:
+//      roundedBoxOptions
+//
+//  Description:
+//		Construct the option box UI.  Involves accessing the standard option
+//		box and customizing the UI accordingly.
+//
+//  Input Arguments:
+//      None.
+//
+//  Return Value:
+//      None.
+//
+proc roundedBoxOptions()
+{
+	//	Name of the command for this option box.
+	//
+	string $commandName = "roundedBox";
+
+	//	Build the option box actions.
+	//
+	string $callback = ($commandName + "Callback");
+	string $setup = ($commandName + "Setup");
+
+	//	STEP 1:  Get the option box.
+	//	============================
+	//
+	//	The value returned is the name of the layout to be used as
+	//	the parent for the option box UI.
+	//
+	string $layout = getOptionBox();
+	setParent $layout;
+	
+	//	STEP 2:  Pass the command name to the option box.
+	//	=================================================
+	//
+	//	Any default option box behaviour based on the command name is set 
+	//	up with this call.  For example, updating the 'Help' menu item with
+	//	the name of the command.
+	//
+	setOptionBoxCommandName($commandName);
+	
+	//	STEP 3:  Activate the default UI template.
+	//	==========================================
+	//
+	//	Activate the default UI template so that the layout of this 
+	//	option box is consistent with the layout of the rest of the 
+	//	application.
+	//
+	setUITemplate -pushTemplate DefaultTemplate;
+
+	//	Turn on the wait cursor.
+	//
+	waitCursor -state 1;
+
+	//	STEP 4: Create option box contents.
+	//	===================================
+	//
+	tabLayout -scr true -tv false;
+	string $parent = `columnLayout -adjustableColumn 1`;
+
+	floatSliderGrp -label "Bevel Radius"
+		-min 0 -max 10 -fmn -0 -fmx 100000
+		roundedBoxBevelRadius;
+
+	separator;
+
+	floatSliderGrp -label "Size X"
+		-min 0 -max 100 -fmn -0 -fmx 100000
+		roundedBoxSizeX;
+
+	floatSliderGrp -label "Size Y"
+		-min 0 -max 100 -fmn -0 -fmx 100000
+		roundedBoxSizeY;
+
+	floatSliderGrp -label "Size Z"
+		-min 0 -max 100 -fmn -0 -fmx 100000
+		roundedBoxSizeZ;
+
+	separator;
+
+	checkBox -label "Create Controls"
+		roundedBoxCreateControls;
+
+
+	//	Turn off the wait cursor.
+	//
+	waitCursor -state 0;
+	
+	//	Step 5: Deactivate the default UI template.
+	//      ===========================================
+	//
+	setUITemplate -popTemplate;
+
+	//	Step 6: Customize the buttons.  
+	//	==============================
+	//
+	//	Provide more descriptive labels for the buttons.
+	//	Disable those buttons that are not applicable to the option box.
+	//	Attach actions to those buttons that are applicable to the option box.
+
+	//	'Apply' button.
+	//
+	string $applyBtn = getOptionBoxApplyBtn();
+	button -edit
+		-label "Create"
+		-command ($callback + " " + $parent + " " + 1)
+		$applyBtn;
+
+	//	'Save' button.
+	//
+	string $saveBtn = getOptionBoxSaveBtn();
+	button -edit 
+		-command ($callback + " " + $parent + " " + 0 + "; hideOptionBox")
+		$saveBtn;
+
+	//	'Reset' button.
+	//
+	string $resetBtn = getOptionBoxResetBtn();
+	button -edit 
+		-command ($setup + " " + $parent + " " + 1)
+		$resetBtn;
+
+	//	Step 7: Set the option box title.
+	//	=================================
+	//
+	setOptionBoxTitle("NURBS Sphere Options");
+
+	//	Set the current values of the option box.
+	//	=========================================
+	//
+	eval (($setup + " " + $parent + " " + 0));	
+	
+	//	Show the option box.
+	//	====================
+	//
+	showOptionBox();
+}
+
+//
+//  Procedure Name:
+//      sphereHelp
+//
+//  Description:
+//		Return a short description about this command.
+//
+//  Input Arguments:
+//      None.
+//
+//  Return Value:
+//      string.
+//
+proc string roundedBoxHelp()
+{
+	return 
+	"  Command: roundedBox - create a NURBS box with uniformly rounded edges.\n";
+}
+
+//
+//  Procedure Name:
+//      assembleCmd
+//
+//  Description:
+//		Construct the command that will apply the option box values.
+//
+//  Input Arguments:
+//      None.
+//
+proc string assembleCmd()
+{
+	string $cmd = "roundedBox";
+
+	setOptionVars(false);
+
+
+	float $sizeX = `optionVar -q roundedBoxSizeX`;
+	float $sizeY = `optionVar -q roundedBoxSizeY`;
+	float $sizeZ = `optionVar -q roundedBoxSizeZ`;
+
+	float $bevelRadius = `optionVar -q roundedBoxBevelRadius`;
+	int $controls = `optionVar -q roundedBoxCreateControls`;
+
+	// History
+	//
+	int $doHistory = `constructionHistory -q -toggle`;
+	if( $controls == 0 )
+	{
+		$controls += $doHistory;
+	}
+	else
+	{
+		$controls++;
+	}
+
+	$cmd = ($cmd 
+		+ " " + $bevelRadius + " " 
+		+ $sizeX + " " + $sizeY + " " + $sizeZ 
+		+ " " + $controls
+		+ ";objectMoveCommand");
+
+	return $cmd;
+}
+
+//
+//  Procedure Name:
+//      performRoundedBox
+//
+//  Description:
+//		Perform the roundedBox command using the corresponding 
+//		option values.  This procedure will also show the option box
+//		window if necessary as well as construct the command string
+//		that will invoke the sphere command with the current
+//		option box values.
+//
+//  Input Arguments:
+//      0 - Execute the command.
+//      1 - Show the option box dialog.
+//      2 - Return the command.
+//
+//  Return Value:
+//      None.
+//
+global proc string performRoundedBox(int $action)
+{
+	string $cmd = "";
+
+	switch ($action) {
+
+		//	Execute the command.
+		//
+		case 0:
+			//	Get the command.
+			//
+			$cmd = `assembleCmd`;
+
+			//	Execute the command with the option settings.
+			//
+			evalEcho($cmd);
+
+			break;
+
+		//	Show the option box.
+		//
+		case 1:
+			roundedBoxOptions;
+			break;
+
+		//	Return the command string.
+		//
+		case 2:
+			//	Get the command.
+			//
+			$cmd = `assembleCmd`;
+			break;
+	}
+	return $cmd;
+}
+X-Zm-Content-Name: userSetup.mel
+Content-Description: Text
+Content-Type: text/plain ; name="userSetup.mel" ; charset=us-ascii
+
+int $numItems = `menu -q -ni $gMainPrimitivesMenu`;
+if ($numItems == 0) { 
+	// Try to build the menu
+	string $pmCmd = `menu -q -pmc $gMainPrimitivesMenu`;
+	catch(eval($pmCmd));
+	$numItems = `menu -q -ni $gMainPrimitivesMenu`;
+}
+if( $numItems == 0 )
+{
+	print "can't find primitives menu, creating new menu";
+	menu -l "NewPrimitives" -aob 1 -p "MayaWindow" primMenu;
+}
+else
+{
+	string $items[] = `menu -q -ia $gMainPrimitivesMenu`;
+	setParent -m $items[0]; // nurbs primitives is the first sub menu item
+}
+
+menuItem -l "Rounded Box" -c "performRoundedBox 0"
+            -dmc "performRoundedBox(2)" -i "cube.xpm"
+            -annotation "NURBS Rounded Box: Create a NURBS box with rounded bevels"
+            roundedBoxItem;
+menuItem -ob true
+            -annotation "NURBS Rounded Box Option Box"
+            -l "Rounded Box Option Box" -i "cube.xpm" -c "performRoundedBox 1" roundedBoxOptItem;
+setParent ..; 

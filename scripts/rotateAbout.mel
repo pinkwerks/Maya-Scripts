@@ -1,0 +1,25 @@
+global proc
+rotateAbout()
+{
+    global string $gRotate;
+    string $cvs[] = `ls -sl -fl -l`;
+    float $wsp[];
+    float $start[];
+    float $end[];
+
+    if (`size $cvs` != 3)
+    	error("Select at least two points, followed by the thing to rotate!");
+
+    $start = `xform -q -ws -t $cvs[0]`;
+    $end = `xform -q -ws -t $cvs[1]`;
+    print($start);
+    select -cl;
+    $joint = `joint -p $start[0] $start[1] $start[2]`;
+    joint -p $end[0] $end[1] $end[2];
+    joint -e -zso -oj xyz joint1;
+    select -tgl $cvs[2];
+    $skin = `newBindSkin " -byClosestPoint -toSkeleton"`;
+
+    setToolTo $gRotate;
+    manipRotateContext -e -mode 0 Rotate;
+}

@@ -1,0 +1,114 @@
+// Rob Bredow
+// rob@185vfx.com
+// http://www.185vfx.com/
+// Copyright 3/2002 Rob Bredow, All Rights Reserved
+// 
+// Converts currently selected point or object from 3d space to 
+// screen space for use in a compositing package.
+//
+// Writes out "normalized" 2d coordinates so multiply the x by the
+// width of your image and y by the height to get pixels
+//
+// Assumes your camera is called "cam_main"
+
+
+// Get a matrix
+proc matrix screenSpaceGetMatrix(string $attr){
+  float $v[]=`getAttr $attr`;
+  matrix $mat[4][4]=<<$v[0], $v[1], $v[2], $v[3]; 
+             $v[4], $v[5], $v[6], $v[7];
+             $v[8], $v[9], $v[10], $v[11];
+             $v[12], $v[13], $v[14], $v[15]>>;
+ return $mat;
+}
+
+// Multiply the vector v by the 4x4 matrix m, this is probably
+// already in mel but I cant find it.
+proc vector screenSpaceVecMult(vector $v, matrix $m){
+  matrix $v1[1][4]=<<$v.x, $v.y, $v.z, 1>>;
+  matrix $v2[1][4]=$v1*$m;
+  return <<$v2[0][0], $v2[0][1],  $v2[0][2]>>;
+}
+
+global proc int screenSpace()
+{
+  // get the currently selected point
+  string $dumpList[] = `ls -sl`;
+  int $argc = size($dumpList);
+
+  if ($argc != 1)
+  {
+    confirmDialog -t "screenSpace Usage" -m "To use, select a point on a geometry or a single object to write";
+    return -1;
+  }
+  
+  string $dumpPt = $dumpList[0];
+
+  // Make $dumpPt a unix friendly name
+  string $name = $dumpPt;
+  while ( match("\\[",$name) != "" ) {
+    $name = `substitute "\\[" $name "_"`;
+  }
+  while ( match("\\]",$name) != "" ) {
+    $name = `substitute "\\]" $name ""`;
+  }
+  while ( match("\\.",$name) != "" ) {
+    $name = `substitute "\\." $name "_"`;
+  }
+
+  // Find the frame range
+  float $fs = `playbackOptions -q -min`;
+  float $fe = `playbackOptions -q -max`;
+  string $verify = "Will create " + $name + "_screenSpace.cmp\n" +
+                   "For the frame range of " + $fs + "-" + $fe + "\n" +
+                   "The camera used will be cam_main\n";
+ 
+  if (`confirmDialog -t "screenSpace Verify" -m $verify -b "Dump" -b "Cancel"` == "Cancel")
+    return -2;
+
+  print ("Dumping selection...\n");
+
+  string $pointWsFile = $name+"_screenSpace.cmp";
+  int $outFileId = fopen($pointWsFile,"w");
+
+  if ($outFileId == 0) {
+    print ("Could not open output file " + $pointWsFile);
+    return -1;
+  }
+
+  string $line;
+
+  int $f;
+  float $tx[],$ty[],$tz[];
+  for ($f=$fs;$f<=$fe;$f++)
+  {
+    currentTime $f;
+
+    // get the world space position of the point into a vector
+    float $ptPosWs[] = `xform -q -ws -t $dumpPt`;
+    vector $ptVecWs = <<$ptPosWs[0],$ptPosWs[1],$ptPosWs[2]>>;
+
+    // Grab the worldInverseMatrix from cam_main
+    matrix $cam_mat[4][4] = screenSpaceGetMatrix("cam_main.worldInverseMatrix");
+
+    // Multiply the point by that matrix
+    vector $ptVecCs = screenSpaceVecMult($ptVecWs,$cam_mat);
+
+    // Adjust the point's position for the camera perspective
+    float $hfv = `camera -q -hfv cam_main`;
+    float $ptx = (($ptVecCs.x/(-$ptVecCs.z))/tand($hfv/2))/2.0+.5;
+    float $vfv = `camera -q -vfv cam_main`;
+    float $pty = (($ptVecCs.y/(-$ptVecCs.z))/tand($vfv/2))/2.0+.5;
+
+    float $ptz = $ptVecCs.z;
+
+    $line = $ptx + " " + $pty + " " + "\n";
+    fprint $outFileId $line; 
+  }
+ 
+  fclose $outFileId;
+
+  return 1;
+}
+
+

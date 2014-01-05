@@ -1,0 +1,5 @@
+global proc checkForZeroScaleAndVisible()
+{
+	error("not implemented");	
+}
+

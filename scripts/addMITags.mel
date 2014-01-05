@@ -1,0 +1,17 @@
+// v20060209 pink
+// addMITags() : adds a mental ray label (tag) to selected shit. 
+global proc
+addMITags ()
+{
+  string $objs[] = `ls -sl -l `;
+  string $obj;
+  int $i = 0;
+  for ($obj in $objs) {
+    if ( `attributeExists "miLabel" $obj` == 0 ) {
+      catch(`addAttr -ln miLabel -at long $obj`);
+      catch(`setAttr -e -keyable true ($obj + ".miLabel")`);
+      catch(`setAttr ($obj + ".miLabel") $i`);
+    }
+    $i++;
+  }
+}

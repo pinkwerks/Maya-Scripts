@@ -1,0 +1,40 @@
+//
+// edit the selected objects associated expression, sort of.
+// ment for quickly pulling up the creation/runtime rules of
+// a given particle object.
+//
+// usage : select a particle object then execute the
+//	   MEL command `editExpression <type>`.
+//
+// 	where <type> is either (currently) either runtime | creation
+//
+
+global proc int
+editExpression(string $type) {
+	$err = 0;
+	$sel = `ls -sl`;
+
+	// a little error checking
+
+	if (size($sel) != 1 ) { $err++; }
+	if ($type != "runtime" && $type != "creation") {
+		$err ++;
+	}
+
+	if ($err) {
+		error ("RTFM bitch.  USAGE : editExpression <type>\n");
+		return(1);
+	}
+	
+	select -r `listRelatives $sel`;
+	$sel = `ls -sl`;
+	
+	if (nodeType($sel) != "particle") {
+		error ("Only Particle objects are supported... try again later.\n");
+		return(1);
+	}
+
+	expressionEditor $type $sel[0] position;
+
+	return(0);
+}

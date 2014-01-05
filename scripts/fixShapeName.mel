@@ -1,0 +1,30 @@
+// fixShapeName.mel v20040625
+//
+// pin|[elton whicha[|]
+//
+// Rename a shape node to the format : ${parentTransform}_Shape
+//
+
+global proc
+fixShapeName()
+{
+    string $me = "fixShapeName";
+    string $shape;
+    string $newShapeName;
+    string $parent;
+    string $tmpA[];
+	string $selectedShapes[] = `ls -sl -l`;
+    int $sizeOfShapes = `size $selectedShapes`;
+
+    if ( $sizeOfShapes == 0 )
+    	error($me + " : Nothing shapes to process!");
+
+    for ( $shape in $selectedShapes )
+    {
+    	$tmpA = `listRelatives -p $shape`;
+		$parent = $tmpA[0];
+		$newShapeName = ($parent + "Shape");
+		rename $shape $newShapeName;
+    }
+}
+

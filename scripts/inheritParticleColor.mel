@@ -1,0 +1,9 @@
+global proc int
+getParticleColorTex() {
+	$things = `ls -sl`;
+	for ($thing in $things) {
+		listConnections ($thing + ".particleColor");
+	}
+	return(0);
+}
+

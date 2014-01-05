@@ -1,0 +1,81 @@
+/*
+ * yamacam v.91 20020211 <pinkwerks@netscape.net>
+ *
+ * yama broke his arm and had no way to move the camera around
+ *
+ */
+
+global proc
+yamacam()
+{
+    string $procName = "yamacam";
+    string $sel[];
+
+    if (`window -exists $procName`) {
+        showWindow $procName;
+        return;
+    }
+
+    string $window = `window -t "Yama Cam" $procName`;
+
+    string $form = `formLayout -numberOfDivisions 9`;
+
+    string $b1 = `button -label "Tumble" -c "TumbleTool"`;
+    string $b2 = `button -label "Track" -c "TrackTool"`;
+    string $b3 = `button -label "Dolly" -c "DollyTool"`;
+    string $b4 = `button -label "Zoom" -c "setToolTo boxZoomSuperContext;"`;
+    string $b5 = `button -label "Roll" -c "setToolTo rollContext;"`;
+    string $b6 = `button -label "Azimuth Elevation" -c "setToolTo azimuthElevationContext;"`;
+    string $b7 = `button -label "Yaw-Pitch" -c "setToolTo yawPitchContext;"`;
+    string $b8 = `button -label "Fly" -c "setToolTo flyThroughContext;"`;
+    string $b9 = `button -label "Pick Mode" -c "SelectTool"`;
+
+    formLayout -edit
+    	-attachForm     $b1	"top" 0
+    	-attachForm     $b1	"left" 0
+    	-attachForm     $b1	"right" 0
+    	-ap		$b1	"bottom"   0 1
+
+    	-ap		$b2	"top"	0 1
+    	-attachForm     $b2	"left"	0
+    	-attachForm     $b2	"right"	0
+    	-ap		$b2	"bottom"   0 2
+
+    	-ap		$b3	"top"	0 2
+    	-attachForm     $b3	"left"	0
+    	-attachForm     $b3	"right"	0
+    	-ap		$b3	"bottom" 0 3 
+
+    	-ap		$b4	"top" 0 3
+    	-attachForm     $b4	"left" 0
+    	-attachForm     $b4	"right"	0
+    	-ap		$b4	"bottom" 0 4
+
+    	-ap		$b5	"top" 0 4
+    	-attachForm     $b5	"left" 0
+    	-attachForm     $b5	"right"	0
+    	-ap		$b5	"bottom" 0 5
+
+    	-ap		$b6	"top" 0 5
+    	-attachForm     $b6	"left" 0
+    	-attachForm     $b6	"right"	0
+    	-ap		$b6	"bottom" 0 6
+
+    	-ap		$b7	"top" 0 6
+    	-attachForm     $b7	"left" 0
+    	-attachForm     $b7	"right"	0
+    	-ap		$b7	"bottom" 0 7
+
+    	-ap		$b8	"top" 0 7
+    	-attachForm     $b8	"left" 0
+    	-attachForm     $b8	"right"	0
+    	-ap		$b8	"bottom" 0 8
+
+    	-ap		$b9	"top" 0 8
+    	-attachForm     $b9	"left" 0
+    	-attachForm     $b9	"right"	0
+    	-ap		$b9	"bottom" 0 9
+    $form;
+
+    showWindow $procName;
+}

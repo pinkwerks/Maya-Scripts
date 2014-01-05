@@ -1,0 +1,82 @@
+// v20070330 pink
+// export selected animation curves to discreet raw file
+//
+// raw format
+/*
+
+(int)NUM_FRAMES (int)NUM_CHANNELS
+(float)FRAME_NUM (float)CHAN_VALUE0 ... (float)CHAN_VALUE_N
+
+Example :
+---
+80 3
+  1.0000  0.0000000   0.0000000  -61.7430534
+  2.0000  0.0000000   0.0000000  -61.7430534
+  ...
+---
+*/
+
+proc
+exportDiscreetEngine(float $fs, float $fe, string $file)
+{
+	string $objs[] = `ls -sl -ni -type transform`;
+	int $numObjs = `size $objs`;
+	if ( $numObjs < 1 )
+	{
+		error("No objects selected for export!");
+	}
+	float $f = 0.0;
+	float $t[];
+	float $r[];
+	float $s[];
+	for ( $obj in $objs )
+	{
+		// Open some files on disk...
+		string $pFile = ($file+"_"+ $obj +"_position.raw");
+		string $rFile = ($file+"_"+ $obj +"_rotation.raw");
+		string $sFile = ($file+"_"+ $obj +"_scale.raw");
+		int $pFileId = `fopen $pFile "w"`;
+		if ( $pFileId == 0 )
+			error("Couldn't open "+ $pFile +" for writing!");
+		int $rFileId = `fopen $rFile "w"`;
+		if ( $rFileId == 0 )
+			error("Couldn't open "+ $rFile +" for writing!");
+		int $sFileId = `fopen $sFile "w"`;
+		if ( $sFileId == 0 )
+			error("Couldn't open "+ $sFile +" for writing!");
+		// Start writing to our files
+		fprint $pFileId ((int)$fe +" 3\n");
+		fprint $rFileId ((int)$fe +" 3\n");
+		for ( $f = $fs ; $f <= $fe; $f++ )
+		{
+			// position
+			fprint $pFileId ($f +" "); // spacer
+			$t = `getAttr -t $f ($obj+".translate")`;
+			fprint $pFileId ($t[0] +" ");
+			fprint $pFileId ($t[1] +" ");
+			fprint $pFileId ($t[2] +"\n");
+			// rotation
+			fprint $rFileId ($f +" "); // spacer
+			$r = `getAttr -t $f ($obj+".rotate")`;
+			fprint $rFileId (($r[0] * -1) +" ");
+			fprint $rFileId (($r[1] * -1) +" ");
+			fprint $rFileId (($r[2] * -1) +"\n");
+			// scale 
+			fprint $sFileId ($f +" "); // spacer
+			$r = `getAttr -t $f ($obj+".scale")`;
+			fprint $sFileId ($s[0] +" ");
+			fprint $sFileId ($s[1] +" ");
+			fprint $sFileId ($s[2] +"\n");
+		}
+		fclose $pFileId;
+		fclose $rFileId;
+		fclose $sFileId;
+	}
+}
+
+global proc
+exportDiscreet(float $fs, float $fe, string $file)
+{
+	exportDiscreetEngine($fs, $fe, $file);
+}
+

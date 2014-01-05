@@ -1,0 +1,64 @@
+// rotate3D v20070814 - pinkwerks
+//
+// Rotate a point ($p0) about an arbitrary axis ($p2 - $p1)
+// Code translated from Bruce Vaughan's PointRotate.py
+// Right-hand ruled rotation.
+//
+// Arguments : 
+// 	$p1 = axis point 1
+// 	$p2 = axis point 2
+// 	$p0 = point to be rotated
+// 	$theta = angle of rotation (in radians)
+//
+// Returns : new point position.
+//
+
+global proc vector
+rotate3D(vector $p1, vector $p2, vector $p0, float $theta)
+{
+	// Translate our point so it's axis is at origin
+	vector $p = $p0 - $p1;	
+	// Init point q
+	vector $q = <<0,0,0>>;
+	vector $N = $p2 - $p1;
+	float $Nm = sqrt(pow($N.x, 2) + pow($N.y, 2) + pow($N.z, 2));
+
+	// Check for zeros.
+	$Nm = $Nm < .00001 ? .00001 : $Nm;
+
+	// Rotation axis unit vector
+	vector $n = <<$N.x / $Nm, $N.y / $Nm, $N.z / $Nm>>;
+
+	// Matrix common factors
+	float $c = cos($theta);
+	//float $t = (1 - cos($theta));
+	float $t = 1 - $c;
+	float $s = sin($theta);
+	float $X = $n.x;
+	float $Y = $n.y;
+	float $Z = $n.z;
+
+	// Matrix 'M'
+	float $d11 = $t * pow($X, 2) + $c;
+	float $d12 = $t * $X * $Y - $s * $Z;
+	float $d13 = $t * $X * $Z + $s * $Y;
+	float $d21 = $t * $X * $Y + $s * $Z;
+	float $d22 = $t * pow($Y, 2) + $c;
+	float $d23 = $t * $Y * $Z - $s * $X;
+	float $d31 = $t * $X * $Z - $s * $Y;
+	float $d32 = $t * $Y * $Z + $s * $X;
+	float $d33 = $t * pow($Z, 2) + $c;
+
+	//            |p.x|
+	// Matrix 'M'*|p.y|
+	//            |p.z|
+	$q = <<
+		$d11 * $p.x + $d12 * $p.y + $d13 * $p.z,
+		$d21 * $p.x + $d22 * $p.y + $d23 * $p.z,
+		$d31 * $p.x + $d32 * $p.y + $d33 * $p.z
+	>>;
+
+	// Translate axis and rotated point back to original location    
+	return($q + $p1);
+}
+

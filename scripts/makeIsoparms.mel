@@ -1,0 +1,153 @@
+//
+// makeIsoparms.mel v20060320 --pink
+// automate duplication of nurbs surface isoparms.
+//
+global proc
+makeIsoparmsTrans(string $numCtl, string $dirCtl, string $distCtl)
+{
+  int $num = `intSliderGrp -q -v $numCtl`;
+  string $dir = `radioButtonGrp -q -sl $dirCtl`;
+  string $dist = `radioButtonGrp -q -sl $distCtl`;
+  // sort out direction
+  switch ($dir)
+    {
+      case "1":
+	$dir = "u";
+	break;
+      case "2":
+	$dir = "v";
+	break;
+    }
+  // sort out distribution
+  switch ($dist)
+    {
+      case "1":
+	$dist = "even";
+	break;
+      case "2":
+	$dist = "rand";
+	break;
+      case "3":
+	$dist = "smooth";
+	break;
+    }
+  print("Dir  = "+$dir+"\n");
+  print("Dist = "+$dist+"\n");
+
+  makeIsoparmsCmd($num, $dir, $dist);
+}
+
+global proc
+makeIsoparmsCmd(int $num, string $dir, string $dist)
+{
+  string $objs[] = `ls -sl -l`;
+  int $sobjs = size($objs);
+  if ( $sobjs < 1 )
+    error("makeIsoparms : select at least one NURBS object.");
+  int $i = 0;
+  float $p = 0;
+  float $rangeAry[];
+  float $range;
+  string $obj;
+  string $tmps[];
+  string $ogname;
+  string $grpnames[];
+  string $dirUpper;
+
+  if ( $dir == "u" )
+    $dirUpper = `toupper $dir`;
+  else if ( $dir == "v" )
+    $dirUpper = `toupper $dir`;
+  else
+    {
+      warning("makeIsoparms : Can't determin direction "+$dir+" defaulting to U");
+      $dir= "u";
+      $dirUpper= "U";
+    }
+  if ( $num < 2 )
+    {
+      warning("makeIsoparms : num ("+$num+") too small defaulting to 2");
+    }
+  for ( $obj in $objs )
+    {
+      $ogname = $obj;
+      select $obj;
+      if ( `nodeType $obj` == "transform" )
+	{
+	  $tmps = `pickWalk -d down`;
+	  $obj = $tmps[0];
+	  warning($ogname+" is a transform, pickWalking down to "+$obj+".");
+	}
+      $nt = `nodeType $obj`;
+      if ( $nt == "nurbsSurface" )
+	{
+	  $rangeAry = `getAttr ($obj+".minMaxRange"+$dirUpper)`;
+	  print($rangeAry);
+	  print("\n");
+	  $range = $rangeAry[1]; 
+	  $i = 0;
+	  print("Range = "+$range+"\n");
+	  while ( $i < $num )
+	    {
+	      if ( $dist == "rand" )
+		$p = rand(1);
+	      else if ( $dist == "smooth" )
+		$p = smoothstep(0, ($num - 1), $i);
+	      else // 'even'
+		$p = linstep(0, ($num - 1), $i);
+
+	      //print ($obj+"."+$dir+"["+$p+"]\n");
+	      $p *= $range;
+	      $tmps = `duplicateCurve -ch 1 -rn 0 -local 0 -n ($ogname+"Crv") ($obj+"."+$dir+"["+$p+"]")`;
+	      $grpnames[$i] = $tmps[0];
+	      $i++;
+	    }
+	  group -n ($ogname+"Crvs") $grpnames;
+	}
+      else
+	warning($obj+" is a "+$nt+" not a NURBS objects, skipping.");
+    }
+}
+
+global proc
+makeIsoparms()
+{
+  string $procName = "makeIsoparms";
+  if ( `window -exists $procName` )
+    deleteUI -window $procName;
+  string $window = `window -rtf on -t "Make Isoparms" $procName`;
+
+  string $lay1 = `formLayout`;
+  string $numCtl = `intSliderGrp -l "Number" -f 1 -v 10 -min 2 -adj 3`;
+  string $dirCtl = `radioButtonGrp -nrb 2 -l "Direction" -la2 "U" "V" -sl 1`;
+  string $distCtl = `radioButtonGrp -nrb 3 -l "Distribution" -la3 "Even" "Random" "Smooth" -sl 1`;
+
+  /* Control Buttons */
+  string $makeBtnCmd = ("makeIsoparmsTrans "+$numCtl+" "+$dirCtl+" "+$distCtl);
+  string $makeBtn = `button -l "Make" -c $makeBtnCmd`;
+  string $closeBtn = `button -l "Close" -c ("deleteUI -window " + $window)`;
+  formLayout -e
+    -af $numCtl top 0
+    -af $numCtl left 0
+    -af $numCtl right 0
+
+    -ac $dirCtl top 0 $numCtl
+    -af $dirCtl left 0
+
+    -ac $distCtl top 0 $dirCtl
+    -af $distCtl left 0
+
+    -ac $makeBtn top 0 $distCtl
+    -af $makeBtn left 0 
+    -ap $makeBtn right 0 50
+    -af $makeBtn bottom 0
+
+    -ac $closeBtn top 0 $distCtl
+    -ap $closeBtn left 0 50
+    -af $closeBtn right 0
+    -af $closeBtn bottom 0
+
+    $lay1;
+
+  showWindow $window;
+}

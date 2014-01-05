@@ -1,0 +1,318 @@
+//
+// Copyright (C) 1997-1998 Alias|Wavefront,
+// a division of Silicon Graphics Limited.
+//
+// The information in this file is provided for the exclusive use of the
+// licensees of Alias|Wavefront.  Such users have the right to use, modify,
+// and incorporate this code into other products for purposes authorized
+// by the Alias|Wavefront license agreement, without fee.
+//
+// ALIAS|WAVEFRONT DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
+// INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO
+// EVENT SHALL ALIAS|WAVEFRONT BE LIABLE FOR ANY SPECIAL, INDIRECT OR
+// CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
+// DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+// TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+// PERFORMANCE OF THIS SOFTWARE.
+//
+//
+//
+//  Alias|Wavefront Script File
+//  MODIFY THIS AT YOUR OWN RISK
+//
+//
+//  Creation Date:  2 December 1997
+//
+//  Procedure Name:
+//      faceForward
+//
+//  Description:
+//      This script makes the selected objects face the way that they are 
+//      moving.  It can also add velocity attributes for the object.  How to
+//      use:
+//          1.  Select the objects that you want to face forward.
+//          2.  Execute faceForward in the Script Editor.
+//          3.  A Face Forward window pops up.
+//               *  The aim vector is the direction that the object 
+//                  is currently facing (for example, the object facing 
+//                  positive X would equate to 1 0 0).
+//               *  The up vector is the current up direction for the object 
+//                  (for example, up being positive Y for the object would 
+//                  equate to 0 1 0).
+//               *  The world up vector is the world up direction (for 
+//                  example, most of the time you want up to be positive Y, 
+//                  this would equate to 0 1 0).
+//               *  The velocity attribute checkbox will add attributes 
+//                  for the instantaneous velocity of the object in the 
+//                  X, Y, and Z directions.
+//          4.  Click on the Face Forward button.
+//          
+//      Now the object will always face forward in the direction it is 
+//      moving.  
+//
+/*      Here is an example to drag around:
+            cone;
+            faceForward;
+  
+        This script will work with the particleSub plugin.  For example:
+            cone -name chazy;
+            faceForward;
+            loadPlugin "particleSub.so";
+  
+            and click the "Face Forward" button and then the "Close" button.  
+            Finally execute the following script in the Script Editor.
+            
+            emitter -pos 0 0 0 -type omni -rate 7 -speed 7 -name emitter;
+            particle -name particles;
+            turbulence -pos 0 0 0 -m 40 -att 0 -f 1.5 -name turbulence;
+            connectDynamic -f turbulence -em emitter particles;
+            particleSub -duplicateAll -deleteBuffer 100 chazy particles;
+            delete chazy;
+*/
+//  Input Arguments:
+//      None.
+//
+//  Return Value:
+//      None.
+//
+
+
+// This procedure builds the face forward window which is identified by 
+// the passed in string.
+//
+proc buildFaceForwardWindow(string $faceForwardWindow)
+{
+    // Create the face forward window and give it a column layout so that 
+    // all of the controls are in a column.
+    //
+    window -title "Face Forward" -iconName "Face Forward" -titleBar true 
+        -minimizeButton true -maximizeButton false 
+        -sizeable true $faceForwardWindow;
+    columnLayout -rs 5 -adjustableColumn true;
+
+    // Create the three float field groups for the aim, up, and world up
+    // vectors.
+    //
+    floatFieldGrp -label "Aim vector" -numberOfFields 3
+        -value1 1 -value2 0 -value3 0 faceForwardAimVector;
+    floatFieldGrp -label "Up vector" -numberOfFields 3
+        -value1 0 -value2 1 -value3 0 faceForwardLocalUpVector;
+    floatFieldGrp -label "World up vector" -numberOfFields 3
+        -value1 0 -value2 1 -value3 0 faceForwardWorldUpVector;
+
+    // Create a checkbox for adding a velocity attribute to the object.
+    //
+    checkBoxGrp -l "Add velocity attribute" -l1 ""
+        -v1 true faceForwardAddVelocity;
+    separator -style out;
+
+    // Create a button for making all the selected objects face forward.
+    //
+    button -l "Face Forward" -c "makeAllFaceForward()";
+    button -l "Close" -c ("window -e -vis 0 " + $faceForwardWindow);
+}
+
+
+// This procedure makes the passed in object face forward based on the state
+// of the controls in the face forward window.
+//
+proc makeFaceForward(string $object)
+{
+    // Get the name of the passed in object.  It is assumed that the passed in
+    // object name is fully specified (eg:  |groupA|nurbsSphere1) so the name
+    // that is obtained is just the object name (eg:  nurbsSphere1).
+    //
+    string $temp[];
+    tokenize($object, "|", $temp);
+    string $name = $temp[size($temp) - 1];
+
+    // Get the position in world space of the object.
+    //
+    float $trans[] = `getAttr ($object + ".translate")`;
+    float $pivot[] = `getAttr ($object + ".transMinusRotatePivot")`;
+    float $pos[] = {$trans[0] - $pivot[0], $trans[0] - $pivot[0], 
+        $trans[0] - $pivot[0]};
+
+    // Create a hidden locator that is parented to the object but does not
+    // inherit the objects transform.
+    //
+    $temp = `spaceLocator -name ($name + "Direction")`;
+    string $locator = "|" + $temp[0];
+    hide $locator;
+    parent $locator $object;
+    $locator = $object + $locator;
+    setAttr ($locator + ".inheritsTransform") false;
+
+    // Get the aim, up, and world up vector values from the face forward
+    // window.
+    //
+    float $aim[] = `floatFieldGrp -q -value faceForwardAimVector`;
+    float $localUp[] = `floatFieldGrp -q -value faceForwardLocalUpVector`;
+    float $worldUp[] = `floatFieldGrp -q -value faceForwardWorldUpVector`;
+
+    // Create an aim constrint on the object that always aims away from 
+    // the locator.
+    //
+    aimConstraint -weight 1 
+        -aimVector (-$aim[0]) (-$aim[1]) (-$aim[2])
+        -upVector $localUp[0] $localUp[1] $localUp[2]
+        -worldUpVector $worldUp[0] $worldUp[1] $worldUp[2] 
+        -name aimConstraint $locator $object;
+
+    // Add some attributes to the object for its last x, y, and z positions as
+    // well as a toggle for its facing forward.
+    //
+    addAttr -ln faceForward -at bool -dv true $object;
+    setAttr -keyable on ($object + ".faceForward");
+    addAttr -ln lastX -at double -dv $pos[0] $object;
+    addAttr -ln lastY -at double -dv $pos[1] $object;
+    addAttr -ln lastZ -at double -dv $pos[2] $object;
+
+    // If the velocity is to be added then add corresponding attributes and 
+    // create a velocity expression component.
+    //
+    string $velocityExpression = "";
+    if (`checkBoxGrp -q -v1 faceForwardAddVelocity`)
+    {
+        // Figure out how much time elapses in a single frame.
+        //
+        float $secondsPerFrame;
+        switch((string)`currentUnit -q -t`) 
+        {
+            case "hour":
+                $secondsPerFrame = 3600;
+                break;
+            case "min":
+                $secondsPerFrame = 60;
+                break;
+            case "sec":
+                $secondsPerFrame = 1;
+                break;
+            case "millisec":
+                $secondsPerFrame = 1.0 / 1000;
+                break;
+            case "game":
+                $secondsPerFrame = 1.0 / 15;
+                break;
+            case "film":
+                $secondsPerFrame = 1.0 / 24;
+                break;
+            case "pal":
+                $secondsPerFrame = 1.0 / 25;
+                break;
+            case "ntsc":
+                $secondsPerFrame = 1.0 / 30;
+                break;
+            case "show":
+                $secondsPerFrame = 1.0 / 48;
+                break;
+            default:
+                $secondsPerFrame = 1.0 / 24;
+                break;
+        }
+
+        // Add the velocity attributes and make them keyable so that they are
+        // visible in the Channel Box.
+        //
+        addAttr -ln velocityX -at double $object;
+        addAttr -ln velocityY -at double $object;
+        addAttr -ln velocityZ -at double $object;
+
+        setAttr -keyable on ($object + ".velocityX");
+        setAttr -keyable on ($object + ".velocityY");
+        setAttr -keyable on ($object + ".velocityZ");
+
+        // Define the expression to update the velocity attributes.
+        //
+        $velocityExpression = 
+            "// The velocity is just the change in position divided by\n" +
+            "// the seconds per frame.  The units are distance per\n" +
+            "// second.\n" +
+            "//\n" +
+            "velocityX = ($positionX - lastX) / " + $secondsPerFrame + ";\n" +
+            "velocityY = ($positionY - lastY) / " + $secondsPerFrame + ";\n" +
+            "velocityZ = ($positionZ - lastZ) / " + $secondsPerFrame + ";\n" +
+            "\n";
+    }
+
+    // Make an expression to update the attributes necessary to have the 
+    // object face forward and include whatever the velocity expression is.
+    //
+    expression -s (
+        "// For some reason the world space position of the object is\n" +
+        "// the translation minus the transMinusRotatePivot attributes.\n" +
+        "//\n" +
+        "float $positionX = translateX - transMinusRotatePivotX;\n" +
+        "float $positionY = translateY - transMinusRotatePivotY;\n" +
+        "float $positionZ = translateZ - transMinusRotatePivotZ;\n" +
+        "\n" +
+        "// If the faceForward attribute is off then short circuit the\n" +
+        "// aim constraint by putting the locator right on top of the\n" +
+        "// object.\n" +
+        "//\n" +
+        "if (! faceForward)\n" +
+        "{\n" +
+        "    lastX = $positionX;\n" +
+        "    lastY = $positionY;\n" +
+        "    lastZ = $positionZ;\n" +
+        "}\n" +
+        "\n" +
+        "// Update the locator to the last world space position of the\n" +
+        "// object.\n" +
+        "//\n" +
+        $locator + ".tx = lastX;\n" +
+        $locator + ".ty = lastY;\n" +
+        $locator + ".tz = lastZ;\n" +
+        "\n" + $velocityExpression +
+        "// Update the last position attributes with the current\n" +
+        "// position.\n" +
+        "//\n" +
+        "lastX = $positionX;\n" +
+        "lastY = $positionY;\n" +
+        "lastZ = $positionZ;\n"
+        ) -o $object -name ($name + "FaceForwardExpr") -ae 0 -uc all;   
+}
+
+
+// This procedure just makes all of the selected objects face forward.
+//
+global proc makeAllFaceForward()
+{
+    // Turn on the wait cursor and get all of the selected objects.
+    //
+    waitCursor -state on;
+    string $objects[] = `ls -l -sl`;
+    string $object;
+
+    // Make all of the objects face forward.
+    //
+    for ($object in $objects)
+        makeFaceForward($object);
+
+    // Select the previously selected objects and turn off the wait cursor.
+    //
+    select -r $objects;
+    waitCursor -state off;
+}
+
+
+// This procedure builds the face forward window if necessary and then 
+// shows it.
+//
+global proc faceForward()
+{
+    // Put the wait cursor on and build the face forward window if it does 
+    // not exist.
+    //
+    waitCursor -state on;
+    string $faceForwardWindow = "faceForwardWindow";
+    if (!`window -exists $faceForwardWindow`)
+        buildFaceForwardWindow($faceForwardWindow);
+
+    // Make sure the face forward window is shown and then turn off the 
+    // wait cursor.
+    //
+    showWindow $faceForwardWindow;
+    waitCursor -state off;
+}
+

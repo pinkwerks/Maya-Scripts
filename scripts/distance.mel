@@ -1,0 +1,10 @@
+// calc euclidian distance between 2 points
+proc float distance(vector $pointA, vector $pointB)
+{
+	return sqrt(
+		pow($pointB.x - $pointA.x, 2) +
+		pow($pointB.y - $pointA.y, 2) +
+		pow($pointA.z - $pointB.z, 2)
+		);
+}
+

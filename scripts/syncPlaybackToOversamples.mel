@@ -1,0 +1,8 @@
+global proc
+syncPlaybackToOversamples()
+{
+	int $os = `getAttr dynGlobals1.overSamples`;
+	float $pb = 1.0/$os;
+	playbackOptions -by $pb;
+}
+

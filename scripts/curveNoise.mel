@@ -1,0 +1,159 @@
+//
+// curveNoise() - add or remove controlled noise to channels.
+// pinkwerks com
+// v20040518
+//		initial version
+// v20070131 
+// 		changed names
+// 		added remove functionality
+// v20070410
+//		works with shapes in channel box
+// v20090125
+//		added time step jitter
+//
+
+global proc
+curveNoise(string $mode)
+{
+	source "generateChannelMenu.mel";
+	string $me = "curveNoise";
+	if ( $mode != "add" && $mode != "remove" )
+	{
+		error($me+" : Invalid operation '"+ $mode +
+			"'.  Valid options are 'add' or 'remove'");
+	}
+	global string $gChannelBoxName;
+	string $plugs[];
+	string $connects[];
+	string $objs[] = `ls -sl -l -fl`;
+	string $obj;
+	string $objChan;
+	string $objChanO;
+	string $animCrv;
+	float $salt;
+	float $Z;
+
+	for ( $obj in $objs ) {
+		// query selected main attributes
+		$channels = `channelBox -q -sma $gChannelBoxName`;
+
+		if ( `size $channels` < 1 )
+		{
+			$channels = `channelBox -q -ssa $gChannelBoxName`;
+			if (`size $channels` < 1)
+					error($me +" : Select channel(s) please!");
+		}
+
+		if ( $mode == "remove" )
+		{
+			for ( $chan in $channels )
+			{
+				$objChan = ($obj +"."+ $chan);
+				$objChanO = ($obj +"."+ $chan +"Original");
+				$connects = `listConnections $objChan`;
+				if ( `nodeType $connects[0]` == "expression" )
+					delete $connects[0];
+				else
+					error($objChan +"is not wired to an expression, skipping.");
+				CBdeleteConnection $objChan;
+				$ogCrv = ($chan +"Original");
+				$plugs = `listConnections -p 1 -scn 1 $objChanO`;
+				connectAttr $plugs[0] $objChan;
+				disconnectAttr $plugs[0] $objChanO;
+			}
+			return;
+		}
+
+		for ( $chan in $channels )
+		{
+			$objChan = ($obj +"."+ $chan);
+			if ( `connectionInfo -id $objChan` == 0 )
+			{
+				//warning($me +" : Channel "+ $chan +", has no animation curve!");
+				setKeyframe $objChan;
+			}
+
+			$ogCrv = ($chan +"Original");
+			$ogCrvL = ($obj + "." + $chan +"Original");
+			if ( ! `attributeExists $ogCrv $obj` )
+			{
+				addAttr -ln $ogCrv -at double $obj;
+				setAttr -e -keyable true ($obj +"."+ $ogCrv);
+			}
+
+			$seed = ($chan +"Seed");
+			if ( ! `attributeExists $seed $obj` )
+			{
+				addAttr -ln $seed -at double $obj;
+				setAttr -e -keyable true ($obj +"."+ $seed);
+				$salt = rand(420.0);
+				setAttr ($obj +"."+ $seed) $salt;
+			}
+
+			$amp = ($chan +"Amplitude");
+			if ( ! `attributeExists $amp $obj` )
+			{
+				addAttr -ln $amp -at double $obj;
+				setAttr -e -keyable true ($obj +"."+ $amp);
+				setAttr ($obj +"."+ $amp) 1;
+			}
+
+			$freq = ($chan +"Frequency");
+			if ( ! `attributeExists $freq $obj` )
+			{
+				addAttr -ln $freq -at double $obj;
+				setAttr -e -keyable true ($obj +"."+ $freq);
+				setAttr ($obj +"."+ $freq) 10;
+			}
+
+			$offset = ($chan +"Offset");
+			if ( ! `attributeExists $offset $obj` ) {
+				addAttr -ln $offset -at double $obj;
+				setAttr -e -keyable true ($obj +"."+ $offset);
+			}
+
+			$steps = ($chan +"Steps");
+			if (!`attributeExists $steps $obj`) {
+				addAttr -ln $steps -at double $obj;
+				setAttr -e -keyable true ($obj +"."+ $steps);
+			}
+
+			$jitter = ($chan +"StepJitter");
+			if (!`attributeExists $jitter $obj`) {
+				addAttr -ln $jitter -at double $obj;
+				setAttr -e -keyable true ($obj +"."+ $jitter);
+			}
+
+			// transfer anim curve
+			$animCrv = `connectionInfo -sfd $objChan`;
+			disconnectAttr $animCrv $objChan;
+			connectAttr $animCrv ($obj +"."+ $ogCrv);
+			// write our expression to the channel the curve used to live 
+			$exp =  "// Added by curveNoise.mel\n";
+			$exp += "string $obj = \""+$obj+"\";\n";
+			$exp += "string $oCrv = \""+$ogCrvL+"\";\n";
+			$exp += "float $timeSlot[];\n";
+			$exp += "float $curveNoise = "+ $ogCrv +" + noise((time + "+ $seed +") * "+ $freq +") * "+ $amp+ " + "+ $offset +";\n";
+			$exp += "if ("+$steps+" > 1) {\n";
+			$exp += "    int $numKeys = `keyframe -q -kc $oCrv`;\n";
+			$exp += "    float $kt[] = `keyframe -q -tc $oCrv`;\n";
+			$exp += "    int $skt = `size $kt`;\n";
+			$exp += "    float $stepSize = ($kt[$skt-1] - $kt[0] + 1) / ("+$steps+"-1);\n";
+			$exp += "    float $jitter;\n";
+			$exp += "    int $i;\n";
+			$exp += "    for ($i = 0; $i < "+$steps+"; $i++) {\n";
+			$exp += "        seed($i + "+$seed+");\n";
+			$exp += "        $jitter = rand(-"+$jitter+", "+$jitter+") * .4 * $stepSize;\n";
+			$exp += "        if ($i == 0 || ($i+1) >= "+$steps+") $jitter = 0;\n";
+			$exp += "        $timeSlot[$i] = $kt[0] + $stepSize * $i;\n";
+			$exp += "        $timeSlot[$i] += $jitter;\n";
+			$exp += "    }\n";
+			$exp += "    int $t = floor(remap(frame, $kt[0], $kt[$skt-1], 0, "+$steps+"-1));\n";
+			$exp += "    $curveNoise = `getAttr -t $timeSlot[$t] $oCrv`;\n";
+			$exp += "}\n";
+			$exp += $objChan+" = $curveNoise;\n";
+			expression -s $exp -o $obj -ae 1 -uc all -name "curveNoiseExpression";
+		}
+	}
+}
+

@@ -1,0 +1,32 @@
+// clusterPerCv v20040714
+// pinkelton wicham
+//
+// for selected curves, generate a one cluster per cv, and one master,
+// group them, and name them nicely :-D
+
+global proc clusterPerCv()
+{
+	string $curves[] = `ls -fl -sl -l`;
+	string $curve;
+	for ( $curve in $curves )
+	{
+		string $cv;
+		string $cvs[];
+		string $clusters[];
+		string $groupName;
+		string $cluster[];
+
+		select $curve;
+		$cvs = `ls -fl -l ($curve + ".cv[*]")`;
+		for ( $cv in $cvs )
+		{
+			select $cv;
+			$cluster = `newCluster "-envelope 1"`;
+			$clusters[`size $clusters`] = $cluster[1];
+		}
+		select $clusters;
+		$groupName = `group`;
+		rename $groupName ($curve + "_clusters");
+	}
+}
+

@@ -1,0 +1,14 @@
+global proc float sdistance(vector $pointA, vector $pointB)
+{
+	vector $test = $pointA - $pointB;
+	float $dist = sqrt(
+		pow($pointB.x - $pointA.x, 2) +
+		pow($pointB.y - $pointA.y, 2) +
+		pow($pointA.z - $pointB.z, 2)
+		);
+	if ( $test.x < 0 || $test.y < 0 || $test.z < 0 )
+		return -$dist;
+	else
+		-$dist;
+}
+

@@ -1,0 +1,15 @@
+global proc float  
+turbulence (
+	int $octaves,
+	float $index
+) {
+	float $v = 0;
+	float $frequency = 1;
+	float $amplitude = 1;
+	for ($i = 0; $i <= $octaves; $i++) {
+		$v += $amplitude * abs(noise($index * $frequency));
+		$frequency += $frequency;
+		$amplitude *= .5;
+	}
+	return($v);
+}

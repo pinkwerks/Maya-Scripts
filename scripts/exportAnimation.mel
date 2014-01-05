@@ -1,0 +1,29 @@
+// exportAnimation
+// animExport done right! --pink
+
+global proc exportAnimation()
+{
+	string $thing;
+	string $things[] = `ls -sl -l`;
+	string $fs = `getAttr defaultRenderGlobals.startFrame`;
+	string $fe = `getAttr defaultRenderGlobals.endFrame`;
+	warning("Please wait...");
+	waitCursor -st 1;
+	bakeResults -simulation true -t ($fs+":"+$fe) -hierarchy below -sampleBy 1 -disableImplicitControl true -preserveOutsideKeys true -sparseAnimCurveBake false -controlPoints false -shape true;
+	//setKeyframe -breakdown 0 -hierarchy below -controlPoints 0 -shape 1;
+	waitCursor -st 0;
+	string $file = `workspace -q -act`;
+	string $sceneName = `getSceneName`;
+	string $outName;
+	//delete `ls -type "curveNormalizer"`;
+	for ($thing in $things) {
+		$outName = ($file+"/data/"+$sceneName+"_"+$thing+".anim");
+		pause -sec 1;
+		file -op "precision=17;intValue=17;nodeNames=1;verboseUnits=0;whichRange=1;options=keys;hierarchy=below;controlPoints=0;shapes=1;useChannelBox=0;copyKeyCmd=-animation objects -option keys -hierarchy below -controlPoints 0 -shape 1 "
+			-typ "animExport"
+			-pr 
+			-es $outName;
+		warning("Wrote : "+$outName);
+	}
+}
+

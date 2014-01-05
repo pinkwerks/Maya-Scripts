@@ -1,0 +1,13 @@
+// v20080205 pink
+// round float to nearest integer
+global proc float
+round(float $v)
+{
+	float $t = trunc($v);
+	float $d = $v - $d;
+	if ($d < .5)
+		return $t;
+	else
+		return ($t + 1);
+}
+

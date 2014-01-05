@@ -1,0 +1,78 @@
+// camImport_v0002.mel
+// Author: David Santiago
+// Revised: September 08, 2001
+// Version: 0002 Revision: 0001
+//
+// Creates a camera with input file's channels
+// UNLABELED Import columns are: frame tx ty tz rx ry rz focal ar apH near far 
+// apH is divided by ar to give apV
+
+global proc int camImport(string $fileName, string $fileType) {
+
+string $cameraName[] = `camera -centerOfInterest 5 -focalLength 35 -lensSqueezeRatio 1 -cameraScale 1 -horizontalFilmAperture 0.98 -horizontalFilmOffset 0 -verticalFilmAperture 0.735 -verticalFilmOffset 0 -filmFit Horizontal -overscan 1 -motionBlur 0 -shutterAngle 144 -nearClipPlane 0.01 -farClipPlane 1000 -orthographic 0 -orthographicWidth 30`;
+
+string $camera = $cameraName[0];
+string $pathParts[];
+string $fileParts[];
+
+$parts = `tokenize $fileName "/" $pathParts`;
+$parts--;
+print ($parts+"\n");
+$file = $pathParts[$parts];
+print($file+"\n");
+
+tokenize $file "." $fileParts;
+print($fileParts[0]+"\n");
+rename -is $camera $fileParts[0];
+$camera = $fileParts[0];
+string $cameraShape = $camera+"Shape";
+rename $cameraName[1] $cameraShape;
+
+	$fileId=`fopen $fileName "r"`;
+
+// while not end of file get camera data
+
+while ( !`feof $fileId` ) {
+
+	int $frame = `fgetword $fileId`;
+//checking if line is blank
+	if ($frame != 0) {
+		float $tx = `fgetword $fileId`;
+		float $ty = `fgetword $fileId`;
+		float $tz = `fgetword $fileId`;
+		float $rx = `fgetword $fileId`;
+		float $ry = `fgetword $fileId`;
+		float $rz = `fgetword $fileId`;
+		float $focal = `fgetword $fileId`;
+		float $ar = `fgetword $fileId`;
+		float $apH = `fgetword $fileId`;
+		float $near = `fgetword $fileId`;
+		float $far = `fgetword $fileId`;
+
+		currentTime $frame;
+
+	//set the camera animation
+
+		setKeyframe -v $tx -attribute "translateX" $camera;
+		setKeyframe -v $ty -attribute "translateY" $camera;
+		setKeyframe -v $tz -attribute "translateZ" $camera;
+		setKeyframe -v $rx -attribute "rotateX" $camera;
+		setKeyframe -v $ry -attribute "rotateY" $camera;
+		setKeyframe -v $rz -attribute "rotateZ" $camera;
+
+	// Set the camera parameters (focal, apH, apV, near, far)
+
+		setKeyframe -v $focal -at "focalLength" $cameraShape;
+		$apH = $apH/25.4;
+		setKeyframe -v $apH -at "horizontalFilmAperture" $cameraShape;
+		float $apV = $apH/$ar;
+		setKeyframe -v $apV -at "verticalFilmAperture" $cameraShape;
+		setKeyframe -v $near -at "nearClipPlane" $cameraShape;
+		setKeyframe -v $far -at "farClipPlane" $cameraShape;
+	}
+	}
+
+	fclose $fileId;
+	return 1;
+}
+fileBrowser camImport "Import" "Text" 1;

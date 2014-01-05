@@ -1,0 +1,59 @@
+proc makeDefaultCamera()
+{
+	string $cam[] = `camera 
+		-centerOfInterest 5 -focalLength 35 -lensSqueezeRatio 1 
+		-horizontalFilmAperture 0.98
+		-verticalFilmAperture 0.735
+		-shutterAngle 180
+		-nearClipPlane 0.01
+		-farClipPlane 10000
+		-orthographic 0`;
+	setAttr ($cam[0]+".displayFilmGate") 1;
+	setAttr ($cam[0]+".displayResolution") 1;
+	$cam[0] = `rename $cam[0] "shotCam"`;
+	string $rx = `group -n "rx" $cam[0]`;
+	string $ry = `group -n "ry" $rx`;
+	string $t = `group -n "t" $ry`;
+	string $off = `group -n "offset" $t`;
+	// lock cam attrs
+	setAttr -lock true ($cam[0]+".tx");
+	setAttr -lock true ($cam[0]+".ty");
+	setAttr -lock true ($cam[0]+".tz");
+	setAttr -lock true ($cam[0]+".ry");
+	setAttr -lock true ($cam[0]+".rz");
+	setAttr -lock true ($cam[0]+".sx");
+	setAttr -lock true ($cam[0]+".sy");
+	setAttr -lock true ($cam[0]+".sz");
+	// lock rx attrs
+	setAttr -lock true ($rx+".tx");
+	setAttr -lock true ($rx+".ty");
+	setAttr -lock true ($rx+".tz");
+	setAttr -lock true ($rx+".ry");
+	setAttr -lock true ($rx+".rz");
+	setAttr -lock true ($rx+".sx");
+	setAttr -lock true ($rx+".sy");
+	setAttr -lock true ($rx+".sz");
+	// lock ry attrs
+	setAttr -lock true ($ry+".tx");
+	setAttr -lock true ($ry+".ty");
+	setAttr -lock true ($ry+".tz");
+	setAttr -lock true ($ry+".rx");
+	setAttr -lock true ($ry+".rz");
+	setAttr -lock true ($ry+".sx");
+	setAttr -lock true ($ry+".sy");
+	setAttr -lock true ($ry+".sz");
+	// lock t attrs
+	setAttr -lock true ($t+".rx");
+	setAttr -lock true ($t+".ry");
+	setAttr -lock true ($t+".rz");
+	setAttr -lock true ($t+".sx");
+	setAttr -lock true ($t+".sy");
+	setAttr -lock true ($t+".sz");
+}
+
+global proc startShot()
+{
+	makeDefaultCamera;
+	prepRender;
+}
+

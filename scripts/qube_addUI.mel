@@ -1,0 +1,144 @@
+
+//
+// Add Maya menu items for Qube rendering and launching QubeGUI
+// PipelineFX
+//
+
+//
+// To auto-install, put the following in usetSetup.mel:
+//   qube_addUI();
+//
+// Location of userSetup.mel:
+//    * Windows: <drive>:\Documents and Settings\<username>\My Documents\maya\<Version>\scripts
+//    * Mac OS X: ~/Library/Preferences/Autodesk/maya/<version>/scripts.
+//    * Linux: ~/maya/<version>/scripts.
+//
+
+global proc qube_removeUI()
+{
+    // Remove MenuItems
+    if (`menuItem -q -exists qube_div1`)                   deleteUI -mi qube_div1; 
+    if (`menuItem -q -exists qube_submitRender`)           deleteUI -mi qube_submitRender; 
+    if (`menuItem -q -exists qube_submitSimpleCmdRender`)  deleteUI -mi qube_submitSimpleCmdRender; 
+    if (`menuItem -q -exists qube_launchQubeGUI`)          deleteUI -mi qube_launchQubeGUI;
+    if (`menuItem -q -exists qube_launchQubeGUI_OB`)       deleteUI -mi qube_launchQubeGUI_OB;
+}
+
+global proc qube_optionVarDlg()
+{
+    // Get optionVar
+    string $qube_qubeguiPath = "";
+    if (`optionVar -exists "qube_qubeguiPath"`) {
+        $qube_qubeguiPath = `optionVar -q "qube_qubeguiPath"`;
+    }
+
+    string $commandName = "QubeGUI";
+    string $callback = ($commandName + "Callback");
+    string $setup = ($commandName + "Setup");
+
+    // Create OptionBox Dialog
+    string $layout = getOptionBox();
+    setParent $layout;
+    setUITemplate -pushTemplate DefaultTemplate;
+    tabLayout -tabsVisible 0 -scrollable 1;
+    string $parent = `columnLayout -adjustableColumn 1`;
+    textFieldButtonGrp -label "QubeGUI Path" -fileName $qube_qubeguiPath -buttonLabel "Browse" -bc "{string $result = `fileDialog -mode 0 -app`;  if ($result != \"\") textFieldButtonGrp -e -fi $result qube_addUI_optionVarDialog_textField; }" qube_addUI_optionVarDialog_textField;
+    setUITemplate -popTemplate;
+    // Buttons
+    string $applyBtn = getOptionBoxApplyBtn();
+    button -e -command ("optionVar -sv \"qube_qubeguiPath\" `textFieldButtonGrp -q -fi qube_addUI_optionVarDialog_textField`") $applyBtn;
+    string $saveBtn = getOptionBoxSaveBtn();
+    button -edit -command ("optionVar -sv \"qube_qubeguiPath\" `textFieldButtonGrp -q -fi qube_addUI_optionVarDialog_textField`; hideOptionBox") $saveBtn;
+    string $resetBtn = getOptionBoxResetBtn();
+    button -edit -command ("optionVar -sv \"qube_qubeguiPath\" \"\"; textFieldButtonGrp -e -fi \"\" qube_addUI_optionVarDialog_textField;")  $resetBtn;
+    // Titling    
+    setOptionBoxTitle ("Qube Preferences");
+    //setOptionBoxHelpTag( "Qube" );
+    // Show
+    showOptionBox();
+}
+
+global proc qube_addUI()
+{
+    print ("Adding Qube menuitems to Render menu\n");
+
+    // Set Parameters
+    //NOTE: Running python directly does not seem to work (likely because of PYTHONPATH is being set by maya)
+    // If Linux, add this to the command so that it launches
+    string $qube_launchgui; 
+    string $qube_launchgui_suffix;   // instead of using "open"
+    string $platform3 = python( "import sys; sys.platform[:3]" ); // get the first 3 characters of the platform
+
+    // Get qubegui path from preferences
+    string $qube_qubeguiPath = "";
+    if (`optionVar -exists "qube_qubeguiPath"`) {
+        $qube_qubeguiPath = `optionVar -q "qube_qubeguiPath"`;
+    }
+
+    switch ($platform3)
+    {
+    case "win": // Windows
+        if ($qube_qubeguiPath == "") { $qube_qubeguiPath = "C:/Program Files/pfx/qube/bin/qube.exe"; }
+        $qube_launchgui = ("start \\\""+$qube_qubeguiPath+"\\\"");
+        $qube_launchgui_suffix = "";
+        break;
+    case "dar": // OSX
+        if ($qube_qubeguiPath == "") { $qube_qubeguiPath = "/Applications/pfx/qube/qube.app"; }
+        $qube_launchgui = ($qube_qubeguiPath+"/Contents/MacOS/qube");
+        $qube_launchgui_suffix = " >/dev/null 2>&1  &";  // instead of using "open"
+        break;
+    case "lin": // Linux
+        if ($qube_qubeguiPath == "") { $qube_qubeguiPath = "/usr/local/pfx/qube/bin/qube"; }
+        $qube_launchgui = $qube_qubeguiPath;
+        $qube_launchgui_suffix = " >/dev/null 2>&1  &";  // instead of using "open"
+        break;
+    }
+    string $qube_cmdTemplate = ("system(\""+$qube_launchgui+" QUBEGUI_ARGS "+$qube_launchgui_suffix+"\")");
+    
+    // Create parent menu (if not exist)
+    global string $gMainRenderMenu;
+    eval(`menu -q -pmc $gMainRenderMenu`); // Make sure Render menu has been created
+
+    // Remove menuitems (if exist)
+    qube_removeUI();
+    
+    // Add menuitems
+    setParent -menu $gMainRenderMenu;
+    menuItem -divider true qube_div1; 
+    //menuItem    -label "+ Qube: Submit Maya Render..."
+    //            -c `substitute "QUBEGUI_ARGS" $qube_cmdTemplate (" --submitDict \\\"{'name':'maya render \"+`file -q -sn -shn`+\"', 'prototype':'maya', 'package':{'scenefile':'\"+`file -q -sn`+\"', 'project':'\"+`workspace -q -rd`+\"', 'range':'\"+`playbackOptions -q -min`+\"-\"+`playbackOptions -q -max`+\"'}}\\\"")` // NOTE: Can use --submitJobtype maya if not want parameters
+    //            -annotation "Render current scene with current renderer through Qube using the Maya jobtype with Dynamic Frame Allocation"
+    //            -echoCommand true
+    //             qube_submitRender;
+    menuItem    -label "+ Qube: Submit Mayabatch Render..."
+                -c `substitute "QUBEGUI_ARGS" $qube_cmdTemplate (" --submitDict \\\"{'name':'maya batchrender \"+`file -q -sn -shn`+\"', 'prototype':'cmdrange', 'package':{'simpleCmdType':'Maya BatchRender (\"+`qube_getCurrentRendererShortname`+\")', 'scenefile':'\"+`file -q -sn`+\"', '-proj':'\"+`workspace -q -rd`+\"', 'range':'\"+`playbackOptions -q -min`+\"-\"+`playbackOptions -q -max`+\"'}}\\\"")`
+                -annotation "Render current scene with current renderer through Qube using the appropriate Mayabatch SimpleCmd that exposes all commandline render options"
+                -echoCommand true
+                 qube_submitSimpleCmdRender;
+    menuItem -label "+ Qube: Launch Qube GUI..."
+                -c `substitute "QUBEGUI_ARGS" $qube_cmdTemplate ""`
+                -annotation "Launch the QubeGUI to monitor and manage distributed jobs"
+                -echoCommand true
+                qube_launchQubeGUI;
+    menuItem -optionBox true -c "qube_optionVarDlg()" qube_launchQubeGUI_OB;
+}
+
+
+global proc string qube_getCurrentRendererShortname()
+{
+    string $curRenderer = `getAttr defaultRenderGlobals.currentRenderer`;
+    switch ($curRenderer)
+    {
+    case "mayaSoftware":
+        $curRenderer = "sw";
+        break;
+    case "mayaHardware":
+        $curRenderer = "hw";
+        break;
+    case "mentalRay":
+        $curRenderer = "mr";
+        break;
+    }
+    //print ("Current Renderer = "+$curRenderer+"\n");
+    return $curRenderer;
+}

@@ -1,0 +1,57 @@
+// camExport_v3.mel
+// Author: David Santiago
+// Revised: May 02, 2002
+// Version: 3 Revision: 0003
+//
+// Exports the translation, rotation and scale channels for the selected object
+// puts them in columns labeled: frame tx ty tz rx ry rz ss sy sz
+//
+
+global proc int camExport(string $fileName, string $fileType) {
+        setNamedPanelLayout "Single Perspective View";
+        updateToolbox();
+	outlinerPanel -e -rp modelPanel4 outlinerPanel1;
+	string $nodes[] = `ls -selection`;
+	int $anyOne = `size $nodes`;
+	if ($anyOne <1) {error "Select a camera\n";}
+	string $camera = $nodes[0];
+	string $camRels[] =`listRelatives -c $camera`;
+	$cameraShape = $camRels[0];
+print $cameraShape;
+	string $type=`nodeType $cameraShape`;
+print $type;
+	if ($type!="camera") {error "Select a camera\n";}
+	if ($fileName == "") {
+		error "No output path and file chosen\n";
+	}
+	$fileId=`fopen $fileName "w"`;
+	float $start = `playbackOptions -q -min`;
+	float $end = `playbackOptions -q -max`;
+//	fprint $fileId "frame\ttx\tty\ttz\trx\try\trz\tfocal\tAR\tapH\tnear\tfar\n";
+
+	for($frame=$start;$frame<=$end;$frame++) {
+		currentTime $frame;
+	//get the camera animation
+		float $trans[] = `xform -q -ws -t $camera`;
+		float $rots[] = `xform -q -ws -ro $camera`;
+		float $tx = $trans[0];
+		float $ty = $trans[1];
+		float $tz = $trans[2];
+		float $rx = $rots[0];
+		float $ry = $rots[1];
+		float $rz = $rots[2];
+	
+		// Get the camera parameters.
+		float $focal = `camera -q -fl $cameraShape`;
+		float $ar = `camera -q -ar $cameraShape`;
+		float $apH= `camera -q -hfa $cameraShape`;
+		$apH = 25.4*$apH;
+		float $near = `camera -q -ncp $cameraShape`;
+		float $far = `camera -q -fcp $cameraShape`;
+		string $output = $frame+" "+$tx+" "+$ty+" "+$tz+" "+$rx+" "+$ry+" "+$rz+" "+$focal+" "+$ar+" "+$apH+" "+$near+" "+$far+"\n";
+		fprint $fileId $output;
+	}
+	fclose $fileId;
+	PreviousViewArrangement;
+	return 1;
+}

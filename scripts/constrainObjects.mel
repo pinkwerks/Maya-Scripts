@@ -1,0 +1,113 @@
+// constrainObjects();
+// 20041025 pinkelton wicham
+//
+// USAGE:
+// parent-constrain selected things, to the last selected thing.
+//
+// NOTES:
+// things are assumed to be transform nodes.
+//
+// you'll get cyclecheck errors if the thing your constraining to
+//   is above the heirarchy - you the object you constrain
+//   to needs to be outside it.
+
+global proc
+constrainObjectsPrep()
+{
+    /* grab the values from the UI and call the engine */
+    string $context = `optionMenuGrp -q -v context`;
+    if ( $context == "" ) {
+    	error("mtorSetValue : Strange, no context!");
+    }
+    print(
+	"constrainObjects "
+	+"\""+$context+"\";"
+	+"\n"
+    );
+    constrainObjectsEngine($context);
+}
+
+global proc
+constrainObjects()
+{
+    string $procName = "constrainObjects";
+
+    if ( `window -exists $procName` ) {
+        showWindow $procName;
+        return;
+    }
+
+    window -rtf 1 -t $procName $procName;
+
+    columnLayout ;
+
+    optionMenuGrp -label "Select Constraint Type" context;
+	menuItem -label "Parent";
+	menuItem -label "Point";
+	menuItem -label "Orient";
+
+    rowLayout -numberOfColumns 2
+    	-columnAlign  1 "center"
+    	-columnAlign  2 "center"
+    	-columnAttach 1 "both" 	0
+    	-columnAttach 2 "both"  0
+    ;
+
+    button -label "Apply" -c constrainObjectsPrep;
+    button -label "Close" -c ("deleteUI -wnd " + $procName);
+
+    showWindow $procName;
+}
+
+global proc
+constrainObjectsEngine(string $ctype)
+{
+    string $prefix = "pco_";
+    string $attrName = ".constraintWeight";
+    string $newSelection[];
+    int $i;
+    string $sel[] = `ls -sl -l`;
+    int $sizeSel = size($sel);
+    for ( $i = 0; $i < $sizeSel - 1; $i ++ ) {
+	string $o = $sel[$i];
+	select $o;
+	addAttr -ln constraintWeight -at double $o;
+	setAttr -e -keyable true ($o + $attrName);
+	setAttr ($o + ".constraintWeight") 1;
+	float $pivot[] = `xform -q -rp $o`;
+	string $shortName[] = `ls -sl`;
+	string $GroupName = `group -r -n ($prefix + $shortName[0])`;
+	pickWalk -d down;
+	string $newLongName[] = `ls -sl -l`;
+	move -r $pivot[0] $pivot[1] $pivot[2] ($GroupName+".scalePivot");
+	move -r $pivot[0] $pivot[1] $pivot[2] ($GroupName+".rotatePivot");
+	setKeyframe ($GroupName + ".tx");
+	setKeyframe ($GroupName + ".ty");
+	setKeyframe ($GroupName + ".tz");
+	setKeyframe ($GroupName + ".rx");
+	setKeyframe ($GroupName + ".ry");
+	setKeyframe ($GroupName + ".rz");
+	setKeyframe ($GroupName + ".sx");
+	setKeyframe ($GroupName + ".sy");
+	setKeyframe ($GroupName + ".sz");
+	string $constrainer = $sel[$sizeSel - 1];
+	select $constrainer;
+	string $con[] = `ls -sl`;
+	select -add $GroupName;
+	string $ConstraintName[];
+	if ( $ctype == "Parent" ) {
+	    $ConstraintName = `parentConstraint -mo -w 1`;
+	} else if ( $ctype == "Point" ) {
+	    $ConstraintName = `pointConstraint -mo -w 1`;
+	} else if ( $ctype == "Orient" ) {
+	    $ConstraintName = `orientConstraint -mo -w 1`;
+	}
+	string $exp = (
+	    $GroupName + "." + "blend" + $ctype + "1 = "
+	    + $newLongName[0] + ".constraintWeight;"
+	);
+	expression -s $exp -o $ConstraintName[0] -ae 1 -uc all ;
+	$newSelection[$i] = $GroupName;
+    }
+    select $newSelection;
+}

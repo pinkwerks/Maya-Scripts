@@ -1,0 +1,18 @@
+// select contraints, then hairSystem
+// v001 pink
+global proc
+connectHairContraints()
+{
+  string $selected[] = `ls -sl -l`;
+  int $selectionSize = `size $selected`;
+  string $affected = $selected[$selectionSize - 1];
+  string $items[] = `stringArrayRemove {$affected} $selected`;
+  string $item;
+  int $i = 0;
+  for ( $item in $items )
+  {
+    print($item + "\n");
+    connectAttr -f ($item+".outPin[0]") ($affected+".inputHairPin["+$i+"]");
+    $i++;
+  }
+}

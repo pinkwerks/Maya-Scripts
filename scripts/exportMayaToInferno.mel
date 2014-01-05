@@ -1,0 +1,392 @@
+//===========================================================================
+//  Second Unit Services www.secondunit.com Script File
+//  MODIFY THIS AT YOUR OWN RISK
+//
+//
+//  Creation Date:	01.02.02
+//  Version:           	1.0
+//  Author:            	Thomas Herrmann
+//
+//  Procedure Name:
+//      exportMayaToInferno()
+//
+//  Description:
+//      File exports a one or two-NodeCamera into inferno.action Vers. 4.x file-format 
+//
+//	Select camera (oneNode) or cameraGroupNode (twoNode) and run the script. 
+//	It will processes the playbackrange.
+//
+//  Input Arguments:
+//      None.
+//
+//  Return Value:
+//      None.
+//===========================================================================
+
+//===========================================================================
+//===	printInfo for Header
+//===========================================================================
+proc outputProlog( int $file, string $creation )
+{
+	global int $startFrame, $endFrame, $Width, $Height;
+	global float $Aspect;
+	int $size[] = {$Width, $Height};
+	
+	fprint( $file, "Module Action\n" );
+	fprint( $file, "Program inferno\n" );
+	fprint( $file, "Version 4.1IR\n" );
+	fprint( $file, "FileVersion 1.4\n");
+	fprint( $file, "CreationDate " +$creation +"\n");
+	fprint( $file, "FrameHeight " +$size[0] +"\n");
+	fprint( $file, "FrameWidth "  +$size[1] +"\n");
+	fprint( $file, "FrameAspectRatio " + $Aspect+"\n\n");
+	fprint( $file, "\tCurrentFrame " + $startFrame + "\n");
+	fprint( $file, "\tMaxFrames " + ($endFrame - $startFrame + 1) + "\n");
+	print ("----- MaxFrames: "+($endFrame - $startFrame + 1)+"\n");
+	fprint( $file, "\tFieldRenderingMode no\n" );
+	fprint( $file, "\tShadingMode no\n" );
+	fprint( $file, "\tTextureMode yes\n" );
+	fprint( $file, "\tWireframeMode no\n" );
+	fprint( $file, "\tZBufferMode yes\n" );
+	fprint( $file, "\tLinetestMode no\n" );
+	fprint( $file, "\tAutoParentMode yes\n" );
+	fprint( $file, "\tCurrentCamera 1\n" );
+	fprint( $file, "\tGridMode 0\n" );
+	fprint( $file, "\tPlayLockMode no\n" );
+	fprint( $file, "\tBackupMode yes\n" );
+	fprint( $file, "\tBackupTime 30\n" );
+	fprint( $file, "\tQuickResolution 6\n" );
+	fprint( $file, "\tAntiAliasingLevel 0\n" );
+	fprint( $file, "\tAntiAliasingSoftness 1\n" );
+	fprint( $file, "\tMotionBlurMode no\n" );
+	fprint( $file, "\tMotionBlurShutter 1\n");
+	fprint( $file, "\tMotionBlurSamples 5\n");
+	fprint( $file, "\tMotionBlurPhase 0\n");
+	fprint( $file, "\tMotionBlurEditor\n");
+	fprint( $file, "\t\tChannel MotionBlurCurve\n");
+	fprint( $file, "\t\t\tExtrapolation constant\n");
+	fprint( $file, "\t\t\tValue 1\n");
+	fprint( $file, "\t\t\tSize 3\n");
+	fprint( $file, "\t\t\tKey 0\n");
+	fprint( $file, "\t\t\t\tFrame 50\n");
+	fprint( $file, "\t\t\t\tValue 1\n");
+	fprint( $file, "\t\t\t\tFrameLock yes\n");
+	fprint( $file, "\t\t\t\tDeleteLock yes\n");
+	fprint( $file, "\t\t\t\tInterpolation hermite\n");
+	fprint( $file, "\t\t\t\tEnd\n");
+	fprint( $file, "\t\t\tKey 1\n");
+	fprint( $file, "\t\t\t\tFrame 100\n");
+	fprint( $file, "\t\t\t\tValue 1\n");
+	fprint( $file, "\t\t\t\tInterpolation hermite\n");
+	fprint( $file, "\t\t\t\tEnd\n");
+	fprint( $file, "\t\tKey 2\n");
+	fprint( $file, "\t\t\t\tFrame 150\n");
+	fprint( $file, "\t\t\t\tValue 1\n");
+	fprint( $file, "\t\t\t\tFrameLock yes\n");
+	fprint( $file, "\t\t\t\tDeleteLock yes\n");
+	fprint( $file, "\t\t\t\tInterpolation hermite\n");
+	fprint( $file, "\t\t\t\tEnd\n");
+	fprint( $file, "\t\t\tEnd\n");
+	fprint( $file, "\t\tChannelEnd\n");
+	fprint( $file, "\t\tDofMode no\n");
+	fprint( $file, "\t\tDofSoftness 1\n");
+	fprint( $file, "\t\tFogMode Off\n");
+	fprint( $file, "\t\tFogColour 0 0 0\n");
+	fprint( $file, "\t\tFogStart 0\n");
+	fprint( $file, "\t\tFogEnd 1\n");
+	fprint( $file, "\t\tFogRange 1\n");
+	fprint( $file, "\t\tEnd\n\n");
+	fprint( $file, "#\n");
+	fprint( $file, "# node database\n");
+	fprint( $file, "#\n");
+	fprint( $file, "ConcreteFileVersion 1.1\n");
+	fprint( $file, "CreationDate " +$creation+"\n\n");
+}
+
+//===========================================================================
+//===	printInfo for NodeGroup
+//===========================================================================
+proc outputNodeGroup (int $file)
+{
+	fprint( $file, "Node Group\n");
+	fprint( $file, "\tName scene\n");
+	fprint( $file, "\tNumber 0\n");
+	fprint( $file, "\tChild 1\n");
+	fprint( $file, "\tMotionPath yes\n");
+	fprint( $file, "\tPosX 0\n");
+	fprint( $file, "\tPosY 0\n");
+	fprint( $file, "\tFlags HIDDEN&SCHEMATIC_HIDDEN\n");
+	fprint( $file, "\tSpecifics\n");
+	fprint( $file, "\t{\n");
+	fprint( $file, "\t}\n");
+	fprint( $file, "End\n");
+}
+
+//===========================================================================
+//===	calculates maya FOV to inferno FOV
+//===========================================================================
+proc float calculateFOV( string $camName, float $frame)
+{
+	float $focal = `getAttr -t $frame ($camName+".focalLength")`;
+	float $aperture = `getAttr -t $frame ($camName+".horizontalFilmAperture")`;
+	float $fov = (0.5 * $aperture) / ($focal * 0.03937);
+	$fov = 2.0 * atan ($fov);
+	$fov = (57.29578 * $fov) / 1.32575; //--- Inferno factor 
+
+    return $fov;
+}
+
+//===========================================================================
+//===	getCamNodes for processing (key values)
+//===========================================================================
+global proc string[] getCamNodes()
+{
+	
+	string $camGroup, $camTransform, $camInterest;
+
+	//--- get the camera shape and interest
+	string $selectList[] = `ls -sl`;
+	string $cameraNodes[] = `listRelatives -children $selectList[0]`;
+    
+	if (size($cameraNodes)== 2)
+	{
+		$tmpShape = `listRelatives -shapes $cameraNodes[0]`;
+		$camGroup = $selectList[0];
+		$camTransform = $cameraNodes[0];
+		$camInterest = $cameraNodes[1];
+	}
+	else if (size($cameraNodes)== 1)
+	{
+		$camGroup = "";
+		$camTransform = $selectList[0];
+		$camInterest = "";		    	
+	}
+	else
+		print ("!!--- wrong selection: select the camera group if twoNode or only the camera if oneNode ---!!\n");
+    
+	//--- (GroupNode, transNode, shapeNode, interestNode)
+    	return {$camGroup, $camTransform, $camInterest}; 
+}
+
+//===========================================================================
+//=== generates values and keys
+//===========================================================================
+proc outputChannel( int $file, string $prefix, string $mayaAttr, string $discAttr, float $globalScale )
+{
+	global int $endFrame, $startFrame;
+	string $curves[];
+	
+	string $buffer[];
+	tokenize $mayaAttr "." $buffer; //--- buffer[0] == Cameraname; buffer[1] == attribute
+	
+	fprint( $file, $prefix+"Channel " +$discAttr +"\n" );
+
+	if( $mayaAttr != "" ) 
+	{
+		$curves = `listConnections -s true -d false $mayaAttr`;
+
+		if( size( $curves ) > 0 )	//--- if obj has anim-curve, printing Keys
+		{
+			fprint( $file, $prefix+"\tValue "+(`getAttr $mayaAttr` * $globalScale)+"\n" );
+			fprint( $file, $prefix+"\tSize "+($endFrame - $startFrame + 1)+"\n" );
+		
+			int $fr;
+			int $key = 0;
+	    
+			for( $fr = $startFrame; $fr <= $endFrame; $fr++ )
+			{
+				fprint( $file, $prefix+"\tKey "+($key++)+"\n" );
+				fprint( $file, $prefix+"\t\tFrame "+$fr+"\n" );
+				if(!`strcmp $buffer[1] "fl"`)
+				{
+					float $tmpFov = calculateFOV($buffer[0], $fr); 
+					fprint( $file, $prefix+"\t\tValue "+($tmpFov * $globalScale)+"\n");			
+				}
+				else 
+					fprint( $file, $prefix+"\t\tValue "+(`getAttr -t $fr $mayaAttr` * $globalScale)+"\n");
+				fprint( $file, $prefix+"\t\tEnd\n" );
+	    		}
+	    	}
+	    	else	//--- if obj has no anim-curve, print Value
+	    	{
+				if(!`strcmp $buffer[1] "fl"`)
+				{
+					float $tmpFov = calculateFOV($buffer[0], $startFrame); 
+					fprint( $file, $prefix+"\tValue "+($tmpFov * $globalScale)+"\n");			
+				}
+				else 
+					fprint( $file, $prefix+"\tValue "+(`getAttr -t $startFrame $mayaAttr` * $globalScale)+"\n");
+				//fprint( $file, $prefix+"\tEnd\n" );	    			
+	    	}
+	}
+    fprint( $file, $prefix+"\tEnd\n" );
+}
+
+//===========================================================================
+//===	exe-funktion: open, generates and close file 
+//===========================================================================
+global proc int performCamExport( string $filename, float $globalScale )
+{
+    	global int $startFrame, $endFrame; //$opSys;
+
+    	string $creationDate = `system "date /t"`;
+    	string $origSelectionSet[]=`ls -selection`;
+	string $selectionSet[] = `ls -selection`;
+    	
+    	$startFrame = `playbackOptions -q -ast`;
+    	$endFrame = `playbackOptions -q -aet`;
+	currentTime -edit $startFrame;
+    	
+    	//-------------- open File -----------------
+    	int $file = fopen( $filename, "w" );
+	print( "exporting to file: "+$filename+"\n" );   	
+    	if ( $file == 0 )
+	{
+        	print( "failed to open file "+$filename+" for writing\n" );
+        	return -1;
+	}
+ 
+	//-------------- Header -----------------
+	outputProlog( $file, $creationDate );
+    
+    	//-------------- Node Group --------------
+	outputNodeGroup ($file);   	
+
+	//------------- Node Camera -------------  	
+	// [0] group node with twist; [1] camera with trans & rot; [2] interest (locator) with trans
+    	string $camNodes[] = getCamNodes();
+
+	fprint( $file, "Node Camera\n");
+	fprint( $file, "\tName camera\n");
+	fprint( $file, "\tNumber 1\n");
+	fprint( $file, "\tMotionPath yes\n");
+	fprint( $file, "\tPosX 100\n");
+	fprint( $file, "\tPosY 0\n");
+	fprint( $file, "\tSpecifics\n");
+	fprint( $file, "\t{\n");
+	if (!`strcmp $camNodes[0] ""`)
+	{
+		fprint( $file, "\t\tType Free\n");	
+	}
+	fprint( $file, "\t\tCamChannel\n");
+	fprint( $file, "\t\t{\n");
+	
+	outputChannel( $file, "\t\t", ($camNodes[1] +".tx"), "position/x", $globalScale );
+	outputChannel( $file, "\t\t", ($camNodes[1] +".ty"), "position/y", $globalScale );
+	outputChannel( $file, "\t\t", ($camNodes[1] +".tz"), "position/z", $globalScale );
+	outputChannel( $file, "\t\t", "", "position/speed", $globalScale );
+	if (`strcmp $camNodes[0] ""`)
+	{
+		outputChannel( $file, "\t\t", ($camNodes[2] +".tx"), "interest/x", $globalScale );
+		outputChannel( $file, "\t\t", ($camNodes[2] +".ty"), "interest/y", $globalScale );
+		outputChannel( $file, "\t\t", ($camNodes[2] +".tz"), "interest/z", $globalScale );
+		outputChannel( $file, "\t\t", "", "interest/speed", $globalScale );
+		outputChannel( $file, "\t\t", "", "rotation/x", $globalScale );
+		outputChannel( $file, "\t\t", "", "rotation/y", $globalScale );
+		outputChannel( $file, "\t\t", "", "rotation/z", $globalScale );
+		outputChannel( $file, "\t\t", "", "distance", $globalScale );
+		outputChannel( $file, "\t\t", ($camNodes[0] +".twist"), "roll", 1.0 );
+		print ("---> exporting twoNode Camera\n");
+	}
+	outputChannel( $file, "\t\t", "", "interest/speed", $globalScale );
+	if (!`strcmp $camNodes[0] ""`)
+	{
+		outputChannel( $file, "\t\t", "", "interest/x", $globalScale );
+		outputChannel( $file, "\t\t", "", "interest/y", $globalScale );
+		outputChannel( $file, "\t\t", "", "interest/z", $globalScale );			
+		outputChannel( $file, "\t\t", "", "interest/speed", $globalScale );		
+		outputChannel( $file, "\t\t", ($camNodes[1] +".rx"), "rotation/x", (-1) );
+		outputChannel( $file, "\t\t", ($camNodes[1] +".ry"), "rotation/y", (-1) );
+		outputChannel( $file, "\t\t", ($camNodes[1] +".rz"), "rotation/z", (-1) );
+		outputChannel( $file, "\t\t", "", "distance", $globalScale );
+		outputChannel( $file, "\t\t", "", "roll", 1.0 );
+		print ("---> exporting oneNode Camera\n");
+	}
+	outputChannel( $file, "\t\t", ($camNodes[1] +".fl"), "fov", 1.0 );		// output vertical field of view in degrees
+
+	outputChannel( $file, "\t\t", "", "near", 1.0 );
+	outputChannel( $file, "\t\t", "", "far", 1.0 );
+	fprint( $file, "\t\tChannelEnd\n");
+	fprint( $file, "\t\t}\n");
+	fprint( $file, "\t\tCamMotionPathMode yes\n");
+	fprint( $file, "\t\tCamMotionPath\n");
+	fprint( $file, "\t\t{\n");
+	fprint( $file, "\t\tPath pos_path\n");
+	fprint( $file, "\t\t\tDimension 3\n");
+	fprint( $file, "\t\t\tClosed no\n");
+	fprint( $file, "\t\t\tSize 0\n");
+	fprint( $file, "\t\t\tEnd\n\n");
+	fprint( $file, "\t\tPath poi_path\n");
+	fprint( $file, "\t\t\tDimension 3\n");
+	fprint( $file, "\t\t\tClosed no\n");
+	fprint( $file, "\t\t\tSize 0\n");
+	fprint( $file, "\t\t\tEnd\n\n");
+	fprint( $file, "\t\t}\n");
+	fprint( $file, "\t\tCamPhysicalParameters\n");
+	fprint( $file, "\t\tPhysicalCameraEnabled no\n");
+	fprint( $file, "\t\tFStop FStop_1\n");
+	fprint( $file, "\t\tFilm_Type 35mm_Full_Frame\n");	
+	fprint( $file, "\t}\n");
+	fprint( $file, "End\n");
+	fprint( $file, "ConcreteEnd\n\n");
+
+	//-------------- Layers -----------------
+	fprint( $file, "#\n");
+	fprint( $file, "# layers\n");
+	fprint( $file, "#\n");
+	fprint( $file, "ActionLayerFileVersion 1.1\n");
+	fprint( $file, "CreationDate " +$creationDate +"\n\n");
+
+	fprint( $file, "LayerCount 2\n");
+	fprint( $file, "ProxyMode PROXY_OFF\n\n");
+
+	fprint( $file, "LayerEnd\n\n");
+
+	//-------------- Drawing order -----------------
+	fprint( $file, "#\n");
+	fprint( $file, "# drawing order\n");
+	fprint( $file, "#\n");
+	fprint( $file, "DrawingOrderFileVersion 1.0\n");
+	fprint( $file, "CreationDate " +$creationDate +"\n\n");
+
+	fprint( $file, "LookupList_Size 1\n");
+	fprint( $file, "LookupTable_Size 2\n");
+	fprint( $file, "LookupList 0\n");
+	fprint( $file, "\tLookupFrameIndex 1\n");
+	fprint( $file, "\tLookupTable 0 1 \n");
+	fprint( $file, "DrawingOrderEnd\n");
+
+    fclose $file;
+    	print ("!---------- Done ----------!");
+    return 1;
+}
+
+//===========================================================================
+//===	supportfunktion, fileDialogBox
+//===========================================================================
+global proc int infernoCamExport( string $exportFile, string $fileType )
+{
+    performCamExport $exportFile 1.0;
+    return 1;
+}
+
+//===========================================================================
+//===	mainfunction, opening fileDialog
+//===========================================================================
+global proc exportMayaToInferno()
+{
+ global int $startFrame;
+ global int $endFrame;
+ global float $Aspect;
+ global int $Width;
+ global int $Height;
+ global int $opSys;
+
+ $startFrame = `playbackOptions -q -ast`;
+ $Aspect = `getAttr "defaultResolution.deviceAspectRatio"`;
+ $Width = `getAttr "defaultResolution.width"`;
+ $Height = `getAttr "defaultResolution.height"`;
+ 
+ fileBrowser infernoCamExport "Export" "Text" 1;
+}
+//exportMayaToInferno()

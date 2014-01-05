@@ -1,0 +1,37 @@
+//
+// removes any slim attributes from your objects
+//
+// zach tucker
+// august 2004
+// v20050221 pink - added shadingGroup/Engine support
+//
+global proc
+removeSlimAtts()
+{
+	string $slimAtts[] = {
+		"rib",
+		"smg",
+		"sen",
+		"sss",
+		"sds",
+		"sls",
+		"svs",
+		"saa",
+		"tcl",
+		"sdso",
+		"mtorSubdiv",
+		"mtorSubdivExtrap",
+		"mtorSubdivInterp",
+		"mtorSubdivIgnoreEdges"
+	};
+	string $enchilada[] = `ls -l -tr -g -typ shadingEngine -typ light`;
+	string $obj;
+	for ($obj in $enchilada) {
+		for ( $att in $slimAtts ) {
+			if (`attributeQuery -n $obj -exists $att`) {
+				deleteAttr ($obj+"."+$att);
+				print("// Deleting : "+$obj+"."+$att+"\n");
+			}
+		}
+	}
+}

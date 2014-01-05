@@ -1,0 +1,6 @@
+$totalFrames = 1437;
+$fps = 24;
+$hours = trunc( $totalFrames / $fps / 60 /60 );
+$mins = trunc( $totalFrames / $fps / 60 ) - ( $hours * 60 );
+$seconds = trunc( $totalFrames / $fps ) - ( $hours * 60 * 60 + $minutes * 60 );
+$frames = $totalFrames - ( fps * trunc( $totalFrames / $fps ) );

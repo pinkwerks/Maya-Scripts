@@ -1,0 +1,391 @@
+/****************************************\
+******************************************
+**					**
+**	initGUI()			**
+**					**
+**	initialize the GUI options	**
+**					**
+******************************************
+\****************************************/
+
+proc
+explodeNodesHelp()
+{
+    //
+    // make the pinkwerks logo, it's pure vanity baby!
+    //
+
+    separator -h 10 -st none;
+
+    $pix = picture(
+	"-image", "/usr/people/chrisb/public_html/pinkwerks_logo.xpm");
+
+    separator -h 20 -st none;
+}
+
+/************************\
+**************************
+**			**
+**	initGUI()	**
+**			**
+**	build the GUI	**
+**			**
+**************************
+\************************/
+
+proc
+buildGUI()
+{
+    int $enable = 1;
+    float $iminval = 0.01;	// initial minimum for trs/xyz floatFields
+    float $imaxval = 1;		// initial maximum for trs/xyz floatFields
+
+    string $topwin = "explodeNodesBox";
+    string $lcn[3] = {"Translate", "Rotate", "Scale"};
+    string $channel[3] = {"T", "R", "S"};
+    string $component[3] = {"X", "Y", "Z"};
+    string $mm[2] = {"Min", "Max"};
+
+    // create the top window, everything is parented to this bad boy.
+
+    window("-title", "explodeNodes", "-s", 0, "-mb", 1, $topwin);
+
+    frameLayout(
+	"-lv", 0,
+	"-borderStyle", "in",
+	"-parent", $topwin,
+	"shit"
+    );
+
+    //
+    // menu
+    //	build menu bar slap some labels on shit etc....
+    //
+
+    menu -label "pinkwerks";
+    menuItem -label "Main Menu" -c "print(\"unimplemented.\\n\")";
+    menuItem -label "About pinkwerks" -c "print(\"unimplemented.\\n\")";
+
+    menu -label "Help" -helpMenu true;
+    menuItem -label "Help with Explode Nodes" -c "print(\"unimplemented.\\n\")";
+
+    //
+    // create the top layout control
+    //
+
+    columnLayout(
+	"-cal", "center",
+	"-adj", 1,
+	"cl"
+    );
+
+	//
+	// ground zero
+	//	this decides on whether to use the top node's
+	//	pivot in calculating the implode/explode reference.
+	//	otherwise maybe i'll use the center of the bounding box.
+	//
+
+	radioButtonGrp(
+	    "-label", "Use Ground Zero",
+	    "-nrb", 2,
+	    "-la2", "On", "Off",
+	    "-sl", 1
+	);
+
+	//
+	// behaviour
+	//	implode - nodes will move toward ground zero or
+	//		the collectives center.
+	//
+	//	explode - nodes will move away from ground zero or
+	//		the collectives center.
+	//
+	//	chaos - you're a rebel, you don't give a shit!  let
+	//		those goddam nodes go where they may.
+	//
+
+	radioButtonGrp(
+	    "-nrb", 3,
+	    "-label", "Behavior",
+	    "-la3", "Implode", "Explode", "Chaos",
+	    "-sl", 2
+	);
+
+	//
+	// xform type
+	//
+
+	string $xftBtn1OnCmd = ("frameLayout -edit -en 1 " + $lcn[0]);
+	string $xftBtn2OnCmd = ("frameLayout -edit -en 1 " + $lcn[1]);
+	string $xftBtn3OnCmd = ("frameLayout -edit -en 1 " + $lcn[2]);
+	string $xftBtn1OffCmd = ("frameLayout -edit -en 0 " + $lcn[0]);
+	string $xftBtn2OffCmd = ("frameLayout -edit -en 0 " + $lcn[1]);
+	string $xftBtn3OffCmd = ("frameLayout -edit -en 0 " + $lcn[2]);
+
+	checkBoxGrp(
+	    "-ncb", 3,
+	    "-label", "Transfrom Type",
+	    "-la3", "Translate", "Rotate", "Scale",
+	    "-on1", $xftBtn1OnCmd,
+	    "-on2", $xftBtn2OnCmd,
+	    "-on3", $xftBtn3OnCmd,
+	    "-of1", $xftBtn1OffCmd,
+	    "-of2", $xftBtn2OffCmd,
+	    "-of3", $xftBtn3OffCmd,
+	    "-va3", 1, 1, 1,
+	    "xformCBG"
+	);
+
+	/****************************************
+	//	  //
+	// vector //
+	//	  //
+
+	// the commands that are executed
+	// when you click the xyz buttons
+
+	string $vtBtn1OnCmd =
+	    "floatFieldGrp -edit -en1 1 " + $lcn[0] + "cl" + $mm[0];
+
+	string $vtBtn2OnCmd =
+	    "floatFieldGrp -edit -en2 1 " + $lcn[1] + "cl" + $mm[0];
+
+	string $vtBtn3OnCmd =
+	    "floatFieldGrp -edit -en3 1 " + $lcn[2] + "cl" + $mm[0];
+
+	string $vtBtn1OffCmd =
+	    "floatFieldGrp -edit -en1 0 " + $lcn[0] + "cl" + $mm[0];
+
+	string $vtBtn2OffCmd =
+	    "floatFieldGrp -edit -en2 0 " + $lcn[1] + "cl" + $mm[0];
+
+	string $vtBtn3OffCmd =
+	    "floatFieldGrp -edit -en3 0 " + $lcn[2] + "cl" + $mm[0];
+
+
+	checkBoxGrp(
+	    "-ncb", 3,
+	    "-label", "Channels",
+	    "-la3", "X", "Y", "Z",
+	    "-on1", $vtBtn1OnCmd,
+	    "-on2", $vtBtn2OnCmd,
+	    "-on3", $vtBtn3OnCmd,
+	    "-of1", $vtBtn1OffCmd,
+	    "-of2", $vtBtn2OffCmd,
+	    "-of3", $vtBtn3OffCmd,
+	    "-va3", 1, 1, 1,
+	    "vectorCBG"
+	);
+	********************************************/
+
+	//
+	// make the array of boxes for trs/xyz combos
+	//
+
+	for ($I = 0; $I < 3; $I++) {
+	    frameLayout(
+		"-label", $lcn[$I] + " Values",
+		"-parent", "cl",
+		"-bs", "etchedIn",
+		"-marginHeight", 5,
+		$lcn[$I]
+	    );
+	    print("frameLayout: " + $lcn[$I] + "\n");
+
+		columnLayout("-cal", "center",
+		    "-adj", 1, 
+		    "-parent", $lcn[$I],
+		    $lcn[$I] + "cl"
+		);
+		print("frameLayout: " + $lcn[$I] + "cl" + "\n");
+
+		    for ($i = 0; $i < 2; $i++) {
+			if ($i == 0)
+			    $v = $iminval; 
+			else
+			    $v = $imaxval; 
+
+			floatFieldGrp(
+			    "-label", $mm[$i],
+			    "-extraLabel", "xyz",
+			    "-numberOfFields", 3,
+			    "-precision", 4,
+			    "-v1", $v,
+			    "-v2", $v,
+			    "-v3", $v,
+			    "-parent", $lcn[$I] + "cl",
+			    $lcn[$I] + "cl" + $mm[$i]
+			);
+			print("frameLayout: " + $lcn[$I] + "cl" + $mm[$i] + "\n");
+		    }
+	}
+
+	//
+	// make the button box at the bottom
+	//
+
+	frameLayout(
+	    "-lv", 0,
+	    "-borderStyle", "out",
+	    "-marginHeight", 10,
+	    "-parent", "cl",
+	    "buttonFrame"
+	);
+
+	    string $form = `formLayout -nd 3`;
+	    string $gBtnCmd = "print(\"do the explode\\n\")";
+	    string $uBtnCmd = "print(\"unimplemented.\\n\")";
+	    string $cBtnCmd = "deleteUI " + $topwin;
+	    string $gBtn = `button -l "Go" -rs false -command $gBtnCmd`;
+	    string $uBtn = `button -l "Undo" -rs false -command $uBtnCmd`;
+	    string $cBtn = `button -l "Cancel" -rs false -command $cBtnCmd`;
+	    
+	    formLayout -edit -parent buttonFrame
+		-attachForm	$gBtn	"left"	5
+		-attachPosition	$gBtn	"right"	5	1
+
+		-attachPosition	$uBtn	"left"	5	1
+		-attachPosition	$uBtn	"right"	5	2
+
+		-attachPosition	$cBtn	"left"	5	2
+		-attachForm	$cBtn	"right"	5
+
+		$form;
+
+    showWindow;
+};
+
+global proc int
+explodeNodes()
+{
+    buildGUI();
+    return(0);
+}
+
+proc int
+randTRS(
+    string $xtype,
+    string $vtype,
+    float $min,
+    float $max,
+    float $direction
+)
+{
+    int $debug = 0;	// debugging/verbose info - 1/on or 0/off
+    int $explode = 0;
+    string $xformtype;
+    string $vectortype;
+    float $min;
+    float $max;
+    float $direction;
+
+    $objs = `ls -sl`;	// array of selected objects
+
+    $sobjs = size($objs);
+
+    buildgui();
+
+    if ($sobjs < 1) {
+	print("explodeNodes: select at least one object\n");
+	return(1);
+    } else if ($sobjs == 1)
+	$i = 0;
+    else
+	$i = 1;
+
+    $refobj = $objs[0];
+    $rx = getAttr($refobj + ".boundingBoxCenterX");
+    $ry = getAttr($refobj + ".boundingBoxCenterY");
+    $rz = getAttr($refobj + ".boundingBoxCenterZ");
+
+    if ($debug) {
+	print("refobj is : " + $refobj + " " + $rx + " " + $ry + " " +
+	    $rz + "\n\n"
+	);
+    }
+
+    for ($i; $i < $sobjs; $i++) {
+	$cx = getAttr($objs[$i] + ".boundingBoxCenterX");
+	$cy = getAttr($objs[$i] + ".boundingBoxCenterY");
+	$cz = getAttr($objs[$i] + ".boundingBoxCenterZ");
+
+	switch ($vectortype) {
+	    case "x":
+	    case "X":
+		$x = rand($min, $max);
+		$y = $z = 0;
+		break;
+	    case "y":
+	    case "Y":
+		$y = rand($min, $max);
+		$x = $z = 0;
+		break;
+	    case "z":
+	    case "Z":
+		$z = rand($min, $max);
+		$x = $y = 0;
+		break;
+	    case "xyz":
+	    case "XYZ":
+		$x = rand($min, $max);
+		$y = rand($min, $max);
+		$z = rand($min, $max);
+		break;
+	    default:
+		print("randTRS : invalid <vector_type> : " +
+		    "valid types, xyz x y z "
+		);
+		return(1);
+		break;
+	}
+
+	if ($direction > 0) {
+	    if ($cx < $rx && $x > 0) $x *= -1;
+	    if ($cx > $rx && $x < 0) $x *= -1;
+	    if ($cy < $ry && $y > 0) $y *= -1;
+	    if ($cy > $ry && $y < 0) $y *= -1;
+	    if ($cz < $rz && $z > 0) $z *= -1;
+	    if ($cz > $rz && $z < 0) $z *= -1;
+	} else if ($direction < 0) {
+	    if ($cx < $rx && $x < 0) $x *= -1;
+	    if ($cx > $rx && $x > 0) $x *= -1;
+	    if ($cy < $ry && $y < 0) $y *= -1;
+	    if ($cy > $ry && $y > 0) $y *= -1;
+	    if ($cz < $rz && $z < 0) $z *= -1;
+	    if ($cz > $rz && $z > 0) $z *= -1;
+	}
+
+	switch ($xformtype) {
+	    case "t":
+	    case "T":
+		move -r $x $y $z $objs[$i];
+		break;
+	    case "r":
+	    case "R":
+		rotate -r $x $y $z $objs[$i];
+		break;
+	    case "s":
+	    case "S":
+		scale -r $x $y $z $objs[$i];
+		break;
+	    default:
+		print("randTRS : invalid <xform_type> : " +
+		    "valid types, t r s"
+		);
+		return(1);
+		break;
+	}
+
+	if ($debug) {
+	    print("obj : " + $objs[$i] + "\n");
+	    print("\tdelta : " + $x + " " + $y + " " + $z + "\n");
+	    print("\twas   : " + $cx + " " + $cy + " " + $cz + "\n");
+	    print("\tnow   : " + ($cx + $x) + " " + ($cy + $y) +
+		" " + ($cz + $z) + "\n\n"
+	    );
+	}
+    }
+
+    return(0);
+};

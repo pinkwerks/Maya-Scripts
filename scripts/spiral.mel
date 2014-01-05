@@ -1,0 +1,39 @@
+global proc string spiral( float $ht, float $radius, float $numRounds )
+
+//
+
+// Description:
+
+// This proc creates a spiral centred about the origin, with a specific
+
+// height, radius and number of rounds/turns/cycles.
+
+//
+
+// This is done by creating a cylinder of the correct size, then
+
+// creating a curve-on-surface on the cylinder (which is in
+
+// the form of a spiral), then duplicating the curve-on-surface
+
+// to get a 3D spiral.
+
+//
+
+{
+
+string $cylinder[] = `cylinder -ch off -ax 0 1 0 -p 0 0 0 -r 1.0 -hr 1.0`;
+
+scale $radius $ht $radius $cylinder[0];
+
+string $cos = `curveOnSurface -d 1 -uv 0.0 0.0 -uv 1.0 ($numRounds*8.0) $cylinder[0]`;
+
+string $duplicatedCrv[] = `duplicateCurve -ch off $cos`;
+
+delete $cos;
+
+delete $cylinder[0];
+
+return $duplicatedCrv[0];
+
+}

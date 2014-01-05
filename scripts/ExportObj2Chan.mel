@@ -1,0 +1,251 @@
+proc int pinkwerksDialogDirBrowseCB( string $dirFieldCtrl, string $initialDir, string $newDir, string $type )
+{
+	if( ! `filetest -d $newDir` )
+		return 0;
+
+	textField -edit -text $newDir $dirFieldCtrl;
+	return 1;
+}
+
+proc int pinkwerksDialogFileBrowseCB( string $dirFieldCtrl, string $initialFile, string $newFile, string $type )
+{
+	if( ! `filetest -r $newFile` )
+		return 0;
+
+	textField -edit -text $newFile $dirFieldCtrl;
+	return 1;
+}
+proc pinkwerksDialogDirBrowse( string $dirFieldCtrl )
+{
+	string $initialDir = `textField -q -text $dirFieldCtrl`;
+	string $curDir     = `workspace -q -fn`;
+
+	int $reset = 0; 
+	if( `filetest -d $initialDir` ) {
+		workspace -dir $initialDir;
+		$reset = 0; 
+	}
+
+	fileBrowser( "pinkwerksDialogDirBrowseCB \"" + $dirFieldCtrl + "\" \"" + $initialDir + "\" ", "Select", "", 4 );
+
+	if( $reset ) {
+		workspace -dir $curDir; 
+	}
+}
+
+proc pinkwerksDialogFileBrowse( string $dirFieldCtrl )
+{
+	string $initialFile = `textField -q -text $dirFieldCtrl`;
+	string $curDir  = `workspace -q -fn`;
+	int $reset = 0; 
+	string $fileDir = `dirname($initialFile)`;
+	if( `filetest -d $fileDir` ) {
+		workspace -dir $fileDir;
+		$reset = 1; 
+	}
+
+	fileBrowser( "pinkwerksDialogFileBrowseCB \"" + $dirFieldCtrl + "\" \"" + $initialFile + "\" ", "Select", "", 2 );
+
+	if( $reset ) {
+		workspace -dir $curDir ; 
+	}
+}
+
+proc string getTransform( string $shape )
+{
+	string $transform = "";
+
+	if ( "transform" != `nodeType $shape`)
+		// If given node is already a transform, just pass on through
+	{
+		string $parents[] = `listRelatives -fullPath -parent $shape`;
+		$transform = $parents[0];
+	}
+
+	return $transform;
+}
+
+proc changeObj()
+{
+	global string $mChanFile;
+	global string $mExportObjSel;
+	global string $mExportObjWindow;
+	//global string $wrkspc;
+	global string $sceneName;
+	$selectedObj = `ls -sl`;
+	textField -edit -text $selectedObj $mExportObjSel;
+	string $objSel = `textField -q -text $mExportObjSel`;
+	$wrkspc = `workspace -q -fn`;
+	$wrkspc = $wrkspc + "/data/" + $sceneName + "_" + $objSel + "_anim.chan";
+	textField -edit -fi $wrkspc $mChanFile;
+	//showWindow $mExportObjWindow;
+
+}
+
+global proc ExportObj2Chan()
+{
+	global string $mExportObjWindow;
+	global string $mExportObjSel;
+	global string $mAnimStart;
+	global string $mAnimEnd;
+	global string $mChanFile;
+	global string $mExportObjSel;
+	global string $wrkspc;
+	global string $sceneName;
+	global string $gv_header;
+	string $mChanFileData[] = `fileInfo -q "__mObjChanFile"`; 
+
+	$sceneName = `file -q -sn`;
+	$sceneName =  basename($sceneName, ".mb");
+	$wrkspc = `workspace -q -fn`;
+	$selectedObj = `ls -typ "transform" -sl`;
+	if (size($selectedObj) > 1)
+		$selectedObj = $selectedObj[0];
+	string $win = `window -h 120 -w 600 -title "ExportObj2Chan" $mExportObjWindow`;
+	string $topForm = `formLayout`;
+	string $contents = `columnLayout -adj true`;
+	rowLayout -nc 2 -cw 1 100 -cal 1 "both" -cal 2 "left" -adj 2;
+	text -label "Object" -font "boldLabelFont";
+	$mExportObjSel = `textField -ed 0 -text $selectedObj`;
+
+
+	setParent ..;
+
+	rowLayout -nc 3 -cw2 150 200 -cal 1 "left" -cal 2 "left" -adj 2;
+	text -label "Output File" -font "boldLabelFont";
+	string $data[] = `fileInfo -q "__mObjChanFile"`;
+
+	if( size( $data ) > 0 ){
+		$previousFile = $data[0];
+		$mChanFile = `textField -text $previousFile -w 220 -editable true`;
+	}
+	else{
+		string $selectedObj = `textField -q -text $mExportObjSel`;
+		$wrkspc = $wrkspc + "/data/" + $sceneName + "_" + $selectedObj + "_anim.chan";
+		$mChanFile = `textField -text $wrkspc -w 220 -editable true`;
+	}
+
+	string $FileBrowseBtn = `iconTextButton -image1 "navButtonBrowse.xpm" -width 30 -height 24`;
+
+	iconTextButton -edit -command ("pinkwerksDialogFileBrowse(\"" + $mChanFile + "\")") $FileBrowseBtn;
+	setParent ..;
+
+
+	rowLayout -nc 4 -cw 1 80 -cw 2 80 -cw 3 80 -cal 1 "left" -cal 2 "left" -cal 3 "left";
+	text -label "FrameRange" -font "boldLabelFont";
+	$mAnimStart = `floatField -width 80 -pre 0`;
+	$mAnimEnd   = `floatField -width 80 -pre 0`;
+	$gv_header = `checkBox -label "Include Headers"`;
+
+	floatField -edit -value `getAttr "defaultRenderGlobals.startFrame"` $mAnimStart;
+	floatField -edit -value `getAttr "defaultRenderGlobals.endFrame"` $mAnimEnd;
+
+	setParent ..; 
+
+
+
+
+	setParent ..;
+
+	$saveButton = `button -label "Save" -width 100 -align "center" -command ("ExportObj();deleteUI -window $mExportObjWindow")`;
+	$cancelButton = `button -label "Close"  -width 100 -align "center" -command ("deleteUI -window $mExportObjWindow")`;
+	formLayout -edit
+		-attachForm $contents "top" 2
+		-attachForm $contents "left" 2
+		-attachForm $contents "right"  2
+		-attachPosition $cancelButton "left"  2 50
+		-attachForm $cancelButton "right"  2
+		-attachControl $saveButton "top"  2 $contents
+		-attachControl $saveButton "right"  2 $cancelButton
+		-attachForm $saveButton "left"  2
+		-attachControl $cancelButton "top"  2 $contents
+		-attachForm $cancelButton "bottom"  2
+		-attachForm $saveButton "bottom"  2
+		$topForm;	
+
+	setParent ..;
+	showWindow $mExportObjWindow;
+	//scriptJob -e "SelectionChanged" "changeObj" -p $mExportObjWindow -permanent;
+}
+
+global proc ExportObj()
+{
+	global string $mExportObjWindow;
+	global string $mExportObjSel;
+	global string $mAnimStart;
+	global string $mAnimEnd;
+	global string $mChanFile;
+	global string $gv_header;
+
+	string $objectName = `textField -q -text $mExportObjSel`;
+	string $fileName = `textField -q -text $mChanFile`;
+	int $startFrame =`floatField -q -value $mAnimStart`;
+	int $endFrame = `floatField -q -value $mAnimEnd`;
+
+	// Returns all selected nodes
+	string $nodes[];
+	$nodes = `selectedNodes`;
+
+	$count = `size($nodes)`;
+
+	if ($count <= 0){
+		error "ERROR: No object selected!" ;
+	}
+	else if ($count > 1) {
+		error "ERROR: Plese do not select more than one object!";
+	}
+
+	$pointName = $nodes[0];
+	print ($pointName + "\n" );
+
+
+	$trsGrp = `spaceLocator -p 0 0 0`;
+	pointConstraint -offset 0 0 0 -weight 1 $pointName $trsGrp;
+	orientConstraint -offset 0 0 0 -weight 1 $pointName $trsGrp;
+	scaleConstraint -offset 1 1 1 -weight 1 $pointName $trsGrp;
+
+	int $fileId;
+	$fileId = `fopen $fileName "w"`;
+
+	//file header
+	if (`checkBox -q -v $gv_header` != 0) {
+		fprint $fileId ("OBJECT: object\n");
+		fprint $fileId ("NAME: " + $pointName + "\n");
+		fprint $fileId ("FORMAT: frame posx posy posz rotx roty rotz sclx scly sclz\n");
+
+		//file data
+		fprint $fileId ("DATA:\n");
+	}
+
+	int $i;
+	float $trans[], $fl;
+
+	for ($i = $startFrame; $i <= $endFrame; $i++)
+	{
+		currentTime $i;
+
+		$pos = `xform -worldSpace -query -translation $trsGrp`;
+		$rot = `xform -worldSpace -query -rotation $pointName`;
+		$scl = `xform -relative -objectSpace -query -scale $trsGrp`;
+
+		fprint $fileId ($i + " ");
+
+		fprint $fileId ($pos[0] + " " + $pos[1] + " " + $pos[2] + " " +
+				$rot[0] + " " + $rot[1] + " " + $rot[2] + " " +
+				$scl[0] + " " + $scl[1] + " " + $scl[2] + " ");
+
+		fprint $fileId "\n";
+	}
+
+	fclose $fileId;
+
+	delete $trsGrp;
+
+	print ("\n\nExportObj2Chan: DONE\n\n");
+
+}
+ExportObj2Chan();
+
+
+
+

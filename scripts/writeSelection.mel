@@ -1,0 +1,83 @@
+//
+// writeSelection.mel
+//
+// v20061208 pink
+//
+// write the current selection to a mel file that can be sourced.
+//
+//
+
+proc string
+createUI()
+{
+    $cgroot = `getenv CGROOT`;
+    $show = `getenv SHOW`;
+    $shot = `getenv SHOT`;
+    //$tx = ($cgroot + "/" + $show + "/shots/" +  $shot + "/bin/ .mel");
+//    $tx = ("c:\temp\ .mel");
+    $tx = ("/tmp/ .mel");
+    $x = `
+		promptDialog
+		-message "Enter file name, yo :"
+		-tx $tx
+		-button "OK"
+		-button "Cancel"
+        -defaultButton "OK"
+		-cancelButton "Cancel"
+		-dismissString "Cancel"
+	`;
+    if ($x == "Cancel")
+		return "_CANCEL";
+    return `promptDialog -q -tx`;
+}
+
+proc
+writeSelectionGuts(string $mode, string $fileName)
+{
+	string $things[];
+	// long path names
+	if ( `gmatch $mode "*l*"` )
+		$things = `ls -sl -l -fl`;
+	else
+		$things = `ls -sl -fl`;
+    $fileId = `fopen $fileName "w"`;
+    if ( $fileId == 0 )
+    	error ("Problem opening file : " + $fileName);
+	string $cfg = "";
+	if ( `gmatch $mode "*G*"` )
+		$cfg = "*:";
+	if ( `gmatch $mode "*g*"` )
+		$cfg = ($cfg + "*");
+    int $i = 0;
+	string $buffer[];
+    for ( $thing in $things )
+	{
+		// no namespaces
+		if ( `gmatch $mode "*n*"` )
+		{
+			$numTokens = `tokenize $thing ":" $buffer`;
+			$thing = $buffer[1];
+		}
+		if ( $i == 0 )
+		{
+			// include namespace glob
+			fprint $fileId  ("catch(`select \""+ $cfg + $thing + "\"`);\n");
+			$i++;
+			continue;
+		}
+		fprint $fileId  ("catch(`select -add \""+ $cfg + $thing + "\"`);\n");
+
+		$i++;
+    }
+    fclose $fileId;
+    print ("source \"" + $fileName + "\"\n");
+}
+
+global proc
+writeSelection(string $mode, string $fileName)
+{
+    if ($fileName == "_GUI") $fileName = createUI();
+
+    if ($fileName != "_CANCEL") writeSelectionGuts $mode $fileName;
+}
+

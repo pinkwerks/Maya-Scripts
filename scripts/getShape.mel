@@ -1,0 +1,10 @@
+global proc string
+getShape(string $thing)
+{
+	string $relatives[] =`listRelatives -s $thing`;
+	if (`size $relatives` !=1) {
+		error ("getShape : Wrong number of relatives, bailing out!  FIXME");
+	}
+	return $relatives[0];
+}
+

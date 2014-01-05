@@ -1,0 +1,2 @@
+optionVar -iv "MIP_SHD_EXPOSE" 1;
+optionVar -iv "MAP_SHD_EXPOSE" 1;

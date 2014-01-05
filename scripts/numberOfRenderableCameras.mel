@@ -1,0 +1,13 @@
+// v20060328 pink
+global proc int
+numberOfRenderableCameras()
+{
+  string $cams[] = `ls -type camera`;
+  int $n = 0;
+  for ( $c in $cams )
+    {
+      if ( `getAttr ($c+".renderable")` != 0 )
+	$n ++;
+    }
+  return $n;
+}

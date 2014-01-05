@@ -1,0 +1,59 @@
+global proc makePolyLOD (int $levels)
+{
+  string $tmpS[];
+  $tmpS = `ls -sl -l`;
+  $obj = $tmpS[0];
+  select -r $obj;
+  $tmpS = `pickWalk -d down`;
+  $tmpS = `ls -sl -l`;
+  string $shape = $tmpS[0];
+
+  string $lod[];
+  string $objd;
+
+  if ( `nodeType $shape` == "subdiv" )
+    {
+      select $obj;
+      $tmpS = `duplicate -rr`;
+      
+      $objd = $tmpS[0];
+      print("objd = " + $objd + "\n");
+      // get shape
+      select -r $objd;
+      $tmpS = `pickWalk -d down`;
+      $tmpS = `ls -sl -l`;
+      string $shape = $tmpS[0];      
+      print("Base OBJ = " + $obj + "\n");
+      print("Base Shape = " + $shape + "\n");
+      
+      /* convert this motherfucker to a poly mesh */
+      
+      $tmpS = `subdToPoly -ch off -aut on -format 1 -depth 0 -sampleCount 1
+	-maxPolys 1 -extractPointPosition 0 -shareUVs 1 -subdNormals 0
+	$shape`;
+      
+      $lod[0] = $objd;
+      delete $shape;
+    }
+  float $x = 2;
+  for ( $i = 1; $i < $levels; $i++ )
+    {
+      //select -r $lod[;
+      $tmpS = `polyReduce -percentage (100 * (1 - (1.0 / $x)))
+	-uvWeights 0 -colorWeights 0 -keepBorder 0 -keepMapBorder 0 -keepHardEdge 0
+	-compactness 0 -triangulate 0 -replaceOriginal 0 -ch 1 $objd`;
+      
+      $lod[$i] = $tmpS[0];
+      $x *= 2;
+    }
+
+  for ($l in $lod)
+    {
+      setAttr ($l + ".translateX") 0;
+      select $l;
+      DeleteHistory;
+    }
+  select $obj;
+  select -add $lod;
+  group -name ($obj + "LODs");
+}

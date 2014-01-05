@@ -1,0 +1,18 @@
+// v20061013 pink
+// find all your file textures and renames the string to end in .map
+global proc
+mkmap()
+{
+	string $fb;
+	string $fn;
+	string $nfn;
+	for ($f in `ls -l -type file`)
+	{
+		$fn = `getAttr ($f + ".fileTextureName")`;
+		$fb = `basenameEx $fn`;
+		$dir = `dirname $fn`;
+		$nfn = ($dir + "/" + $fb + ".map");
+		setAttr -type "string" ($f+".fileTextureName") $nfn;
+	}
+}
+

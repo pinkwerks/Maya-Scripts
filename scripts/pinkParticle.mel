@@ -1,0 +1,40 @@
+global proc pinkParticle()
+{
+  string $selected[] = `ls -sl -l`;
+  string $particleShape;
+  int $parts_size = `size $selected`;
+  if ( $parts_size == 1 )
+    {
+      $particleShape = $selected[0];
+      select $particleShape;
+      pickWalk -d down;
+      $selected = `ls -sl -l`;
+      $particleShape = $selected[0];
+      if ( `nodeType $particleShape` != "particle" )
+	{
+	  error("Select one object of type particle!");
+	}
+    }
+  // set paticleShape to use lifespanPP
+  setAttr ($particleShape = ".lifespanMode") 3;
+
+  addAttr -ln pos_freq -at double3  $particleShape;
+  addAttr -ln pos_freqX -at double -p pos_freq  $particleShape;
+  addAttr -ln pos_freqY -at double -p pos_freq  $particleShape;
+  addAttr -ln pos_freqZ -at double -p pos_freq  $particleShape;
+  setAttr -type double3 ($particleShape + ".pos_freq") 0 0 0;
+  setAttr -e -keyable true ($particleShape + ".pos_freq");
+  setAttr -e -keyable true ($particleShape + ".pos_freqX");
+  setAttr -e -keyable true ($particleShape + ".pos_freqY");
+  setAttr -e -keyable true ($particleShape + ".pos_freqZ");
+  addAttr -ln noiz_freq -at double3  $particleShape;
+  addAttr -ln noiz_freqX -at double -p noiz_freq  $particleShape;
+  addAttr -ln noiz_freqY -at double -p noiz_freq  $particleShape;
+  addAttr -ln noiz_freqZ -at double -p noiz_freq  $particleShape;
+  setAttr -type double3 ($particleShape + ".noiz_freq") 0 0 0;
+  setAttr -e -keyable true ($particleShape + ".noiz_freq");
+  setAttr -e -keyable true ($particleShape + ".noiz_freqX");
+  setAttr -e -keyable true ($particleShape + ".noiz_freqY");
+  setAttr -e -keyable true ($particleShape + ".noiz_freqZ");
+
+}

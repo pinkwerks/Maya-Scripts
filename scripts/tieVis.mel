@@ -1,0 +1,38 @@
+global proc tieVis()
+{
+	string $obj;
+	string $objs[] = `ls -sl -l`;
+	int $objsSize = `size $objs`;
+	string $lastObj = $objs[$objsSize - 1];
+	int $i = 1;
+	string $x = "expression -e -s \"";
+	if ($objsSize < 2)
+		return;
+	// Create a controller
+	string $g = `group -em -n tieVis_controller`;
+	addAttr -ln "bias" -k 1 -at double $g;
+	addAttr -ln "magnitude" -k 1 -at double $g;
+	setAttr ($g+".bias") .5;
+	setAttr ($g+".magnitude") ($objsSize - 1);
+	for ($obj in $objs) {
+		$x = "";
+		// skip last object
+		if ($i == $objsSize)
+			continue;
+		$x += "float $v = "+$lastObj+".translateY;\n";
+		$x += "if ($v > 1 || $v < 0)\n";
+		$x += "\twarning(\"tieVis : Control values is out of [0-1]\");\n";
+		$x += "// bias\n";
+		$x += "$v = pow($v, log("+$g+".bias) / -0.693147180559945);\n";
+		$x += "$v *= "+$g+".magnitude;\n";
+		$x += "$v = ceil($v);\n";
+		$x += "if ($v >= "+$i+")\n";
+		$x += "\t$v = 1;\n";
+		$x += "else\n";
+		$x += "\t$v = 0;\n";
+		$x += $obj+".visibility = $v;\n";
+		expression -s ($x) -o $obj -ae 1 -uc all -name tieVis;
+		$i++;
+	}
+}
+

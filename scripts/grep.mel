@@ -1,0 +1,13 @@
+global proc string[]
+grep(string $pattern, string $list[])
+{
+	int $count=0;
+	string $matchingItems[];
+	for($item in $list){
+		if(size(`match $pattern $item`)){
+			$matchingItems[ $count++ ] = $item;
+		}
+	}
+	return( $matchingItems );
+}
+

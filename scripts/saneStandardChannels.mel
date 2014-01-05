@@ -1,0 +1,34 @@
+// show and unlock the standard channels tx-z, rx-z, sx-z
+global proc
+saneStandardChannels()
+{
+  string $objs[] = `ls -sl -l `;
+  string $obj;
+  for ($obj in $objs)
+    {
+      if ( `nodeType $obj` == "transform" )
+	{
+	  setAttr -k on ($obj + ".translateX");
+	  setAttr -k on ($obj + ".translateY");
+	  setAttr -k on ($obj + ".translateZ");
+	  setAttr -k on ($obj + ".rotateX");
+	  setAttr -k on ($obj + ".rotateY");
+	  setAttr -k on ($obj + ".rotateZ");
+	  setAttr -k on ($obj + ".scaleX");
+	  setAttr -k on ($obj + ".scaleY");
+	  setAttr -k on ($obj + ".scaleZ");
+	  setAttr -k on ($obj + ".visibility");
+
+	  setAttr -lock off ($obj + ".translateX");
+	  setAttr -lock off ($obj + ".translateY");
+	  setAttr -lock off ($obj + ".translateZ");
+	  setAttr -lock off ($obj + ".rotateX");
+	  setAttr -lock off ($obj + ".rotateY");
+	  setAttr -lock off ($obj + ".rotateZ");
+	  setAttr -lock off ($obj + ".scaleX");
+	  setAttr -lock off ($obj + ".scaleY");
+	  setAttr -lock off ($obj + ".scaleZ");
+	  setAttr -lock off ($obj + ".visibility");
+	}
+    }
+}

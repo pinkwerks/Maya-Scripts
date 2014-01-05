@@ -1,0 +1,42 @@
+// copyAttributes.mel by pink
+//
+// copy values from first selected thing to the rest of the selected crap.
+//
+
+global proc
+copyAttributes()
+{
+	global string $gChannelBoxName;
+	string $objs[] = `ls -sl -l`;
+	string $obj;
+	string $src = $objs[0];
+	string $srcAttrs[] = `listAttr -k $src`;
+	string $attrs[] = `channelBox -q -sma $gChannelBoxName`;
+	string $attr;
+	float $v;
+	string $plugSrc;
+	for ( $obj in $objs ) {
+		// Skip over the first object...
+		if ( $obj == $src )
+			continue;
+		// copy all keyables since nothing selected in channelbox
+		if (`size $attrs` == 0) {
+			warning("No channels selected in channel box, using all keyable.");
+			$attrs = `listAttr -k $obj`;
+		}
+		for ( $attr in $attrs ) {
+			if ( `attributeExists $attr $obj` && `attributeExists $attr $src` ) {
+				// deal with attributes that are connected to say, animCurves....
+				print("// Dealing with "+$src+"."+$attr+"\n");
+				$plugSrc = `connectionInfo -sfd ($src+"."+$attr)`;
+				if ( $plugSrc != "" )
+					connectAttr -f $plugSrc ($obj+"."+$attr);
+				else {
+					$v = `getAttr ($src+"."+$attr)`;
+					setAttr ($obj+"."+$attr) $v;
+				}
+			}
+		}
+	}
+}
+

@@ -1,0 +1,106 @@
+//  p!nkwerks
+// vim:ts=4:sw=4
+//
+//  Author:	pink
+//
+//  Description:	Create UI components for Pinkwerks common utilities.
+//
+
+global proc pinkwerksSetup()
+{
+  print("// pinkwerksSetup.mel::pinkwerksSetup()\n");
+  // Make the main window the parent for the Pinkwerks menu
+  //
+  global string $gMainWindow;
+  setParent $gMainWindow;
+    
+  // Set some strings that will be used commonly in the UI
+  //
+  global string $gPinkwerksMenu = "Pinkwerks";
+
+  // Check if a Pinkwerks menu is already there.  If not, create one.
+  if ( !`menu -exists $gPinkwerksMenu` ) {
+    menu -label "Pinkwerks" -allowOptionBoxes true -tearOff true $gPinkwerksMenu;
+      
+    menuItem -label "Start Shot" -command "startShot";
+    menuItem -divider 1;
+
+    menuItem -label "Select Kids" -command "selectKids";
+    menuItem -label "Node Name" -command "nodeName \"_GUI\"";
+    menuItem -label "Match Transforms" -command "python(\"import matchXforms\");python(\"matchXforms.main()\")";
+    menuItem -label "Enumerated Name" -command "enumName _GUI";
+    menuItem -label "Hide Annoying Stuff" -command "hideAnnoyingStuff";
+    menuItem -label "Breakout Camera" -c "python(\"import breakoutCamera\");python(\"reload(breakoutCamera)\");python(\"breakoutCamera.breakoutCamera()\")";
+    menuItem -l "Turn On Undo" -c "undoInfo -state on; undoInfo -infinity on";
+    //			menuItem -l "Unique Names" -c "python(\"import uniqueNames\");python(\"reload(uniqueNames)\";python(\"uniqueNames.main()\");";
+    menuItem -l "Uniq Names (MEL)" -c "uniqNames";
+    menuItem -divider 1;
+
+    menuItem -subMenu true -label "Animation" -tearOff true;
+    menuItem -label "Copy Attributes" -command "copyAttributes";
+    menuItem -label "Link Attributes" -command "linkAttributes";
+    setParent -menu ..;
+
+    menuItem -subMenu true -label "Attributes" -tearOff true;
+    menuItem -label "Add Attributes" -command "addAttributes";
+    menuItem -label "Copy Attributes" -command "copyAttributes";
+    menuItem -label "Link Attributes" -command "linkAttributes";
+    menuItem -divider 1;
+    menuItem -label "Chaos Box" -command "chaosBox";
+    menuItem -label "Chaos" -command "chaos";
+    setParent -menu ..;
+
+    menuItem -subMenu true -label "Dynamics" -tearOff true;
+    menuItem -label "removeInitialState" -command "removeInitialState";
+    menuItem -label "uniqEmitterSeeds" -command "uniqEmitterSeeds";
+    setParent -menu ..;
+
+    menuItem -subMenu true -label "Modeling" -tearOff true;
+    menuItem -label "chaos" -command "chaos";
+    menuItem -label "deleteDuplicatePolys" -command "deleteDuplicatePolys";
+    setParent -menu ..;
+
+    menuItem -subMenu true -label "Rendering" -tearOff true;
+    menuItem -label "Prepare for Render" -c "prepRender" -ann "prepRender().mel"; 
+    menuItem -divider 1;
+    menuItem -label "Create Render Passes" -c "createRenderPasses"; 
+    menuItem -label "Sharc Init" -c "python(\"import sharc\");python(\"sharc.init()\")";
+    menuItem -label "Sharc Write" -c "python(\"import sharc\");python(\"sharc.write()\")";
+
+    menuItem -subMenu true -tearOff true -label "Arnold";
+    menuItem -label "Make Matte Object" -c "python(\"import arnoldMakeMatteObject\");python(\"arnoldMakeMatteObject.main()\");";
+    menuItem -label "Disable All AOVs" -c "python(\"import arnoldUtils\");python(\"arnoldUtils.disable_all_aovs()\");";
+    setParent -menu ..;
+
+    menuItem -label "Add MI Label (tag)" -c "addMITags";
+    menuItem -label "Disable Image Planes" -c "python(\"renderUtils.disableImagePlane()\")";
+    menuItem -label "Make MI Proxies" -c "python(\"import makeMIProxy\");python(\"reload(makeMIProxy)\");python(\"makeMIProxy.main()\")";
+    menuItem -label "Insert Gamma Nodes" -c "python(\"import insertGammaNodes\");python(\"reload(insertGammaNodes)\");python(\"insertGammaNodes.main()\")";
+    menuItem -label "Insert Ray Switch" -c "python(\"import insertRayswitch\");python(\"reload(insertRayswitch)\");python(\"insertRayswitch.main()\")";
+    menuItem -label "Make Buffers" -c "python(\"import makeBuffers\");python(\"reload(makeBuffers)\");python(\"makeBuffers.main()\")";
+    menuItem -label "Make Lighting Buffers" -c "python(\"import makeLightingBuffers\");python(\"reload(makeLightingBuffers)\");python(\"makeLightingBuffers.main()\")";
+    menuItem -label "Color Objects Randomly" -c "python(\"import colorObjects\");python(\"reload(colorObjects)\");python(\"colorObjects.main()\")";
+    //    menuItem -divider 1;
+    //    menuItem -label "Disable Hyper Shade Icon updates" -c "renderThumbnailUpdate false;";	
+    //    menuItem -label "Enable Hyper Shade Icon updates" -c "renderThumbnailUpdate true;";
+    //    menuItem -divider 1;
+    menuItem -label "Find and Fix Polygon Material Assignment" -c "findAndFixPolygonFaceMaterials";
+    menuItem -divider 1;
+    menuItem -l "Magic Fix" -c "fixDefaultRenderLayer; fixRenderLayerOutAdjustmentErrors";
+    setParent -menu ..;
+				
+    menuItem -subMenu true -tearOff true -label "UI";
+    menuItem -l "Hide Notes" -c "layout -e -vis 0 AEaddOrEditNotesLayout;";
+    setParent -menu ..;
+
+    menuItem -subMenu true -tearOff true -l "Select";
+    menuItem -l "Selct Random" -c "selectRandomUI";
+    menuItem -label "Select All Animation Curves" -c "selectAllAnimCurves";
+    setParent -menu ..;
+
+    menuItem -divider 1;
+
+    menuItem -label "Reload Menu and Rehash" -command "deleteUI $gPinkwerksMenu; source pinkwerksSetup; pinkwerksSetup; rehash;";
+  }
+}
+

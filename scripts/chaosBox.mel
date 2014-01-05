@@ -1,0 +1,228 @@
+//
+//      chaosBox v20070325 by pink
+//
+// notes : setAttr() seems to be very slow, compared to chaos.mel which
+// uses explicit transforms (move, scale etc).
+//
+
+proc vector
+localvMult(vector $v1, vector $v2)
+{
+  return(<<$v1.x * $v2.x, $v1.y * $v2.y, $v1.z * $v2.z>>);
+}
+
+global proc int
+chaosBoxEngine(
+               string $model,
+               string $mode,
+               float $min,
+               float $max,
+               int $octavesCtl,
+               float $freq
+               )
+{
+  string $procName = "chaosBoxEngine";
+  global string $gChannelBoxName;
+  string $channels[] = `channelBox -q -sma $gChannelBoxName`;
+  string $historyChannels[] = `channelBox -q -sha $gChannelBoxName`;
+  if (`size $channels` < 1)
+    {
+      $channels = `channelBox -q -ssa $gChannelBoxName`;
+      if (`size $channels` < 1)
+        error($procName +" : Select channel(s) please!");
+    }
+  int $channelsSize = `size $channels`;
+
+  if ($channelsSize < 1)
+    error($procName +" : Select at least one channel!");
+
+  float $f;
+  float $b;
+  string $objs[] = `ls -sl -fl`;
+  string $tokes[];
+  string $dest;
+  for ($obj in $objs)
+    {
+      //                print("obj = "+ $obj +"\n");
+      // Special case for cv's
+      if (`gmatch $obj "*.cv[[]*"`)
+        {
+          tokenize $obj "." $tokes;
+          $obj = $tokes[0];
+        }
+
+      if (`gmatch $obj "*.vtx[[]*"`)
+        {
+          tokenize $obj "." $tokes;
+          $obj = $tokes[0];
+        }
+
+      for ($channel in $channels)
+        {
+          if ($model == "rand")
+            $f = rand($min, $max);
+          else if ($model == "noise")
+            $f = noise($freq);
+          else
+            error($procName +" : invalid model");
+
+          $dest = ($obj + "."+ $channel);
+          if ($mode == 1) // abs
+            setAttr $dest $f;
+          else if ($mode == 2) // add
+            {
+              $b = `getAttr $dest`;
+              $f += $b;
+              setAttr $dest $f;
+            }
+          else if ($mode == 3) // avg
+            {
+              $b = `getAttr $dest`;
+              $f += $b;
+              $f /= 2;
+              setAttr $dest $f;
+            }
+          else // mult
+            {
+              $b = `getAttr $dest`;
+              $f *= $b;
+              setAttr $dest $f;
+            }
+        }
+    }
+  return(0);
+};
+
+global proc
+applyChaosBox(string $modelCtl, string $modeCtl, string $minCtl, string $maxCtl,
+              string $octavesCtl, string $freqCtl)
+{
+  string $model = `optionMenuGrp -q -v $modelCtl`;
+  string $mode = `radioButtonGrp -q -sl $modeCtl`;
+  float $min = `floatSliderGrp -q -v $minCtl`;
+  float $max = `floatSliderGrp -q -v $maxCtl`;
+  int $octaves = `intSliderGrp -q -v $octavesCtl`;
+  float $fx = `floatFieldGrp -q -v1 $freqCtl`;
+  float $fy = `floatFieldGrp -q -v2 $freqCtl`;
+  float $fz = `floatFieldGrp -q -v3 $freqCtl`;
+  vector $freq = <<$fx, $fy, $fz>>;
+  chaosBoxEngine $model $mode $min $max $octaves $freq;
+  print("chaosBoxEngine "+ $model +" "+ $mode +" "+ $min +" "+ $max +" "+ $octaves +" "+ $freq + "\n");
+}
+
+global proc
+modelCtlCmd(string $modelCtl, string $octavesCtl, string $freqCtl)
+{
+  string $model = `optionMenuGrp -q -v $modelCtl`;
+  if ($model == "noise" || $model == "dnoise")
+    intSliderGrp -edit -enable true $octavesCtl;
+  else
+    intSliderGrp -edit -enable false $octavesCtl;
+  if ($model == "random" || $model == "sphrand")
+    floatFieldGrp -edit -enable false $freqCtl;
+  else
+    floatFieldGrp -edit -enable true $freqCtl;
+}
+
+global proc
+chaosBox()
+{
+  string $procName = "chaosBox";
+
+  if (`window -exists $procName`)
+    {
+      showWindow $procName;
+      return;
+    }
+
+  string $window = `window -t "Chaos Box" -rtf 1 $procName`;
+
+  string $form0 = `formLayout -numberOfDivisions 100`;
+
+  string $modelCtl = `optionMenuGrp -label "Model"`;
+  menuItem -label "rand";
+  menuItem -label "noise";
+  formLayout -edit
+    -af $modelCtl "top" 5
+    -af $modelCtl "left" 5
+    -af $modelCtl "right" 5
+    -an $modelCtl "bottom"
+    $form0;
+
+  string $modeCtl = `radioButtonGrp -nrb 4 -sl 1 -l "Mode" -la4 "Absolute" "Add" "Average" "Multiply"`;
+  formLayout -edit
+    -ac $modeCtl "top" 5 $modelCtl
+    -af $modeCtl "left" 5
+    -af $modeCtl "right" 5
+    -an $modeCtl "bottom"
+    $form0;
+
+  string $minCtl = `floatSliderGrp -label "Min" -field true -min -360 -max 360 -pre 4 -v -1`;
+  formLayout -edit
+    -ac $minCtl "top" 5 $modeCtl
+    -af $minCtl "left" 5
+    -af $minCtl "right" 5
+    -an $minCtl "bottom"
+    $form0;
+
+  string $maxCtl = `floatSliderGrp -label "Max" -field true -min -360 -max 360 -pre 4 -v 1`;
+  formLayout -edit
+    -ac $maxCtl "top" 5 $minCtl
+    -af $maxCtl "left" 5
+    -af $maxCtl "right" 5
+    -an $maxCtl "bottom"
+    $form0;
+
+  string $octavesCtl = `intSliderGrp -label "Octaves" -enable 0 -field true -min 1 -max 32 -value 3`;
+  formLayout -edit
+    -ac $octavesCtl "top" 5 $maxCtl
+    -af $octavesCtl "left" 5
+    -af $octavesCtl "right" 5
+    -an $octavesCtl "bottom"
+    $form0;
+
+  string $freqCtl = `floatFieldGrp -numberOfFields 3 -pre 4 -enable 0 -label "Frequency" -v1 1 -v2 1 -v3 1`;
+  formLayout -edit
+    -ac $freqCtl "top" 5 $octavesCtl
+    -af $freqCtl "left" 5
+    -af $freqCtl "right" 5
+    -an $freqCtl "bottom"
+    $form0;
+
+  optionMenuGrp -edit -cc ("modelCtlCmd "+ $modelCtl +" "+$octavesCtl+" "+$freqCtl) $modelCtl;
+
+  string $b0 = `button -label "Apply" -c ("applyChaosBox "+ $modelCtl +" "
+                                          + $modeCtl +" "+ $minCtl +" "+ $maxCtl +" "+ $octavesCtl + " "
+                                          + $freqCtl)`;
+  string $b1 = `button -label "Undo" -c "undo"`;
+  string $b2 = `button -label "Hide" -c ("window -e -vis 0 "+ $window)`;
+  string $b3 = `button -label "Close" -c ("deleteUI -wnd "+ $window)`;
+
+  formLayout -edit
+    -ac $b0 "top" 5 $freqCtl
+    -af $b0 "left" 5
+    -ap $b0 "right" 5 25
+    -af $b0 "bottom" 5
+
+    -ac $b1 "top" 5 $freqCtl
+    -ap $b1 "left" 5 25
+    -ap $b1 "right" 5 50
+    -af $b1 "bottom" 5
+
+    -ac $b2 "top" 5 $freqCtl
+    -ap $b2 "left" 5 50
+    -ap $b2 "right" 5 75
+    -af $b2 "bottom" 5
+
+    -ac $b3 "top" 5 $freqCtl
+    -ap $b3 "left" 5 75
+    -af $b3 "right" 5
+    -af $b3 "bottom" 5
+
+    $form0;
+
+  window -e -rtf 1 $window;
+
+  showWindow $window;
+}
+

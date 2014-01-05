@@ -1,0 +1,9 @@
+global proc int
+toggleXray(int $state) {
+	$currentPanel = `getPanel -withFocus`;
+	string $panelType = `getPanel -to $currentPanel`;
+	if ($panelType ==  "modelPanel") {
+		modelEditor -e -xray $state $currentPanel;
+	}
+	return(0);
+}

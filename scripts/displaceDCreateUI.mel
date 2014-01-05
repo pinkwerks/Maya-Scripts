@@ -1,0 +1,129 @@
+/////////////////////
+// Add displaceD menu //
+/////////////////////
+
+
+/* paint Weight Tool. Still under construction...
+global proc displaceD_paintWeightTool(
+	int $setToTool
+){
+	int $setToTool 
+){
+	global string $gArtAttrCurrentAttr;
+
+	$gArtAttrCurrentAttr = "";
+	string $filterUILabel = (uiRes("m_artAttrToolScript.kFilter"));
+	
+	string $tool = "artAttrContext";
+
+	makePaintable -activateAll false;
+	makePaintable -attrType "multiFloat" -sm "deformer" "displaceD" "weights";  
+
+	setToolTo $tool;
+
+	if( 3 == $setToTool ) {
+		toolPropertyWindow;
+
+		// Make sure that the filer is displayed. 
+		if (`button -q -ex artAttrFilterButton`) {
+			button -e -label `artAttrFilterLabel` artAttrFilterButton;
+    	}
+	}else{
+		if( 4 != $setToTool ) {
+			warning (uiRes("m_artAttrToolScript.kWrongInput"));
+		} else if (!artAttrInitPaintableAttr()) {		
+			warning (uiRes("m_artAttrToolScript.kSelectObjectWithPaintableAttr"));
+		}	
+	}
+}
+*/
+
+
+global proc displaceDCreateUI()//Call from API
+{
+	global string $gMainDeformationsMenu;
+	global string $gMainEditDeformationsMenu;
+	
+	
+	/* ----- handling mainDeformationsMenu ----- */
+	if($gMainDeformationsMenu!="mainDeformationsMenu")
+		print ("[displaceDCreateUI]$gMainDeformationsMenu value is strange:"+$gMainDeformationsMenu+"\n displaceD menu might not be added correctly.\n");
+	
+	int $numItems = `menu -q -ni $gMainDeformationsMenu`;
+	if ($numItems == 0) { 
+		// Try to build the menu
+		string $pmCmd = `menu -q -pmc $gMainDeformationsMenu`;
+		catch(eval($pmCmd));
+		$numItems = `menu -q -ni $gMainDeformationsMenu`;
+	}
+	
+	if ($numItems == 0)
+		print ("[displaceDCreateUI]$gMainDeformationsMenu value is strange:"+$gMainDeformationsMenu+"\n displaceD menu might not be added correctly.\n");
+	
+	
+	/* ----- handling mainEditDeformationsMenu ----- */
+	if($gMainEditDeformationsMenu!="mainEditDeformationsMenu")
+		print ("[displaceDCreateUI]$gMainEditDeformationsMenu value is strange:"+$gMainEditDeformationsMenu+"\n displaceD menu might not be added correctly.\n");
+	
+	$numItems = `menu -q -ni $gMainEditDeformationsMenu`;
+	if ($numItems == 0) { 
+		// Try to build the menu
+		string $pmCmd = `menu -q -pmc $gMainEditDeformationsMenu`;
+		catch(eval($pmCmd));
+		$numItems = `menu -q -ni $gMainEditDeformationsMenu`;
+	}
+	
+	if ($numItems == 0)
+		print ("[displaceDCreateUI]$gMainEditDeformationsMenu value is strange:"+$gMainEditDeformationsMenu+"\n displaceD menu might not be added correctly.\n");
+	
+	
+	/* ----- add original menu ----- */
+	global string $gDisplaceD_menu1;
+	global string $gDisplaceD_menu2;
+	//global string $gDisplaceD_menu3;
+	
+	$gDisplaceD_menu1=`menuItem -parent $gMainDeformationsMenu -divider 1 displaceD_MenuItem1`;
+	$gDisplaceD_menu2=`menuItem -parent $gMainDeformationsMenu -l "Create displaceD" -c "deformer -type displaceD" displaceD_MenuItem2`;
+	/*
+	$gDisplaceD_menu3=`
+		menuItem
+		 -parent $gMainEditDeformationsMenu
+		 -l "Paint displaceD Weight Tool"
+		 -optionBox 1
+		 -c displaceD_paintWeightTool(4)
+		 
+		 displaceD_MenuItem3`;
+	*/
+}
+
+
+global proc displaceDDeleteUI()//Call from API
+{
+
+	global string $gDisplaceD_menu1;
+	global string $gDisplaceD_menu2;
+	//global string $gDisplaceD_menu3;
+	
+	if($gDisplaceD_menu1=="")
+		print ("[displaceDDeleteUI]value is strange:"+$gDisplaceD_menu1+"\n");
+	if($gDisplaceD_menu2=="")
+		print ("[displaceDDeleteUI]value is strange:"+$gDisplaceD_menu2+"\n");
+		
+	deleteUI -menuItem $gDisplaceD_menu1;
+	deleteUI -menuItem $gDisplaceD_menu2;
+	//deleteUI -menuItem $gDisplaceD_menu3;
+	
+	
+	/* Force remove by name..Unnexessary.
+	global string $gMainDeformationsMenu;
+	string $deformerMenuItems[]=`menu -q -itemArray $gMainDeformationsMenu`;
+	for($deformerMenuItem in  $deformerMenuItems){
+		print ("[displaceDDeleteUI]"+$deformerMenuItem+"\n");
+		if(`menuItem -q -divider $deformerMenuItem`)continue;
+		string $item=`menuItem -q -l $deformerMenuItem`;
+		if(`gmatch "*displaceD*" $item`)
+		deleteUI -menuItem $item;
+	}
+	*/
+}
+////////////////////////////////////////////////////////

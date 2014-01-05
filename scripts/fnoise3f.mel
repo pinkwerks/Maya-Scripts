@@ -1,0 +1,15 @@
+global proc float  
+fnoise3f (
+	int $octaves,
+	vector $index
+) {
+	float $v = 0;
+	float $frequency = 1;
+	float $amplitude = 1;
+	for ($i = 0; $i <= $octaves; $i++) {
+		$v += $amplitude * noise($index * $frequency);
+		$frequency += $frequency;
+		$amplitude *= .5;
+	}
+	return($v);
+}

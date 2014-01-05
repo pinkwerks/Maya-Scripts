@@ -1,0 +1,16 @@
+//
+// v20070201 pinkwerks
+// note sister file checkBreakFile.mel
+//
+global proc string
+breakFileCreate(string $basename)
+{
+	int $pid = `getpid`;
+	string $fn = basenameEx(`file -q -sn`);
+	string $bf = system("mktemp /tmp/"+ $basename +"_"+ $fn +"__XXXXXX | tr -d '\n'");
+	if ( `filetest -f $bf` )
+		return $bf;
+	else
+		error("breakFileCreate : Failed creation of "+ $bf +" !");
+}
+

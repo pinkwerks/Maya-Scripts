@@ -1,0 +1,30 @@
+global proc 
+colorEmit (string $proj, int $x, int $y) {
+    $surfs = `ls -sl`;
+    $currentFrame = `currentTime -q`;
+    for ($surf in $surfs) {
+	string $children[] = `listRelatives $surf`;
+	string $emit;
+	if (size($children) > 1) {
+	    $emit = $children[1];
+	    if (nodeType($emit) != "pointEmitter") {
+		print("Skipping "+$surf+"\n");
+		continue;
+	    }
+	    $newFile = $surf+"_PTEX";
+	    print ($newFile+" --> "+$emit+"\n");
+	    if (size(`ls $newFile`) == 1) {
+		delete $newFile;
+	    }
+	    convertSolidTx -rx $x -ry $y -aa 0 -f 1 -n $newFile $proj $surf;
+	    string $fileName = `getAttr ($newFile+".fileTextureName")`;
+	    if (substring($fileName,1,1) == "/") {
+		$fileName = substring($fileName, 2, 1000);
+		setAttr -type "string" ($newFile+".fileTextureName") $fileName;
+	    }
+	    if (isConnected(($newFile+".outColor"),($emit+".particleColor")) == 0) {
+		connectAttr -f ($newFile+".outColor") ($emit+".particleColor");
+	    }
+	}
+    }
+}

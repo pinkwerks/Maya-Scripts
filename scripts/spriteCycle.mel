@@ -1,0 +1,37 @@
+global proc spriteCycle()
+{
+    string $exp = "";
+    string $obj;
+
+    string $objs[] = `ls -sl -fl -l`;
+
+    int $sobjs = `size $objs`;
+
+    if ( $sobjs < 1 )
+    	error("spriteCycle : need more than one object selected!");
+
+    string $attr = "spriteCycleFrame";
+    string $j[] = `spaceLocator -p 0 0 0 -n spriteCycle`;
+    string $joystick = $j[0];
+    string $c = ($joystick + "." + $attr);
+    addAttr -ln $attr -at long -min 0 -max ($sobjs - 1) $joystick;
+    setAttr -e -keyable true $c;
+
+
+    int $i = 0;
+    // do the work
+    for ( $obj in $objs )
+    {
+	// initialize this bitch.
+    	$exp = "";
+	$exp += ("if ( " + $c + " == " + $i + " )\n");
+	$exp += ("\tv = 1;\n");
+	$exp += ("else\n");
+	$exp += ("\tv = 0;\n");
+
+	expression -n $c -s $exp -o $obj -ae 1 -uc all;
+
+	$i++;
+    }
+
+}

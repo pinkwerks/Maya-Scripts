@@ -1,0 +1,19 @@
+global proc findUnknownDags()
+{
+  select -adn;
+  string $objs[] = `ls -sl -l`;
+  int $sobjs = `size $objs`;
+  string $ud[];
+  int $i = 0;
+  for ( $obj in $objs )
+    {
+      string $nt = `nodeType $obj`;
+      if ( $nt == "unknownDag" )
+	{
+	  print ($obj + " is of type, " + $nt + "\n");
+	  $ud[$i] = $obj;
+	  $i++;
+	}
+    };
+  select $ud;
+}

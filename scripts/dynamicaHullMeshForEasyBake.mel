@@ -1,0 +1,78 @@
+// Dynamica EasyBake Hull and Mesh Creation
+//
+// Creates Hull and Mesh Dynamica rigid bodies with attached original mesh for easy baking later
+//
+// Usage: Select poly objects to convert into Dynamica rigid bodies, select option
+//
+// Date: 2009-07-25, Author: "RBD" from Physics Simulation Forum
+// Forum: http://www.bulletphysics.com/Bullet/phpBB3/viewforum.php?f=12
+//
+{
+if (!`pluginInfo -q -l BulletMayaPlugin`)
+    warning "This script requires the Dynamica plugin to be loaded";
+int $domass = `pluginInfo -q -l measure`;  // to calc volume... part of BonusTools
+float $minmass = 1;
+float $maxmass = 10;
+$choice = `confirmDialog -title "EasyBake Dynamica Hull and Mesh Creation" -message "Type of Dynamica rigid body to create from selected polys? (when in doubt select Hull)"
+    -button "Hull" -button "Mesh" -button "Hull Array" -button "Mesh Array" -button "Cancel" -defaultButton "Hull"
+    -cancelButton "Cancel" -dismissString "Cancel"`;
+if ($choice != "Cancel") {
+    string $pObjs[] = `ls -sl`;
+    string $cs[];
+    DeleteHistory;
+    float $minvol;
+    float $maxvol;
+    if ($domass) {
+        // Calculate poly volume
+        float $vol[];
+        $minvol = pow(10,10);
+        $maxvol = 0.0;
+        for ($pObj in $pObjs) {
+            $vol = `measure -v $pObj`; // Requires BonusTools' measure.dll to be loaded
+            if ($vol[0] > $maxvol) $maxvol = $vol[0];
+            if ($vol[0] < $minvol) $minvol = $vol[0];
+        };
+    }
+    // Convert to Dynamica rigid body
+    int $i = 0;
+    float $pos[];
+    $centpvts = `confirmDialog -title "Easybake: Center Pivots" -message "Center pivots? (recommended, pivot = center of mass)"
+    -button "Yes" -button "No" -defaultButton "Yes" -cancelButton "No" -dismissString "No"`;
+    if ($centpvts == "Yes")
+        xform -centerPivots;  // Optional, user may want a different center of mass
+    for ($pObj in $pObjs) {
+        if (`firstParentOf $pObj` != "") {
+            parent -w $pObj; // unparent all objects (Dynamica doesn't like children ;)
+        }
+    	$pos = `xform -q -rp -ws $pObj`;
+        move -rpr 0 0 0 $pObj;
+    	makeIdentity -a 1 $pObj;
+    	select -r $pObj;
+    	$cs = `duplicate`;
+    	polyMoveVertex -ltz -0.06; // Substract default bullet margin (0.04... but can be vertex vs face)
+    	DeleteHistory; // Delete history for this object
+    	if ($choice == "Hull")
+    	    dynamicaUI_createActiveHullRB(); // Don't get anything back, so assume it's currently selected object
+    	else if ($choice == "Mesh")
+            dynamicaUI_createActiveMeshRB();
+        else if ($choice == "Hull Array") {
+            setAttr ($pObj+".v") 0; // Hide original poly since we can't show it in an array situation
+            dynamicaUI_createActiveHullRBArray;
+        }
+        else if ($choice == "Mesh Array") {
+            setAttr ($pObj+".v") 0; // Hide original poly
+    	    dynamicaUI_createActiveMeshRBArray;
+	    }
+    	$cs = `ls -sl`;
+    	if ($domass && $minvol != $maxvol) {
+        	$vol = `measure -v $pObj`;
+    	    // If you prompted for density, it would be very easy: mass = density * volume... but, also want to keep mass range low...
+    	    setAttr ($cs[0]+".mass") ((($vol[0]-$minvol)/($maxvol-$minvol))*($maxmass-$minmass)+$minmass); // Set mass from volume
+    	}
+        move -a $pos[0] $pos[1] $pos[2] ($cs[0]);
+        parent -r $pObj ($cs[0]); // Make original poly child of RB
+        // make RB part of group?
+    };
+    select -r $pObjs; // restore selection
+}
+}

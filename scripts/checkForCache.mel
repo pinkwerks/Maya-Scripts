@@ -1,0 +1,11 @@
+global proc checkForCache()
+{
+	string $nParts[] = `ls -l -typ nParticle`;
+	string $shapes[];
+	string $part;
+	string $shape;
+	for ($p in $nParts) {
+		warning($p);
+	}
+}
+

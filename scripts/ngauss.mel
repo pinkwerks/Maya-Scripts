@@ -1,0 +1,4 @@
+global proc float ngauss()
+{
+	return(1.0-linstep(-3,3,gauss(1.0)));
+}

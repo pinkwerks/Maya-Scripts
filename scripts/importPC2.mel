@@ -1,0 +1,31 @@
+// relies on KP_PointCacheReader
+// if 'mode' == 'mc' we convert the PC2 and use maya format caches
+global proc importPC2(string $mode)
+{
+	string $dir = "N:/prod/chipsahoy_3441M/pitch/Sequences/Work/cbonnstetter/xsi/dotXSI";
+	string $outdir = ($dir+"/mc/");
+	string $root = "run_fall_anim_v08_Cinderfella_Stand_In_rig";
+	string $dirroot = ($dir+"/"+$root);
+	string $objs[] = `ls -sl`;
+	for ($obj in $objs) {
+		print("// Processing "+$obj+"\n");
+		if ($mode == "mc") {
+			// convert pc2 to maya cache and hook it up.
+			// note, the geo may have to be rotated to fix orientation.
+			string $pc2 = ($dirroot+"."+$obj+".pc2");
+			string $switch = createHistorySwitch($obj,false);
+			setAttr ($switch+".playFromCache") 1;
+			string $mc = ($outdir+"/"+$obj+".mc");
+			string $cache = `cacheFile -pc2 1 -pcf $pc2 -f $obj -dir $outdir -format OneFile`;
+//			setAttr ($cache+".multithreaded") 1;
+			string $attachCmd = ("cacheFile -af -f \""+$mc+"\" -ia "+$switch+".inp[0]");
+			eval $attachCmd;
+		} else {
+			string $def[] = `deformer -type KP_PointCacheReader $obj`;
+			setAttr ($def[0]+".useCustomPlayback") 1;
+			expression -s ($def[0]+".customFrame=frame");
+			setAttr -type "string" ($def[0]+".file") ($dirroot+"."+$obj+".pc2");
+		}
+	}
+}
+

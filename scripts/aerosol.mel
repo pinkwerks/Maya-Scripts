@@ -1,0 +1,208 @@
+//
+// aerosol.mel v20060823 pinkA7pinkwerksD07com
+//
+// usage : select a particle object then a fluid volume and exec`aeorsol`
+//
+// aeorsol will transfer particle velocity and density to a fluid volume. 
+// note you also need aerosolEngine() for this to work, this just set's it up.
+//
+
+proc string
+getShape (string $thing)
+{
+  string $relatives[] =`listRelatives -s $thing`;
+  if (`size $relatives` !=1)
+    {
+      error ("aerosol : Wrong number of relatives, bailing out!  FIXME");
+    }
+  return $relatives[0];
+}
+
+global proc
+aerosol ()
+{
+	int $i = 0;
+	string $script = "";
+	string $selected[] =`ls -sl -l`;
+	int $ssel =`size $selected`;
+
+	//
+	// Error checking.
+	//
+	if ($ssel < 2)
+		error ("Select one Particle shape and one fluid shape!");
+	string $fluid =`getShape $selected[$ssel - 1]`;
+	if (`nodeType $fluid` !="fluidShape")
+		error ("Last selected object is not of type 'fluidShape'!");
+
+	for ($i = 0; $i < $ssel - 1; $i++)
+	{
+		string $particle =`getShape $selected[$i]`;
+		if (`nodeType $particle` !="particle")
+			error ("Selected object # " + $i + "`" + $particle + "' is not of type`particleShape'!");
+		//
+		// XXX The fluid box can't be rotated or scaled for the current
+		// bounding box test to work.
+		//
+		float $tmp[] =`getAttr ($selected[$i] + ".scale")`;
+		if ($tmp[0] != 1 || $tmp[1] != 1 || $tmp[2] != 1)
+		{
+			setAttr ($selected[$i] + ".scaleX") 1;
+			setAttr ($selected[$i] + ".scaleY") 1;
+			setAttr ($selected[$i] + ".scaleZ") 1;
+			warning ("// aerosol : scale reset.");
+		}
+		$tmp =`getAttr ($selected[1] + ".rotate")`;
+		if ($tmp[0] != 0 || $tmp[1] != 0 || $tmp[2] != 0)
+		{
+			setAttr ($selected[1] + ".rotateX") 0;
+			setAttr ($selected[1] + ".rotateY") 0;
+			setAttr ($selected[1] + ".rotateZ") 0;
+			warning ("// aerosol : rotation reset.");
+		}
+		//
+		// Add density controls to the particle shape
+		//
+		if (!`attributeExists "doAerosol" $particle`)
+		{
+			addAttr -k 1 -ln doAerosol -at bool $particle;
+			setAttr ($particle + ".doAerosol") 1;
+		}
+		if (!`attributeExists "densityMethod" $particle`)
+		{
+		  addAttr -k 1 -ln densityMethod -at "enum"
+			-en "none:additive:average" $particle;
+		  setAttr ($particle + ".densityMethod") 1;
+		}
+		if (!`attributeExists "densityEmission" $particle`)
+		{
+		  addAttr -k 1 -ln densityEmission -at double $particle;
+		  setAttr ($particle + ".densityEmission") 1;
+		}
+
+		if (!`attributeExists "heatEmission" $particle`)
+		{
+			addAttr -k 1 -ln heatEmission -at double $particle;
+			setAttr ($particle + ".heatEmission") 1;
+		}
+		if (!`attributeExists "fuelEmission" $particle`)
+		{
+			addAttr -k 1 -ln fuelEmission -at double $particle;
+			setAttr ($particle + ".fuelEmission") 1;
+		}
+
+		if (!`attributeExists "ageFade" $particle`)
+		{
+			addAttr -k 1 -ln ageFade -at double $particle;
+			setAttr ($particle + ".ageFade") 0;
+		}
+		/*
+		if (!`attributeExists "keepInjecting" $particle`)
+		{
+		  addAttr -k 1 -ln keepInjecting -at bool $particle;
+		  setAttr ($particle + ".keepInjecting") 0;
+		}
+		*/
+		if (!`attributeExists "clampDensity" $particle`)
+		{
+		  addAttr -k 1 -ln clampDensity -at bool $particle;
+		  setAttr ($particle + ".clampDensity") 1;
+		}
+		if (!`attributeExists "minDensity" $particle`)
+		{
+		  addAttr -k 1 -ln minDensity -at double $particle;
+		  setAttr ($particle + ".minDensity") -2;
+		}
+		if (!`attributeExists "maxDensity" $particle`)
+		{
+		  addAttr -k 1 -ln maxDensity -at double $particle;
+		  setAttr ($particle + ".maxDensity") 2;
+		}
+
+		//
+		// Add velocity controls to the particle shape
+		//
+		if (!`attributeExists "velocityMethod" $particle`)
+		{
+			addAttr -k 1 -ln velocityMethod -at "enum" -en "none:additive:average" $particle;
+			setAttr ($particle + ".velocityMethod") 2;
+		}
+		if (!`attributeExists "velocityAmp" $particle`)
+		{
+			addAttr -k 1 -ln velocityAmp -at double $particle;
+			setAttr ($particle + ".velocityAmp") 1;
+		}
+		if (!`attributeExists "conserveFluidVelocity" $particle`)
+		{
+			addAttr -k 1 -ln conserveFluidVelocity -at double $particle;
+			setAttr ($particle + ".conserveFluidVelocity") 1;
+		}
+
+		//
+		// Add per-particle variables
+		//
+		if (!`attributeExists "densityPP" $particle`)
+		{
+			addAttr -ln densityPP -dt doubleArray $particle;
+			addAttr -ln density0PP -dt doubleArray $particle;
+			string $exp =`dynExpression -q -c $particle`;
+			dynExpression
+				-s ($exp + "\n// Added by aerosol()\ndensity0PP = densityEmission;\n")
+				-c $particle;
+			$exp =`dynExpression -q -c $particle`;
+			dynExpression
+				-s ($exp + "densityPP = densityEmission;\n")
+				-c $particle;
+		}
+
+		if (!`attributeExists "heatPP" $particle`)
+		{
+		  addAttr -ln heatPP -dt doubleArray $particle;
+		  addAttr -ln heat0PP -dt doubleArray $particle;
+		  string $exp =`dynExpression -q -c $particle`;
+		  dynExpression
+			-s ($exp + "// Added by aerosol()\nheatPP = heatEmission;\n")
+			-c $particle;
+		  $exp =`dynExpression -q -c $particle`;
+		  dynExpression
+			-s ($exp + "heat0PP = heatEmission;\n")
+			-c $particle;
+		}
+
+		if (!`attributeExists "fuelPP" $particle`)
+		{
+		  addAttr -ln fuelPP -dt doubleArray $particle;
+		  addAttr -ln fuel0PP -dt doubleArray $particle;
+		  string $exp =`dynExpression -q -c $particle`;
+		  dynExpression
+			-s ($exp + "// Added by aerosol()\nfuelPP = fuelEmission;\n")
+			-c $particle;
+		  $exp =`dynExpression -q -c $particle`;
+		  dynExpression
+			-s ($exp + "fuel0PP = fuelEmission;\n")
+			-c $particle;
+		}
+
+		if (!`attributeExists "lastCellPP" $particle`)
+		{
+		  addAttr -ln lastCellPP -dt vectorArray $particle;
+		  string $exp =`dynExpression -q -c $particle`;
+		  dynExpression
+			-s ($exp + "// Added by aerosol()\nlastCellPP = <<0 ,0, 0>>;\n")
+			-c $particle;
+		}
+
+      //
+      // create script node
+      //
+      $script += ("aerosolEngine " + $particle + " " + $fluid + ";\n");
+    }
+
+  //
+  // Setup script node to execute every frame.
+  //
+  string $scriptNode =`scriptNode -beforeScript $script`;
+  $scriptNode =`rename $scriptNode aerosolScriptNode`;
+  setAttr ($scriptNode + ".scriptType") 7;
+  print ("// aerosol finshed, delete with`delete " + $scriptNode + ";`.\n");
+}

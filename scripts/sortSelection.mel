@@ -1,0 +1,67 @@
+// v20090420 pink
+// sort the selection by euclidean space
+// sortSelection priority reverse-x reverse-y reverse-z
+global proc sortSelection(
+	string $priority,
+	int $reverseX,
+	int $reverseY,
+	int $reverseZ
+)
+{
+	string $objs[] = `ls -sl -fl`;
+	string $obj;
+	float $cur_pos[];
+	float $sort_pos[];
+	float $val;
+	float $y;
+	float $z;
+	string $sorted[];
+	int $k;
+
+	string $one = ".boundingBoxCenterX";
+	string $two = ".boundingBoxCenterY";
+
+	if ($priority == "yxz") {
+		$one = ".boundingBoxCenterY";
+		$two = ".boundingBoxCenterX";
+	}
+
+	for ($obj in $objs) {
+		$val = `getAttr ($obj+$one)`;
+		$k = 0;
+		for ($s in $sorted) {
+			$val2 = `getAttr ($s+$one)`;
+			if ($reverseX) {
+				if ($val < $val2)
+					$k++;
+			} else {
+				if ($val > $val2)
+					$k++;
+			}
+		}
+		stringArrayInsertAtIndex $k $sorted $obj;
+	}
+	select $sorted;
+
+	reverseSelectionOrder;
+	$objs = `ls -sl -fl`;
+	clear $sorted;
+
+	for ($obj in $objs) {
+		$val = `getAttr ($obj+$two)`;
+		$k = 0;
+		for ($s in $sorted) {
+			$val2 = `getAttr ($s+$two)`;
+			if ($reverseY) {
+				if ($val < $val2)
+					$k++;
+			} else {
+				if ($val > $val2)
+					$k++;
+			}
+		}
+		stringArrayInsertAtIndex $k $sorted $obj;
+	}
+	select $sorted;
+}
+

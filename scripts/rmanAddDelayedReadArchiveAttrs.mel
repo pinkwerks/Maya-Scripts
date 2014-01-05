@@ -1,0 +1,22 @@
+global proc rmanAddDelayedReadArchiveAttrs() 
+{
+	string $selected[] = `ls -sl`;
+	int $i, $j;
+	for( $i=0; $i < size($selected); $i++ ) {
+		// Generates a maya attr name, given a setting name as declared
+		// in RfM's ini files.
+		string $attr = `rmanGetAttrName "postTransformScript"`;
+		rmanAddAttr $selected[$i] $attr "rmanOutputDelayedReadArchive";
+		$attr = `rmanGetAttrName "draFile"`;
+		rmanAddAttr $selected[$i] $attr "";
+		$attr = `rmanGetAttrName "draUseSequenceNumber"`;
+		rmanAddAttr $selected[$i] $attr "";
+		$attr = `rmanGetAttrName "draSequenceNumber"`;
+		rmanAddAttr $selected[$i] $attr "";
+		// Create a default expression which sets the sequence number
+		// to the current frame number.
+		expression -s ($selected[$i] + "." + $attr + "=frame")
+			-o $selected[$i] -ae 1 -uc all;
+	}
+}
+

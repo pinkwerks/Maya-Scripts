@@ -1,0 +1,527 @@
+// lucyRender
+//
+// version : 20051216
+// author : pink
+//
+
+//========================================================
+// doLucyRender
+//========================================================
+proc
+doLucyRender(string $proj, string $shot, string $asset, string $cmd,
+		 string $fs, string $fe, string $fi, string $name,
+		 string $filepath, string $user, string $pri, string $type)
+{
+  string $url = ("http://neuron/mavis/maya/submit_job.php?"
+		 + "project=" + $proj
+		 + "&shot=" + $shot
+		 + "&asset=" + $asset
+		 + "&command=" + $cmd
+		 + "&type=" + $type
+		 + "&fs=" + $fs
+		 + "&fe=" + $fe
+		 + "&fi=" + $fi
+		 + "&scriptname=" + $name
+		 + "&imagepath=" + $filepath
+		 + "&username=" + $user
+		 + "&priority=" + $pri
+		 );
+
+  print("// lucyRender -doLucyRender : " + $url + "\n");
+  $url = `substitute $url "s/[[:blank:]]/%20/g"`;
+  $url = `substitute $url "s/#/%23/g"`;
+//  $url = `substitute $url "s/>/%3E/g"`;
+  print("// lucyRender URL : " + $url + "\n");
+  url("write", $url);
+}
+
+//========================================================
+// lucyRender_buildOptionMenuGrpItems
+//========================================================
+proc
+buildOptionMenuGrpItems(string $ctl, string $items[])
+{
+  for ($item in $items)
+    {
+      //print("// Building menu item : " + $ctl + "|OptionMenu " + $item + "\n");
+      menuItem -parent ($ctl + "|OptionMenu") -label $item $item;
+    } 
+  // HACK:0 is needed to redraw optionMenus correctly
+  /*
+  if ( `size $items` <= 1 )
+    menuItem -parent ($ctl + "|OptionMenu") -label "";
+  if ( `size $items` < 2 )
+    menuItem -parent ($ctl + "|OptionMenu") -label "";
+    */
+}
+
+//========================================================
+// deleteOptionMenuGrpItems
+//========================================================
+proc
+deleteOptionMenuGrpItems(string $ctl)
+{
+  // Delete exisiting menu items.
+  int $numItems = `optionMenuGrp -q -ni $ctl`;
+  if ( $numItems != 0 )
+    {
+      string $itemsToDelete[] = `optionMenuGrp -q -ill $ctl`;
+      for ( $item in $itemsToDelete )
+	{
+	  //print("// Deleting menu item : " + $item + "\n");
+	  deleteUI -menuItem $item;
+	}
+    }
+}
+
+//========================================================
+// outDirCmd
+//========================================================
+global proc
+outDirCmd(string $octl, string $bctl)
+{
+  $dir = `textFieldGrp -q -tx $octl`;
+  if ( `file -q -ex $dir` == 0 ) 
+    button -e -en on $bctl;
+  else
+    button -e -en off $bctl;
+}
+
+
+//========================================================
+// mkdirCmd
+//========================================================
+global proc
+mkdirCmd(string $outDirCtl, string $mkdirBtn)
+{
+  $dir = `textFieldGrp -q -tx $outDirCtl`;
+  if ( `sysFile -md $dir` == 0 )
+    error("lucyRender : Couldn't create " + $dir);
+  else
+    button -e -en off $mkdirBtn;
+}
+
+//========================================================
+// setOutDir
+//========================================================
+global proc
+setOutDir(string $mode, string $outDirCtl, string $mkdirBtn)
+{
+  // Output Directory
+  //
+  if ( `namedPathPiece root` == "mnt" )
+    error("lucyRender -setOutDir : Your file was not opened through /hdx!");
+  string $proj = `namedPathPiece proj`; 
+  string $shots = `namedPathPiece shots`; 
+  string $shot = `namedPathPiece shot`; 
+  string $fileName = `file -q -sn`;
+  string $chop = basenameEx($fileName);
+  string $dir;
+  if ( $shots == "assets" )
+    $dir = ("/hdx/projects/"+$proj+"/"+$shots+"/"+$shot+"/turntable");
+  else
+    $dir = ("/hdx/projects/"+$proj+"/"+$shots+"/"+$shot+"/images");
+
+  if ($mode == "testRenders" && $shots != "assets")
+    $dir = ($dir+"/test_renders");
+  else if ($mode == "testRenders" && $shots == "assets")
+    warning("lucyRender -setOutDir : Assets don't have 'Test Render' directories.  Ignoring.");
+  else if ($mode == "default")
+    $dir = ($dir+"/3d_renders");
+
+  if ($mode == "scene")
+    $dir = ($dir+"/3d_renders/"+$chop);
+
+  if ( `file -q -ex $dir` == 0 ) 
+    button -e -en on $mkdirBtn;
+  else
+    button -e -en off $mkdirBtn;
+
+  textFieldGrp -e -tx $dir $outDirCtl;
+}
+
+//========================================================
+// resSelCmd 
+//========================================================
+global proc
+resSelCmd(string $resCtl, string $resSelCtl)
+{
+  string $sel = `optionMenuGrp -q -v $resSelCtl`;
+  int $selIndex = `optionMenuGrp -q -sl $resSelCtl`;
+  if ( `optionVar -ex lucyRender_resolution` )
+    {
+      optionVar -rm lucyRender_resolution;
+      optionVar -iv lucyRender_resolution $selIndex;
+    }
+
+  if ( $sel == "NTSC" )
+    floatFieldGrp -e -v1 720 -v2 486 -v3 1.333 -v4 .9 $resCtl;
+  else if ( $sel == "PAL" )
+    floatFieldGrp -e -v1 720 -v2 576 -v3 1.333 -v4 1.066 $resCtl;
+  else if ( $sel == "VGA" )
+    floatFieldGrp -e -v1 640 -v2 480 -v3 1.333 -v4 1.0 $resCtl;
+  else if ( $sel == "Web" )
+    floatFieldGrp -e -v1 320 -v2 240 -v3 1.333 -v4 1.0 $resCtl;
+  else if ( $sel == "Film 1k" )
+    floatFieldGrp -e -v1 1024 -v2 778 -v3 1.316 -v4 1.0 $resCtl;
+  else if ( $sel == "Film 1.5k" )
+    floatFieldGrp -e -v1 1556 -v2 1168 -v3 1.316 -v4 1.0 $resCtl;
+  else if ( $sel == "Film 2k" )
+    floatFieldGrp -e -v1 2048 -v2 1556 -v3 1.316 -v4 1.0 $resCtl;
+  else if ( $sel == "Film 3k" )
+    floatFieldGrp -e -v1 3072 -v2 2334 -v3 1.316 -v4 1.0 $resCtl;
+  else if ( $sel == "Film 4k" )
+    floatFieldGrp -e -v1 4096 -v2 3112 -v3 1.316 -v4 1.0 $resCtl;
+  else
+    {
+      warning("lucyRender -resSelCmd : Can't parse "+ $sel+", using VGA.");
+      floatFieldGrp -e -v1 640 -v2 480 -v3 1.333 -v4 1.0 $resCtl;
+    }
+}
+
+//========================================================
+// globalsCmd
+//========================================================
+global proc
+globalsCmd(string $frameRangeCtl)
+{
+  float $fs = `getAttr defaultRenderGlobals.startFrame`;
+  float $fe = `getAttr defaultRenderGlobals.endFrame`;
+  float $fi = `getAttr defaultRenderGlobals.byFrame`;
+  floatFieldGrp -e -v1 $fs -v2 $fe -v3 $fi $frameRangeCtl;
+}
+
+//========================================================
+// timelineCmd 
+//========================================================
+global proc
+timelineCmd(string $frameRangeCtl)
+{
+  float $fs = `playbackOptions -q -min`; 
+  float $fe = `playbackOptions -q -max`; 
+  float $fi = `playbackOptions -q -by`; 
+  floatFieldGrp -e -v1 $fs -v2 $fe -v3 $fi $frameRangeCtl;
+}
+
+//========================================================
+// tenPercentCmd
+//========================================================
+global proc
+tenPercentCmd(string $frameRangeCtl)
+{
+  float $fs = `floatFieldGrp -q -v1 $frameRangeCtl`;
+  float $fe = `floatFieldGrp -q -v2 $frameRangeCtl`;
+  float $fi = floor(($fe - $fs + 1) / 10.0);
+  floatFieldGrp -e -v1 $fs -v2 $fe -v3 $fi $frameRangeCtl;
+}
+
+//========================================================
+// lucyRender_renderBtnCmd 
+//========================================================
+global proc
+lucyRender_renderBtnCmd(string $outDirCtl, string $frameRangeCtl,
+			string $resCtl, string $rendererCtl,
+			string $priorityCtl, string $optsCtl,
+			string $renderLayerCtl)
+{
+  string $fileNameWithPath = `file -q -sn`;
+  if ( $fileNameWithPath == "" )
+    error("lucyRender : Bad scene file name, try saving first!");
+  string $fileName = `file -q -sn -shn`;
+  string $root = `namedPathPiece root`; 
+  string $projs = `namedPathPiece projs`; 
+  string $proj = `namedPathPiece proj`; 
+  string $project = ("/" + $root + "/" + $projs + "/" + $proj);
+  string $shots = `namedPathPiece shots`; 
+  string $shot = `namedPathPiece shot`; 
+  string $user = `getenv USER`;
+//  if ( $user == "pink" )
+//    $user = "Render Ninja";
+  string $renderDir = `textFieldGrp -q -tx $outDirCtl`;
+  // check for existance of render dir.
+  if ( `file -q -ex $renderDir` == 0 )
+    error("lucyRender : Invalid Output Directory.  `mkdir` it first or specify an alternative.");
+  string $image = ($renderDir + "/" + basenameEx($fileName) + ".#.iff");
+  string $asset;
+  if ( $shots == "assets" )
+    {
+      $asset = $shot;
+      $shot = "";
+    }
+
+  // Frame Range
+  string $fs = `floatFieldGrp -q -v1 $frameRangeCtl`;
+  string $fe = `floatFieldGrp -q -v2 $frameRangeCtl`;
+  string $fi = `floatFieldGrp -q -v3 $frameRangeCtl`;
+
+  // Priority
+  string $pri = `intSliderGrp -q -v $priorityCtl`;
+
+  // Renderer & Type
+  string $type;
+  string $renderer;
+  if ( `radioButtonGrp -q -sl $rendererCtl` == 1 )
+    {
+      $renderer = "sw";
+      $type = "Maya Software";
+    }
+  else if ( `radioButtonGrp -q -sl $rendererCtl` == 2 )
+    {
+      $renderer = "hw";
+      $type = "Maya Hardware";
+    }
+  else
+    {
+      // mentalray with 1 thread
+      $renderer = "mr -rt 1";
+      $type = "mental ray";
+    }
+
+  // Job name, image name
+  string $jobName = basenameEx(`file -q -sn -shn`);
+
+  string $renderLayer = `optionMenuGrp -q -v $renderLayerCtl`;
+  string $renderLayerOpts = ("-rl " + $renderLayer + " ");
+  if ( $renderLayer == "defaultRenderLayer" || $renderLayer == "Selected" )
+      $renderLayerOpts = "";
+  else
+      $jobName = ($jobName+"_"+$renderLayer);
+
+  // Logging
+  string $logCmd;
+  string $logFile;
+  if ( `checkBoxGrp -q -v1 $optsCtl` == 1 )
+    {
+      $logCmd = ("%3E %26 " + $renderDir + "/"+$jobName+"_lucyLog.#.txt");
+      $logFile = ($renderDir + "/"+$jobName+"_lucyLog.#.txt");
+      $logFile = ($project + "/logs/"+$jobName+"FRAME.txt");
+      $logCmd = ("-log " + $logFile);
+    }
+  // 16 bit renders
+  string $format = "iff";
+  if ( `checkBoxGrp -q -v1 $optsCtl` == 1 )
+      $format = "iff16";
+  // Build the command
+  string $cmd = ("/bin/su - 3d -c \"/hdx/common/cg/scripts/CellRender "
+		 + "-fnc 3 "
+		 + "-pad 4 "
+		 + "-of " + $format + " "
+		 + "-r " + $renderer + " "
+		 + "-s FRAME -e FRAME "
+		 + "-proj " + $project + " "
+		 + "-rd " + $renderDir + " "
+		 + $renderLayerOpts
+//		 + "-rl " + $renderLayer + " "
+		 + "-im " + $jobName + " "
+		 + $logCmd + " "
+		 + $fileNameWithPath
+//		 + $fileNameWithPath + " "
+//		 + $logCmd
+		 + "\"");
+
+  // Escape ampersand for URL.
+  print("// lucyRender CMD : " + $cmd + "\n");
+
+  // Do the work
+  doLucyRender($proj, $shot, $asset, $cmd, $fs, $fe, $fi, $jobName, $image, $user, $pri, $type);
+  deleteUI -window "lucyRender";
+  print("// Job "+$jobName+" submitted, check Lucy.\n");
+}
+
+///========================================================
+///
+/// lucyRender
+///
+///========================================================
+global proc
+lucyRender()
+{
+  string $procName = "lucyRender";
+  if ( `window -exists $procName` ) deleteUI -window $procName;
+  string $window = `window -rtf on -t "Lucy Render" $procName`;
+  string $f = `formLayout`;
+  string $fileName = `file -q -sn`;
+  string $fileNameCtl = `textFieldGrp -l "File to Render" -adj 2 -ed 0 -tx $fileName`;
+  formLayout -e
+    -af $fileNameCtl top 0  
+    -af $fileNameCtl left 0
+    -af $fileNameCtl right 0
+    $f;
+
+
+  setParent $f;
+  string $f1 = `formLayout`;
+    string $outDirCtl = `textFieldGrp -l "Output Directory" -adj 2`;
+    string $mkdirBtn =
+      `button -l "mkdir" -en 0`;
+    setOutDir "default" $outDirCtl $mkdirBtn;
+    string $defaultDirBtn =
+      `button -l "Default" -c ("setOutDir \"default\" "+$outDirCtl+" "+$mkdirBtn)`;
+    string $testRendersBtn =
+      `button -l "Test Renders" -c ("setOutDir \"testRenders\" "+$outDirCtl+" "+$mkdirBtn)`;
+    string $sceneBtn =
+      `button -l "Scene" -c ("setOutDir scene "+$outDirCtl+" "+$mkdirBtn)`;
+    string $cmd = ("outDirCmd "+$outDirCtl+" "+$mkdirBtn);
+    textFieldGrp -e -cc $cmd $outDirCtl;
+    $cmd = ("mkdirCmd "+$outDirCtl+" "+$mkdirBtn);
+    button -e -c $cmd $mkdirBtn;
+    formLayout -e
+      -af $outDirCtl left 0
+      -ac $outDirCtl right 0 $defaultDirBtn
+      -ac $defaultDirBtn right 0 $testRendersBtn
+      -ac $testRendersBtn right 0 $sceneBtn
+      -ac $sceneBtn right 0 $mkdirBtn
+      -af $mkdirBtn right 0
+      $f1;
+  formLayout -e
+    -ac $f1 top 0 $fileNameCtl
+    -af $f1 left 0
+    -af $f1 right 0
+    $f;
+
+
+/**********************/
+/* Frame range & list */
+/**********************/
+  setParent $f;
+  string $f2 = `formLayout`;
+    string $frameRangeCtl = `floatFieldGrp -l "Frame Range" -nf 3 -v1 1 -v2 100 -v3 1`;
+    string $globalsBtn = `button -l "Globals" -en 1`;
+    string $timelineBtn = `button -l "Timeline" -en 1`;
+    string $tenPercentBtn = `button -l "10%" -en 1`;
+    button -e -c ("globalsCmd "+$frameRangeCtl) $globalsBtn;
+    globalsCmd $frameRangeCtl;
+    button -e -c ("timelineCmd "+$frameRangeCtl) $timelineBtn;
+    button -e -c ("tenPercentCmd "+$frameRangeCtl) $tenPercentBtn;
+//    string $frameListCtl = `textFieldGrp -l "Frame List" -adj 2 -en 0`;
+    formLayout -e
+      -af $frameRangeCtl left 0
+      -ac $globalsBtn left 0 $frameRangeCtl
+      -ac $timelineBtn left 0 $globalsBtn
+      -ac $tenPercentBtn left 0 $timelineBtn
+//      -ac $frameListCtl left 0 $globalsBtn
+//      -af $frameListCtl right 0
+      $f2;
+  formLayout -e
+    -ac $f2 top 0 $f1
+    -af $f2 left 0
+    -af $f2 right 0
+    $f;
+
+/**************/
+/* Resolution */
+/**************/
+  setParent $f;
+  string $resLay = `formLayout`;
+    string $resCtl = `floatFieldGrp -l "Resolution" -pre 3 -nf 4`;
+    string $resSelCtl  = `optionMenuGrp`;
+      menuItem -l "Film 1k";
+      menuItem -l "Film 1.5k";
+      menuItem -l "Film 2k";
+      menuItem -l "Film 3k";
+      menuItem -l "Film 4k";
+      menuItem -l "NTSC";
+      menuItem -l "PAL";
+      menuItem -l "VGA";
+      menuItem -l "Web";
+    optionMenuGrp -e -cc ("resSelCmd " + $resCtl + " " + $resSelCtl) $resSelCtl;
+    if ( `optionVar -ex lucyRender_resolution` )
+	optionMenuGrp -e -sl `optionVar -q "lucyRender_resolution"` $resSelCtl;
+    else
+      {
+	optionVar -iv lucyRender_resolution 7;
+	optionMenuGrp -e -sl 7 $resSelCtl;
+      }
+    resSelCmd $resCtl $resSelCtl;
+    formLayout -e
+      -af $resCtl left 0
+      -ac $resSelCtl left 0 $resCtl
+      $resLay;
+  formLayout -e
+    -ac $resLay top 0 $f2
+    -af $resLay left 0
+    -af $resLay right 0
+    $f;
+
+/***********/
+/* Options */
+/***********/
+  setParent $f;
+  string $colLay = `columnLayout`;
+    string $slicesCtl  = `intSliderGrp -en 0 -l "Slices" -f 1 -s 2 -min 0 -max 20 -v 0`;
+    string $rendererCtl = `radioButtonGrp -nrb 3 -l "Renderer" -la3 "Maya Software" "Maya Hardware" "mental ray"`;
+    string $renderer = `getAttr defaultRenderGlobals.currentRenderer`;
+    if ( $renderer == "mayaSoftware" )
+      radioButtonGrp -e -sl 1 $rendererCtl;
+    else if ( $renderer == "mayaHardware" )
+      radioButtonGrp -e -sl 2 $rendererCtl;
+    else if ( $renderer == "mentalRay" )
+      radioButtonGrp -e -sl 3 $rendererCtl;
+    else
+      {
+	radioButtonGrp -e -sl 3 $rendererCtl;
+	warning("lucyRender : Unknown renderer, "+$renderer+".  Using mentalray");
+      }
+    string $priorityCtl  = `intSliderGrp -l "Priority" -f 1 -min 0 -max 10 -v 5`;
+    string $optsCtl = `checkBoxGrp -ncb 2 -l "Options" -l1 "Log to Out-Dir." -l2 "16 bit"`;
+    /* render layer */
+    string $renderLayerCtl = `optionMenuGrp -l "Render Layer"`;
+    string $renderLayerItems[];
+    string $dest[];
+    int $i = 1;
+    $renderLayerItems[0] = "Selected";
+    float $rlattrs[] = `getAttr renderLayerManager.renderLayerId`;
+    string $plug;
+    for ( $plug in $rlattrs )
+      {
+	$dest = `listConnections renderLayerManager.renderLayerId[$plug]`;
+	$renderLayerItems[`size $renderLayerItems`] = $dest[0];
+	$i++;
+      }
+    buildOptionMenuGrpItems($renderLayerCtl, $renderLayerItems);
+  formLayout -e
+    -ac $colLay top 0 $resLay
+    -af $colLay left 0
+    -af $colLay right 0
+    $f;
+
+/*******************/
+/* Control Buttons */
+/*******************/
+  setParent $f;
+  string $ctlLay = `formLayout`;
+    string $renderBtnCmd = (
+    	"lucyRender_renderBtnCmd "
+	+ $outDirCtl + " "
+	+ $frameRangeCtl + " "
+	+ $resCtl + " "
+	+ $rendererCtl + " "
+	+ $priorityCtl + " "
+	+ $optsCtl + " "
+	+ $renderLayerCtl
+	);
+    string $renderBtn = `button -l "Render" -c $renderBtnCmd`;
+    string $lucyPic = `picture -image "lucyRender.xpm"`;
+    string $hdxPic = `picture -image "hdx_logo.xpm"`;
+    string $closeBtn = `button -l "Close" -c ("deleteUI -window " + $window)`;
+    formLayout -e
+      -af $renderBtn top 0
+      -af $renderBtn left 0
+      -af $renderBtn bottom 0
+      -ap $renderBtn right 0 50
+      -ac $lucyPic left 0 $renderBtn
+      -ac $hdxPic left 0 $lucyPic
+      -af $closeBtn top 0
+      -af $closeBtn right 0
+      -af $closeBtn bottom 0
+      $ctlLay;
+  formLayout -e
+    -af $ctlLay left 0
+    -af $ctlLay right 0
+    -af $ctlLay bottom 0
+    $f;
+
+  showWindow $window;
+  window -e -rtf 1 $window;
+}
+

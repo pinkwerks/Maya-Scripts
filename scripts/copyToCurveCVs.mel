@@ -1,0 +1,21 @@
+//
+// pick the object to copy then the CV's
+//
+
+global proc
+copyToCurveCVs( string $objectToCopy )
+{
+    string $cvs[] = `ls -sl -fl -l`;
+    float $wsp[];
+    
+    for ($cv in $cvs) {
+	$wsp = `xform -q -ws -t $cv`;
+
+	select -cl;
+	select -r $objectToCopy;
+	$newObj = `duplicate -rr`;
+
+	select $newObj;
+	move -ws -a $wsp[0] $wsp[1] $wsp[2];
+    }
+}

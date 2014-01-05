@@ -1,0 +1,7 @@
+global proc float
+bias(float $b, float $x)
+{
+// log(.5) = -0.693147180559945
+	return pow($x, log($b) / -0.693147180559945);
+}
+

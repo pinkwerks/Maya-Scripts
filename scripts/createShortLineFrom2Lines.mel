@@ -1,0 +1,91 @@
+/*
+* create the shortest line between two lines in 3D
+* from the tutorial by Paul Bourke: pbourke@swin.edu.au
+* http://astronomy.swin.edu.au/~pbourke/geometry/lineline3d/
+*
+* implemented in MEL by Dan Wills: dan@rsp.com.au
+* Feb 2003
+*
+* create 4 locators, make sure they are called locator 1..4
+* runing this script then creates 2 more locators and 3 curves to illustrate the vectors.
+*
+*/
+
+
+//do the function 'd' as defined by pb.
+global proc float d_of(float $m[],float $n[],float $o[],float $p[])
+{
+   return ($m[0] - $n[0]) * ($o[0] - $p[0]) + ($m[1] - $n[1]) * ($o[1] - $p[1]) + ($m[2] - $n[2]) * ($o[2] - $p[2]);
+}
+
+
+//linearly interpolate 2 3d points
+global proc float[] inter3D(float $a[], float $b[], float $weight)
+{
+   float $rezul[];
+   $rezul[0] = ( $weight * $b[0] ) + ( (1 - $weight) * $a[0] );
+   $rezul[1] = ( $weight * $b[1] ) + ( (1 - $weight) * $a[1] );
+   $rezul[2] = ( $weight * $b[2] ) + ( (1 - $weight) * $a[2] );
+   return $rezul;
+}
+
+
+//define the locators to use:
+string $p1 = "locator1";
+string $p2 = "locator2";
+string $p3 = "locator3";
+string $p4 = "locator4";
+
+
+//grab their translation info
+float $pp1[];
+float $pp2[];
+float $pp3[];
+float $pp4[];
+
+$pp1[0] = `getAttr ($p1 + ".translateX")`;
+$pp1[1] = `getAttr ($p1 + ".translateY")`;
+$pp1[2] = `getAttr ($p1 + ".translateZ")`;
+$pp2[0] = `getAttr ($p2 + ".translateX")`;
+$pp2[1] = `getAttr ($p2 + ".translateY")`;
+$pp2[2] = `getAttr ($p2 + ".translateZ")`;
+$pp3[0] = `getAttr ($p3 + ".translateX")`;
+$pp3[1] = `getAttr ($p3 + ".translateY")`;
+$pp3[2] = `getAttr ($p3 + ".translateZ")`;
+$pp4[0] = `getAttr ($p4 + ".translateX")`;
+$pp4[1] = `getAttr ($p4 + ".translateY")`;
+$pp4[2] = `getAttr ($p4 + ".translateZ")`;
+
+
+//create the two base curves
+curve -d 1 -ws -p $pp1[0] $pp1[1] $pp1[2]  -p $pp2[0] $pp2[1] $pp2[2];
+curve -d 1 -ws -p $pp3[0] $pp3[1] $pp3[2]  -p $pp4[0] $pp4[1] $pp4[2];
+
+//caluclate the parpametric position on the 2 curves, mua and mub
+float $mua = ( d_of($pp1,$pp3,$pp4,$pp3) * d_of($pp4,$pp3,$pp2,$pp1)  - d_of($pp1,$pp3,$pp2,$pp1) * d_of($pp4,$pp3,$pp4,$pp3) ) / ( d_of($pp2,$pp1,$pp2,$pp1) * d_of($pp4,$pp3,$pp4,$pp3)  - d_of($pp4,$pp3,$pp2,$pp1) * d_of($pp4,$pp3,$pp2,$pp1) );
+
+float $mub = ( d_of($pp1,$pp3,$pp4,$pp3) + $mua * d_of($pp4,$pp3,$pp2,$pp1)  ) / d_of($pp4,$pp3,$pp4,$pp3);
+
+//clip the value between [0..1] constraining the solution to lie on the original curves
+if ($mua < 0) $mua = 0;
+if ($mub < 0) $mub = 0;
+if ($mua > 1) $mua = 1;
+if ($mub > 1) $mub = 1;
+
+//get the actual transforms by linearly interpolating
+float $muap[];
+float $mubp[];
+$muap = inter3D($pp1,$pp2,$mua);
+$mubp = inter3D($pp3,$pp4,$mub);
+
+//create a locator on both points
+$sl =  `spaceLocator`;
+move $muap[0] $muap[1] $muap[2] $sl;
+
+$sl = `spaceLocator`;
+move $mubp[0] $mubp[1] $mubp[2] $sl;
+
+//create a curve between them
+curve -d 1 -ws -p $muap[0] $muap[1] $muap[2]  -p $mubp[0] $mubp[1] $mubp[2];
+
+

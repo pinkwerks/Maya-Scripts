@@ -1,0 +1,11 @@
+// v20080505 pink
+global proc
+rmsAddSubdivisionSchemeForMesh()
+{
+	string $objs[] = `ls -l -sl -typ "mesh" -shapes`;
+	string $obj;
+	for ($obj in $objs) {
+		rmanAddAttr $obj rman__torattr___subdivScheme 0;
+	}
+}
+

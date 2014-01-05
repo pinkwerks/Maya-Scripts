@@ -1,0 +1,54 @@
+//  Creates one polygon, based on control vertexes of selected NURBS curve
+//
+//  using
+//     	1. select NURBS curve        
+//	2. enter command
+//		curveToPoly
+//
+//  Zabelin V.V.  22.11.00
+// e-mail: zabelinv@mtu-net.ru 
+
+global proc curveToPoly(){
+
+string $selList[];
+$selList =`ls -sl`;
+
+string $curveSel[];
+$curveSel =`filterExpand -sm 9 $selList`;
+int 	$n=size($curveSel);
+int	$ind,$cvNum,$j;
+float	$coord[];
+string 	$cmd;
+	if ($n>0){
+		string	$tmpCurve;
+		string 	$cmd;
+		string	$vertStr;
+
+		for ($ind=0;$ind<$n;$ind++){
+			$tmpCurve=$curveSel[$ind];
+		string	$tmpPoly[];
+			$cvNum=`getAttr -size ($tmpCurve +".controlPoints")`;
+			$cmd="polyCreateFacet -ch 0 ";
+			$vertStr="";
+			for ($j=0;$j<$cvNum;$j++){
+				$coord=`xform -q -ws -t ($tmpCurve+".cv["+$j+"]")`;
+				$vertStr+=" -p ";
+				$vertStr+=$coord[0];
+				$vertStr+=" ";
+				$vertStr+=$coord[1];
+				$vertStr+=" ";
+				$vertStr+=$coord[2];
+			};
+			$cmd+=$vertStr;
+			$cmd+=" ";
+			$tmpPoly=eval($cmd);
+			
+			// merge first and last vertex if distance between them is lesser then 0.001
+			$cvNum-=1;
+			string $vertMergcmd="polyMergeVertex -d 0.001 "+$tmpPoly[0] +".vtx[0] "+$tmpPoly[0] +".vtx["+$cvNum+"] ";
+			print $vertMergcmd;
+			eval($vertMergcmd);
+			select -cl;	
+		};
+	};
+};

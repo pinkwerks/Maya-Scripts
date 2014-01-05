@@ -1,0 +1,24 @@
+global proc
+resetTransform()
+{
+  string $objs[] = `ls -sl -l`;
+  string $obj;
+  for ($obj in $objs)
+  {
+    if ( `nodeType $obj` == "transform" )
+      {
+	setAttr ($obj+".tx") 0;
+	setAttr ($obj+".ty") 0;
+	setAttr ($obj+".tz") 0;
+	setAttr ($obj+".rx") 0;
+	setAttr ($obj+".ry") 0;
+	setAttr ($obj+".rz") 0;
+	setAttr ($obj+".sx") 1;
+	setAttr ($obj+".sy") 1;
+	setAttr ($obj+".sz") 1;
+	setAttr ($obj+".shxy") 0;
+	setAttr ($obj+".shxz") 0;
+	setAttr ($obj+".shyz") 0;
+      }
+  }
+}

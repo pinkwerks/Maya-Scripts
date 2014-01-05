@@ -1,0 +1,208 @@
+//
+// v20040303 pinkelton wicham
+//
+
+global proc
+mtorSetValuePrep()
+{
+    /* grab the values from the UI and call the engine */
+    string $context = `optionMenuGrp -q -v context`;
+    string $action = `optionMenuGrp -q -sl actionOption`;
+    string $glob = `textFieldGrp -q -tx glob`; 
+    string $parameter = `textFieldGrp -q -tx parameter`;
+    string $value = `textFieldGrp -q -tx value`;
+    string $randMode = `optionMenuGrp -q -sl randMode`;
+    float $min = `floatFieldGrp -q -v1 randRange`;
+    float $max = `floatFieldGrp -q -v2 randRange`;
+
+    if ( $context == "" ) {
+    	error("mtorSetValue : Strange, no context!");
+    }
+    if ( $glob == "" ) {
+    	error("mtorSetValue : Please specify a glob!");
+    }
+    if ( $parameter == "" ) {
+    	$parameter = "\"\"";
+    }
+    print(
+	"mtorSetValueEngine "
+	+"\""+$context+"\" "
+	+$action+" "
+	+"\""+$glob+"\" "
+	+"\""+$parameter+"\" "
+	+"\""+$value+"\" "
+	+$randMode+" "
+	+$min+" "
+	+$max+" "
+	+"\n"
+    );
+    mtorSetValueEngine($context,$action,$glob,$parameter,$value,
+      $randMode,$min,$max);
+}
+
+global proc
+mtorSetValue_actionChange()
+{
+    string $action = `optionMenuGrp -q -sl actionOption`;
+
+    if ($action == 1 ) {
+	// Edit
+	textFieldGrp -edit -enable true parameter;
+	textFieldGrp -edit -enable true value;
+	optionMenuGrp -e -en 0 randMode;
+	floatFieldGrp -e -en 0 randRange;
+    } else if ($action == 2 ) {
+	// Randomize
+	textFieldGrp -edit -enable true parameter;
+	textFieldGrp -edit -enable 0 value;
+	optionMenuGrp -e -en 1 randMode;
+	floatFieldGrp -e -en 1 randRange;
+    } else if ($action == 3 ) {
+	// Report
+	textFieldGrp -edit -enable true parameter;
+	textFieldGrp -edit -enable 0 value;
+	optionMenuGrp -e -en 0 randMode;
+	floatFieldGrp -e -en 0 randRange;
+    } else if ($action == 4 ) {
+	// Search
+	textFieldGrp -edit -enable true parameter;
+	textFieldGrp -edit -enable true value;
+	optionMenuGrp -e -en 0 randMode;
+	floatFieldGrp -e -en 0 randRange;
+    }
+}
+
+global proc
+mtorSetValue()
+{
+    string $procName = "mtorSetValue";
+    if ( `window -exists $procName` ) {
+        showWindow $procName;
+        return;
+    }
+    window -rtf 1 -t $procName $procName;
+    columnLayout ;
+    optionMenuGrp -label "Match Context" context;
+	menuItem -label "Master";
+	menuItem -label "Name";
+    textFieldGrp -label "Glob" -text "*" glob;
+    optionMenuGrp -label "Action" -cc mtorSetValue_actionChange actionOption;
+	menuItem -label "Edit";
+	menuItem -label "Randomize";
+	menuItem -label "Report";
+	menuItem -label "Search";
+    optionMenuGrp -e -sl 1 actionOption;
+    textFieldGrp -label "Parameter" parameter;
+    textFieldGrp -en 1 -label "Value" value;
+    optionMenuGrp -en 0 -label "Random Context" randMode;
+	menuItem -label "Absolute";
+	menuItem -label "Relative";
+    floatFieldGrp -en 0 -nf 2 -label "Random Range" -v1 0 -v2 1 randRange;
+    rowLayout -numberOfColumns 3
+    	-columnAlign  1 "center"
+    	-columnAlign  2 "center"
+    	-columnAlign  3 "center"
+    	-columnAttach 1 "both" 	0
+    	-columnAttach 2 "both"  0
+    	-columnAttach 3 "both"  0
+    ;
+    button -label "Apply" -c mtorSetValuePrep;
+    button -label "Hide" -c ("window -e -vis 0 " + $procName);
+    button -label "Close" -c ("deleteUI -wnd " + $procName);
+    showWindow $procName;
+}
+
+global proc
+mtorSetValueEngine(
+    string $context,
+    string $action,
+    string $glob,
+    string $parmname,
+    string $value,
+    float $randMode,
+    float $min,
+    float $max
+)
+{
+    int $i = 0;
+    string $matchMaster;
+    string $propsL;
+    string $handles[];
+    string $props[];
+    if ( $context == "Master" ) {
+	$matchMaster = `slimcmd slim GetAppearances -master $glob`;
+    } else if ( $context == "Name" ) {
+	$matchMaster = `slimcmd slim GetAppearances -name $glob`;
+    } else {
+    	error("mtorSetValueEngine : bad context! : " + $context + "\n");
+    }
+    tokenize $matchMaster " " $handles;
+    print("\n");
+    if ( $action == 1 )
+	print("// mtorSetValue - Editing ....\n");
+    if ( $action == 2 )
+	print("// mtorSetValue - Randomizing....\n");
+    if ( $action == 3 )
+	print("// mtorSetValue - Reporting....\n");
+    if ( $action == 4 )
+	print("// mtorSetValue - Searching....\n");
+    print("//\n");
+    for ( $handle in $handles ) {
+	$label = `slimcmd $handle GetLabel`;
+	$propsL = `slimcmd $handle GetProperties -name $parmname`;
+	tokenize $propsL " " $props;
+	for ($prop in $props) {
+	    string $propName = `slimcmd $prop GetName`;
+	    if ( $prop == "") {
+		continue;
+	    }
+	    string $propLabel = `slimcmd $prop GetLabel`;
+	    string $propVal = `slimcmd $prop GetValue`;
+	    if ( $action == 4 ) {
+	    /* search */
+		$match = `gmatch $propVal $value`;
+		if ( $match ) {
+		    print("// " + $label + " : " + $propName + " : " + $propVal + "\n");
+		    $i++;
+		}
+	    } else if ( $action == 3 ) {
+	    /* report */
+		if ( $propName == $parmname ) {
+		    print("// "+$label+" : "+$propLabel+" ("+$propName+") = "+$propVal+"\n");
+		    $i++;
+		}
+	    } else if ( $action == 1 ) {
+	    /* edit */
+		if ( $propName == $parmname )
+		{
+		    slimcmd $prop SetValue ("\"" + $value + "\"");
+		    print("// " + $label + " : " + $propLabel + " : "
+			+ $propName + " = " + $value + "\n");
+		    $i++;
+		}
+	    } else if ( $action == 2 ) {
+	    /* random */
+		if ( $propName == $parmname ) {
+		    $value = $propVal;
+		    if ( $randMode == 1 ) {
+		      $value = rand($min, $max);
+		    } else {
+		      $value += rand($min, $max);
+		    }
+		    slimcmd $prop SetValue ("\"" + $value + "\"");
+
+		    print("// " + $label + " : " + $propLabel + " : "
+			+ $propName + " = " + $value + "\n");
+		    $i++;
+		}
+	    }
+
+	} // end of parameter loop
+    } // end of appearance loop
+
+    if ( $i == 0 ) {
+    	warning("No appearances found matching glob!");
+    }
+//    print("//\n");
+//    print("// mtorSetValue - Done.\n");
+}

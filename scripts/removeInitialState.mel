@@ -1,0 +1,84 @@
+// :set ts=4
+//
+// removeInitialState.mel
+// Patrick Palmer, ppalmer@aw.sgi.com
+// February 1, 1998
+//
+
+
+// removeInitialState() takes all of the selected
+// particle objects are removes the initial state.  This
+// is done by setAttr'in the initial state attributes to
+// zero.
+
+// To add an entry to the Maya Initial State menu at startup
+// place the following MEL segment into $HOME/maya/scripts/userSetup.mel
+// (removing the comments).
+//
+//// adding menus to dynamics working mode
+/*
+global proc addDynamicsMenus()
+{
+    global string $gMainDynSettingsMenu;
+
+    if (! `menu -q -ni $gMainDynSettingsMenu` )
+        DynSettingsMenu $gMainDynSettingsMenu;
+
+    // add "remove initial state for particles
+    menuItem -l "Remove For Particle" -parent "initialStateMenu"
+        -annotation "Remove Initial State on current particle object"
+        -c "removeInitialState" removeStateAll;
+}
+scriptJob -runOnce true -cf "busy" "addDynamicsMenus";
+*/
+
+global proc removeInitialState() {
+
+        string $selList[] = `ls -sl`;
+        string $sel;
+        int $count = 0;
+        string $shape, $shapes[];
+        string $attr, $attrs[];
+
+        for ($sel in $selList) {
+
+                clear $shapes;
+                if (`objectType $sel` == "particle")
+                        $shapes[0] = $sel;
+                else if (`objectType $sel` == "transform")
+                        $shapes = `listRelatives -shapes $sel`;
+
+                for ($shape in $shapes) {
+
+                        // make sure this is a particle shape
+                        if (`objectType $shape` != "particle")
+                                continue;
+
+                        // clear out all of the double arrays
+                        $attrs = `particle -q -ppd $shape`;
+                        for ($attr in $attrs) {
+                                if (`attributeQuery -exists -n $shape ($attr + "0")`)
+                                        setAttr ($shape+"."+$attr+"0") -type "doubleArray" 0;
+                        }
+
+                        // clear out all of the vector arrays
+                        $attrs = `particle -q -ppv $shape`;
+                        for ($attr in $attrs) {
+                                if (`attributeQuery -exists -n $shape ($attr + "0")`)
+                                        setAttr ($shape+"."+$attr+"0") -type "vectorArray" 0;
+                        }
+
+                        // other attributes that need to be cleared
+                        setAttr ($shape+".nid0") 0;
+                        setAttr ($shape+".particleId0") -type "doubleArray" 0;
+                        setAttr ($shape+".age0") -type "doubleArray" 0;
+
+                        // one more particle shape
+                        $count++;
+                }
+        }
+
+        // if there wasn't any particle shapes selected, send error
+        if ($count == 0)
+                error "Need to select a particle object";
+}

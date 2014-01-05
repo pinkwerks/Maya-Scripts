@@ -1,0 +1,89 @@
+global proc int
+polyImageTile
+(
+	int $gridSizeX,
+	int $gridSizeZ,
+	string $file
+) {
+	waitCursor -state 1;
+	string $originalSelection[] = `ls -sl`;
+
+	string $gridName = "fancyPants";
+	string $thisName;
+	string $thisNameF;
+
+	string $grids[];
+	string $grids2[];
+
+	int $xi;
+	int $zi;
+	int $ni = 0;
+
+	// make a shader
+	shadingNode -asShader lambert -n ($gridName + "_mat");
+	sets -renderable true -noSurfaceShader true -empty -name ($gridName + "SG");
+	//connectAttr -f ($gridName + "_mat.outColor") ($gridName + "SG.surfaceShader");
+	
+	// make the geometry
+	for($xi = 0; $xi < $gridSizeX; $xi++) {
+		for($zi = 0; $zi < $gridSizeZ; $zi++, $ni++) {
+			$thisName = ($gridName + "_" + $xi + "_" + $zi);
+			polyPlane -w 1 -h 1 -sx 1 -sy 1 -ax 0 1 0 -tx 1 -ch 1 -n $thisName;
+			move -rpr $xi 0 $zi;
+			$grids[$ni] = ("|" + $thisName);  // this prevents namespace matching from previous runs
+			$grids2[$ni] = $thisName;  // and this is a lazy hack :)
+			
+			$thisName = ($grids2[$ni] + "_p2d");
+			$thisNameF = ($grids2[$ni] + "_file");
+
+			$thisName = `shadingNode -asUtility place2dTexture -n $thisName`;
+			$thisNameF = `shadingNode -asTexture file -n $thisNameF`;
+
+			setAttr -type "string" ($thisNameF + ".fileTextureName") $file;
+
+			connectAttr -f ($thisName + ".coverage") ($thisNameF + ".coverage");
+			connectAttr -f ($thisName + ".translateFrame") ($thisNameF + ".translateFrame");
+			connectAttr -f ($thisName + ".rotateFrame") ($thisNameF + ".rotateFrame");
+			//connectAttr -f ($thisName + ".mirror") ($thisNameF + ".mirror");
+			connectAttr -f ($thisName + ".stagger") ($thisNameF + ".stagger");
+			connectAttr -f ($thisName + ".wrapU") ($thisNameF + ".wrapU");
+			connectAttr -f ($thisName + ".wrapV") ($thisNameF + ".wrapV");
+			connectAttr -f ($thisName + ".repeatUV") ($thisNameF + ".repeatUV");
+			connectAttr -f ($thisName + ".offset") ($thisNameF + ".offset");
+			connectAttr -f ($thisName + ".rotateUV") ($thisNameF + ".rotateUV");
+			connectAttr ($thisName + ".outUV") ($thisNameF + ".uv");
+			connectAttr ($thisName + ".outUvFilterSize") ($thisNameF + ".uvFilterSize");
+
+			setAttr ($thisName + ".coverageU") $gridSizeX;
+			setAttr ($thisName + ".coverageV") $gridSizeZ;
+			setAttr ($thisName + ".translateFrameU") ($xi * -1);
+			setAttr ($thisName + ".translateFrameV") ($zi + 1);
+
+			select $grids2[$ni];
+			assignShadingGroup ($gridName + "SG");		
+		}
+	}
+	select $grids;
+	group -n ($gridName + "_theGrids");
+	move -rpr 0 0 0;
+
+	// make & link a shading switch
+	$thisName = `shadingNode -asUtility tripleShadingSwitch`;
+	connectAttr -f ($thisName + ".output") ($gridName + "_mat.color");
+	
+	// add the surfaces to the switch node
+	// AEswitchAddButtonCB $thisName input inShape inTriple;
+	
+	// link the textures to the switcher
+	for($xi = 0, $ni = 0; $xi < $gridSizeX; $xi++) {
+		for($zi = 0; $zi < $gridSizeZ; $zi++, $ni++) {
+			connectAttr -f ($gridName + "_" + $xi + "_" + $zi + "Shape.instObjGroups[0]") ($thisName + ".input[" + $ni + "].inShape");
+			connectAttr -f ($gridName + "_" + $xi + "_" + $zi + "_file.outColor") ($thisName + ".input[" + $ni + "].inTriple");
+		}
+	}
+
+	// clean up
+	select $originalSelection;
+	waitCursor -state 0;
+	return(0);
+}

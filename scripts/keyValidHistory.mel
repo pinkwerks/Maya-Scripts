@@ -1,0 +1,89 @@
+proc string
+createUI()
+{
+    $x = `promptDialog -message "ID string :" -button "OK" -button "Cancel"
+        -defaultButton "OK" -cancelButton "Cancel" -dismissString "Cancel"`;
+
+    if ($x == "Cancel") return "_CANCEL";
+
+    return `promptDialog -q -tx`;
+}
+
+global proc int
+keyValidHistory(string $idprefix)
+{
+	$debug = 0;
+
+	waitCursor -state on;
+
+	if ($idprefix == "_setup") {
+		waitCursor -state off;
+
+		$newName = createUI();
+		if ($newName == "_CANCEL") {
+			return(0);
+		}
+
+		waitCursor -state on;
+
+		string $node = `group -empty`;
+
+		rename $node ("mel_" + $newName);
+		$node = ("mel_" + $newName);
+
+		addAttr -ln eval -at bool $node;
+		setAttr -e -keyable true ($node + ".eval");
+		setAttr ($node + ".eval") 1;
+
+		$exp =  ($node + ".eval = 1;\n");
+		$exp +=  ("if (" + $node + ".eval == 1) {\n");
+		$exp += ("\tkeyValidHistory \"" + $newName + "\";\n");
+		$exp += "}\n";
+		if ($debug) {
+		    print ($exp);
+		    print ("Node : " + $node + "\n");
+		}
+		expression -o $node -s $exp -n ($node + "Script");
+
+		waitCursor -state off;
+		return(0);
+	}
+
+	$things = `ls -sl`;
+	string $islist[];
+	for
+
+	select ($idprefix + "*");
+	select -d "*Shape*";
+	for ($thing in $things) {
+		$history = `listHistory $thing`;
+		$cfs = $history[1];
+		$crvGrp = $history[4];
+		$is = $history[5];	
+
+		catch ($spans = `getAttr ($thing + ".spans")` );
+		if ($debug) {
+			print("Object:  " + $thing + "\n");
+			print("\tCFS:   " + $cfs + "\n");
+			print("\tIS:    " + $is + "\n\n");
+			print("\tICrvG: " + $crvGrp + "\n\n");
+			print("\tSpans: " + $spans + "\n\n");
+		}
+		
+		$shit = `listRelatives $thing`;
+		if ($spans == 0) {
+			setAttr ($cfs + ".nodeState") 2;
+			//setAttr ($is + ".nodeState") 2;
+			if ($debug) {
+			    print ("Turning off " + $thing + "\n");
+			}
+		} else {
+			setAttr ($cfs + ".nodeState") 0;
+			setAttr ($is + ".nodeState") 0;
+		}
+	}
+
+	select -cl;
+	waitCursor -state off;
+	return(0);
+}

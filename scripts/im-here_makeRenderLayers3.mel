@@ -1,0 +1,484 @@
+// select a render layer
+//	editRenderLayerGlobals -crl "BigFace"
+
+proc createRenderPasses()
+{
+	string $pass;
+	$name = "MotionVector2D";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass "/usr/autodesk/maya2009-x64/presets/attrPresets/renderPass/2DMotionVector.mel" 1;
+		rename $pass $name;
+	}
+	$name = "Depth";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass "/usr/autodesk/maya2009-x64/presets/attrPresets/renderPass/cameraDepth.mel" 1;
+		rename $pass $name;
+	}
+	$name = "Diffuse";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass "/usr/autodesk/maya2009-x64/presets/attrPresets/renderPass/diffuse.mel" 1;
+		rename $pass $name;
+	}
+	$name = "Indirect";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass "/usr/autodesk/maya2009-x64/presets/attrPresets/renderPass/indirect.mel" 1;
+		rename $pass $name;
+	}
+	$name = "Refraction";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass "/usr/autodesk/maya2009-x64/presets/attrPresets/renderPass/refraction.mel" 1;
+		rename $pass $name;
+	}
+	$name = "Reflection";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass "/usr/autodesk/maya2009-x64/presets/attrPresets/renderPass/reflection.mel" 1;
+		rename $pass $name;
+	}
+	$name = "AO";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass "/usr/autodesk/maya2009-x64/presets/attrPresets/renderPass/ambientOcclusion.mel" 1;
+		rename $pass $name;
+	}
+	$name = "Shadow";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass "/usr/autodesk/maya2009-x64/presets/attrPresets/renderPass/rawShadow.mel" 1;
+		rename $pass $name;
+	}
+
+	$name = "Specular";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass "/usr/autodesk/maya2009-x64/presets/attrPresets/renderPass/specular.mel" 1;
+		rename $pass $name;
+	}
+
+	$name = "IncidenceCN";
+	if (!`objExists $name`) {
+		$pass = `createNode renderPass`;
+		applyAttrPreset $pass "/usr/autodesk/maya2009-x64/presets/attrPresets/renderPass/incidenceCamNorm.mel" 1;
+		rename $pass $name;
+	}
+
+}
+
+proc FaceMask()
+{
+	createRenderLayer -mc -name "FaceMask" -noRecurse "*:SHELDON_RIG:face_mask_new";
+	editRenderLayerAdjustment "miDefaultOptions.finalGather";
+	setAttr "miDefaultOptions.finalGather" 0;
+	sets -e -forceElement "*:SHELDON_RIG:BlackHole_SG" "*:SHELDON_RIG:face_mask";
+	sets -e -forceElement "*:SHELDON_RIG:red_SG" "*:SHELDON_RIG:eyeSocketR";
+	sets -e -forceElement "*:SHELDON_RIG:green_SG" "*:SHELDON_RIG:eyeSocketL";
+	sets -e -forceElement "*:SHELDON_RIG:blue_SG" "*:SHELDON_RIG:mouthSocket";
+//	catchQuiet(`connectAttr -nextAvailable FaceMask.renderPass MotionVector2D.owner`);
+}
+
+proc BigFace()
+{
+	string $mouthClose[];
+	tokenize "*:SHELDON_RIG:mouthClose" $mouthClose;
+
+	string $clusters[];
+	tokenize "*:SHELDON_RIG:eye_r_adjust_transform *:SHELDON_RIG:eye_r_adjust_transform1 *:SHELDON_RIG:eye_r_adjust_transform2 *:SHELDON_RIG:eye_r_adjust_transform3 *:SHELDON_RIG:eye_l_adjust_transform *:SHELDON_RIG:eye_l_adjust_transform1 *:SHELDON_RIG:eye_l_adjust_transform2 *:SHELDON_RIG:eye_l_adjust_transform3" $clusters;
+
+	string $clustersOutside[];
+	tokenize "*:SHELDON_RIG:outsideSocket_transform7 *:SHELDON_RIG:outsideSocket_transform6 *:SHELDON_RIG:outsideSocket_transform5 *:SHELDON_RIG:outsideSocket_transform4 *:SHELDON_RIG:outsideSocket_transform3 *:SHELDON_RIG:outsideSocket_transform2 *:SHELDON_RIG:outsideSocket_transform1 *:SHELDON_RIG:outsideSocket_transform" $clustersOutside;
+
+	createRenderLayer -mc -name "BigFace" -noRecurse "*:SHELDON_RIG:big_face" "*:SHELDON_RIG:bigFaceAdjust" $mouthClose;
+
+	editRenderLayerAdjustment "miDefaultOptions.finalGather";
+	setAttr "miDefaultOptions.finalGather" 0;
+	sets -e -forceElement "*:SHELDON_RIG:bigFace_SG" "*:SHELDON_RIG:face_transform";
+//	sets -e -forceElement "*:SHELDON_RIG:BlackHole_SG" "*:SHELDON_RIG:big_face|*:SHELDON_RIG:face|*:SHELDON_RIG:eyeSocket_transform";
+//	sets -e -forceElement "*:SHELDON_RIG:BlackHole_SG" "*:SHELDON_RIG:big_face|*:SHELDON_RIG:face|*:SHELDON_RIG:eyeSocket_transform1";
+//	sets -e -forceElement "*:SHELDON_RIG:BlackHole_SG" "*:SHELDON_RIG:big_face|*:SHELDON_RIG:faceRef|*:SHELDON_RIG:mouthSocket_transform";
+	sets -e -forceElement "*:SHELDON_RIG:BlackHole_SG" "*:SHELDON_RIG:head_big";
+}
+
+proc EyeMattes()
+{
+	string $iris[];
+	tokenize "*:SHELDON_RIG:iris_l *:SHELDON_RIG:iris_r" $iris;
+
+	string $barrel[];
+	tokenize "*:SHELDON_RIG:barrel_r *:SHELDON_RIG:barrel_l" $barrel;
+
+	string $scelra[];
+	tokenize "*:SHELDON_RIG:sclera_r *:SHELDON_RIG:sclera_l" $scelra;
+
+	createRenderLayer -mc -name "EyeMattes" -noRecurse $iris $barrel $scelra;
+
+	editRenderLayerAdjustment "miDefaultOptions.finalGather";
+	setAttr "miDefaultOptions.finalGather" 0;
+
+	sets -e -forceElement "*:SHELDON_RIG:red_SG" $barrel;
+	sets -e -forceElement "*:SHELDON_RIG:green_SG" $iris;
+	sets -e -forceElement "*:SHELDON_RIG:blue_SG" $scelra;
+
+//	catchQuiet(`connectAttr -nextAvailable EyeMattes.renderPass MotionVector2D.owner`);
+}
+
+proc AOcc()
+{
+	string $lids[];
+	tokenize "*:SHELDON_RIG:eyelid_r_b_Outer *:SHELDON_RIG:eyelid_r_b_Middle *:SHELDON_RIG:eyelid_r_b_Inner *:SHELDON_RIG:eyelid_l_b_Outer *:SHELDON_RIG:eyelid_l_b_Middle *:SHELDON_RIG:eyelid_l_b_Inner *:SHELDON_RIG:eyelid_l_t_Outer *:SHELDON_RIG:eyelid_l_t_Middle *:SHELDON_RIG:eyelid_l_t_Inner *:SHELDON_RIG:eyelid_r_t_Outer *:SHELDON_RIG:eyelid_r_t_Middle *:SHELDON_RIG:eyelid_r_t_Inner" $lids;
+
+	string $lips[];
+	tokenize "*:SHELDON_RIG:geo_Lip_L *:SHELDON_RIG:geo_Lip_R *:SHELDON_RIG:geo_Lip_Top_L *:SHELDON_RIG:geo_Lip_Top_L1 *:SHELDON_RIG:geo_Lip_Top_R *:SHELDON_RIG:geo_Lip_Top_R1 *:SHELDON_RIG:geo_Lip_Top_Mid_Mid *:SHELDON_RIG:geo_Lip_Bottom_Mid_Mid *:SHELDON_RIG:geo_Lip_Bot_L *:SHELDON_RIG:geo_Lip_Bot_R" $lips;
+
+	string $face[];
+	tokenize "*:SHELDON_RIG:faceSocket_transform *:SHELDON_RIG:faceSocket_transform1 *:SHELDON_RIG:faceSocket_face" $face;
+
+	createRenderLayer -mc -name "AOcc" -noRecurse $lids $lips $face;
+	editRenderLayerAdjustment "miDefaultOptions.finalGather";
+	setAttr "miDefaultOptions.finalGather" 0;
+
+	sets -e -forceElement "*:SHELDON_RIG:AO_SG" $lids $lips $face;
+	for ($f in $face) {
+		setAttr ($f+".primaryVisibility") 0;
+	}
+
+//	connectAttr -nextAvailable AOcc.renderPass MotionVector2D.owner;
+}
+
+proc EyelidMouthFlat()
+{
+	string $lids[];
+	tokenize "*:SHELDON_RIG:eyelid_r_b_Outer *:SHELDON_RIG:eyelid_r_b_Middle *:SHELDON_RIG:eyelid_r_b_Inner *:SHELDON_RIG:eyelid_l_b_Outer *:SHELDON_RIG:eyelid_l_b_Middle *:SHELDON_RIG:eyelid_l_b_Inner *:SHELDON_RIG:eyelid_l_t_Outer *:SHELDON_RIG:eyelid_l_t_Middle *:SHELDON_RIG:eyelid_l_t_Inner *:SHELDON_RIG:eyelid_r_t_Outer *:SHELDON_RIG:eyelid_r_t_Middle *:SHELDON_RIG:eyelid_r_t_Inner" $lids;
+
+	string $lips[];
+	tokenize "*:SHELDON_RIG:geo_Lip_L *:SHELDON_RIG:geo_Lip_R *:SHELDON_RIG:geo_Lip_Top_L *:SHELDON_RIG:geo_Lip_Top_L1 *:SHELDON_RIG:geo_Lip_Top_R *:SHELDON_RIG:geo_Lip_Top_R1 *:SHELDON_RIG:geo_Lip_Top_Mid_Mid *:SHELDON_RIG:geo_Lip_Bottom_Mid_Mid *:SHELDON_RIG:geo_Lip_Bot_L *:SHELDON_RIG:geo_Lip_Bot_R" $lips;
+
+
+	createRenderLayer -mc -name "EyelidMouthFlat" -noRecurse $lids $lips;
+	editRenderLayerAdjustment "miDefaultOptions.finalGather";
+	setAttr "miDefaultOptions.finalGather" 0;
+
+	sets -e -forceElement "*:SHELDON_RIG:eyelidsAndMouthFlat_SG" $lids $lips;
+
+	catchQuiet(`connectAttr -nextAvailable EyelidMouthFlat.renderPass AO.owner`);
+	catchQuiet(`connectAttr -nextAvailable EyelidMouthFlat.renderPass Depth.owner`);
+	catchQuiet(`connectAttr -nextAvailable EyelidMouthFlat.renderPass Diffuse.owner`);
+	catchQuiet(`connectAttr -nextAvailable EyelidMouthFlat.renderPass Indirect.owner`);
+//	connectAttr -nextAvailable EyelidMouthFlat.renderPass MotionVector2D.owner;
+	catchQuiet(`connectAttr -nextAvailable EyelidMouthFlat.renderPass Reflection.owner`);
+}
+
+proc EyelidMouthBeauty()
+{
+	string $lights[];
+	tokenize "*:|SHELDON_RIG:fill *:|SHELDON_RIG:key" $lights;
+
+	string $lidsI[];
+	tokenize "*:SHELDON_RIG:eyelid_r_b_Outer *:SHELDON_RIG:eyelid_r_b_Middle *:SHELDON_RIG:eyelid_r_b_Inner *:SHELDON_RIG:eyelid_l_b_Outer *:SHELDON_RIG:eyelid_l_b_Middle *:SHELDON_RIG:eyelid_l_b_Inner *:SHELDON_RIG:eyelid_l_t_Outer *:SHELDON_RIG:eyelid_l_t_Middle *:SHELDON_RIG:eyelid_l_t_Inner *:SHELDON_RIG:eyelid_r_t_Outer *:SHELDON_RIG:eyelid_r_t_Middle *:SHELDON_RIG:eyelid_r_t_Inner" $lidsI;
+
+	string $mouth = "*:SHELDON_RIG:Lips_Geo";
+
+	createRenderLayer -mc -name "EyelidMouthBeauty" -noRecurse $lights $lidsI $mouth;
+	editRenderLayerAdjustment "miDefaultOptions.finalGather";
+	setAttr "miDefaultOptions.finalGather" 0;
+
+	catchQuiet(`connectAttr -nextAvailable EyelidMouthBeauty.renderPass AO.owner`);
+	catchQuiet(`connectAttr -nextAvailable EyelidMouthBeauty.renderPass Depth.owner`);
+	catchQuiet(`connectAttr -nextAvailable EyelidMouthBeauty.renderPass Diffuse.owner`);
+	catchQuiet(`connectAttr -nextAvailable EyelidMouthBeauty.renderPass Indirect.owner`);
+//	connectAttr -nextAvailable EyelidMouthBeauty.renderPass MotionVector2D.owner;
+	catchQuiet(`connectAttr -nextAvailable EyelidMouthBeauty.renderPass Reflection.owner`);
+}
+
+proc EyeShadow()
+{
+	string $membranes = "*:SHELDON_RIG:membranes";
+	string $lights[];
+	tokenize "*:|SHELDON_RIG:fill *:|SHELDON_RIG:key" $lights;
+
+	string $eyes_v003[];
+	tokenize "*:SHELDON_RIG:sclera_l_v03 *:SHELDON_RIG:eye_l_v03|*:SHELDON_RIG:barrelA_transform *:SHELDON_RIG:eye_l_v03|*:SHELDON_RIG:barrelB_transform *:SHELDON_RIG:eye_l_v03|*:SHELDON_RIG:barrelBcap_transform *:SHELDON_RIG:eye_l_v03|*:SHELDON_RIG:barrelC_transform *:SHELDON_RIG:eye_l_v03|*:SHELDON_RIG:irisB_transform1 *:SHELDON_RIG:sclera_r_v03 *:SHELDON_RIG:eye_r_v03|*:SHELDON_RIG:barrelA_transform *:SHELDON_RIG:eye_r_v03|*:SHELDON_RIG:barrelB_transform *:SHELDON_RIG:eye_r_v03|*:SHELDON_RIG:barrelBcap_transform *:SHELDON_RIG:eye_r_v03|*:SHELDON_RIG:barrelC_transform *:SHELDON_RIG:eye_r_v03|*:SHELDON_RIG:irisB_transform1" $eyes_v003;
+
+	string $newEyes[];
+	tokenize "*:SHELDON_RIG:eye_r_v02 *:SHELDON_RIG:eye_l_v02" $newEyes;
+
+	string $objs[];
+	tokenize "*:SHELDON_RIG:model|*:SHELDON_RIG:eye_r|*:SHELDON_RIG:cornea_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_l|*:SHELDON_RIG:cornea_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_r|*:SHELDON_RIG:iris_r *:SHELDON_RIG:iris_l *:SHELDON_RIG:model|*:SHELDON_RIG:eye_l|*:SHELDON_RIG:barrelA_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_l|*:SHELDON_RIG:barrelB_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_l|*:SHELDON_RIG:barrelC_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_r|*:SHELDON_RIG:barrelA_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_r|*:SHELDON_RIG:barrelB_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_r|*:SHELDON_RIG:barrelC_transform *:SHELDON_RIG:model|*:SHELDON_RIG:face|*:SHELDON_RIG:faceBeauty"
+		$objs;
+
+//	string $sockets[];
+//	tokenize "*:SHELDON_RIG:socket_transform *:SHELDON_RIG:socket_transform1" $sockets;
+
+	string $lidsI[];
+	tokenize "*:SHELDON_RIG:eyelid_r_b_Outer *:SHELDON_RIG:eyelid_r_b_Middle *:SHELDON_RIG:eyelid_r_b_Inner *:SHELDON_RIG:eyelid_l_b_Outer *:SHELDON_RIG:eyelid_l_b_Middle *:SHELDON_RIG:eyelid_l_b_Inner *:SHELDON_RIG:eyelid_l_t_Outer *:SHELDON_RIG:eyelid_l_t_Middle *:SHELDON_RIG:eyelid_l_t_Inner *:SHELDON_RIG:eyelid_r_t_Outer *:SHELDON_RIG:eyelid_r_t_Middle *:SHELDON_RIG:eyelid_r_t_Inner" $lidsI;
+
+//	createRenderLayer -mc -name "EyeShadow" -noRecurse $sockets $newEyes $objs $lights $eyes_v003 $membranes $lidsI;
+	createRenderLayer -mc -name "EyeShadow" -noRecurse $newEyes $objs $lights $eyes_v003 $membranes $lidsI;
+}
+
+proc EyelidMouthShadow()
+{
+	string $lights[];
+	tokenize "*:|SHELDON_RIG:fill *:|SHELDON_RIG:key" $lights;
+
+	string $lids[];
+	tokenize "*:SHELDON_RIG:eyelid_r_b_Outer *:SHELDON_RIG:eyelid_r_b_Middle *:SHELDON_RIG:eyelid_r_b_Inner *:SHELDON_RIG:eyelid_l_b_Outer *:SHELDON_RIG:eyelid_l_b_Middle *:SHELDON_RIG:eyelid_l_b_Inner *:SHELDON_RIG:eyelid_l_t_Outer *:SHELDON_RIG:eyelid_l_t_Middle *:SHELDON_RIG:eyelid_l_t_Inner *:SHELDON_RIG:eyelid_r_t_Outer *:SHELDON_RIG:eyelid_r_t_Middle *:SHELDON_RIG:eyelid_r_t_Inner" $lids;
+
+	string $lips[];
+	tokenize "*:SHELDON_RIG:geo_Lip_L *:SHELDON_RIG:geo_Lip_R *:SHELDON_RIG:geo_Lip_Top_L *:SHELDON_RIG:geo_Lip_Top_L1 *:SHELDON_RIG:geo_Lip_Top_R *:SHELDON_RIG:geo_Lip_Top_R1 *:SHELDON_RIG:geo_Lip_Top_Mid_Mid *:SHELDON_RIG:geo_Lip_Bottom_Mid_Mid *:SHELDON_RIG:geo_Lip_Bot_L *:SHELDON_RIG:geo_Lip_Bot_R" $lips;
+
+	string $face = "*:SHELDON_RIG:faceBeauty";
+
+	createRenderLayer -mc -name "EyelidMouthShadow" -noRecurse $lights $lids $lips $face;
+	editRenderLayerAdjustment "miDefaultOptions.finalGather";
+	setAttr "miDefaultOptions.finalGather" 0;
+
+	connectAttr -f initialShadingGroup.message EyelidMouthShadow.shadingGroupOverride;
+	catchQuiet(`connectAttr -nextAvailable EyelidMouthShadow.renderPass Shadow.owner`);
+//	connectAttr -nextAvailable EyelidMouthShadow.renderPass MotionVector2D.owner;
+}
+
+proc EyeSockets()
+{
+	string $sockets = "*:SHELDON_RIG:face_socket";
+	string $clusters[];
+	tokenize "*:SHELDON_RIG:eye_r_adjust_transform *:SHELDON_RIG:eye_r_adjust_transform1 *:SHELDON_RIG:eye_r_adjust_transform2 *:SHELDON_RIG:eye_r_adjust_transform3 *:SHELDON_RIG:eye_l_adjust_transform *:SHELDON_RIG:eye_l_adjust_transform1 *:SHELDON_RIG:eye_l_adjust_transform2 *:SHELDON_RIG:eye_l_adjust_transform3" $clusters;
+
+	string $clustersOutside[];
+	tokenize "*:SHELDON_RIG:outsideSocket_transform7 *:SHELDON_RIG:outsideSocket_transform6 *:SHELDON_RIG:outsideSocket_transform5 *:SHELDON_RIG:outsideSocket_transform4 *:SHELDON_RIG:outsideSocket_transform3 *:SHELDON_RIG:outsideSocket_transform2 *:SHELDON_RIG:outsideSocket_transform1 *:SHELDON_RIG:outsideSocket_transform" $clustersOutside;
+
+	createRenderLayer -mc -name "EyeSockets" -noRecurse $sockets $clustersOutside $clusters;
+	setAttr "*:SHELDON_RIG:head_bigShape.primaryVisibility" 1;
+//	catchQuiet(`connectAttr -nextAvailable EyeSockets.renderPass MotionVector2D.owner`);
+}
+
+proc BeautyShadow()
+{
+	string $lights[];
+	tokenize "*:|SHELDON_RIG:fill *:|SHELDON_RIG:key" $lights;
+
+	string $newEyes[];
+	tokenize "*:SHELDON_RIG:eye_r_v02 *:SHELDON_RIG:eye_l_v02" $newEyes;
+
+	string $objs[];
+	tokenize "*:SHELDON_RIG:model|*:SHELDON_RIG:eye_r|*:SHELDON_RIG:cornea_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_l|*:SHELDON_RIG:cornea_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_r|*:SHELDON_RIG:iris_r *:SHELDON_RIG:iris_l *:SHELDON_RIG:model|*:SHELDON_RIG:eye_l|*:SHELDON_RIG:barrelA_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_l|*:SHELDON_RIG:barrelB_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_l|*:SHELDON_RIG:barrelC_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_r|*:SHELDON_RIG:barrelA_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_r|*:SHELDON_RIG:barrelB_transform *:SHELDON_RIG:model|*:SHELDON_RIG:eye_r|*:SHELDON_RIG:barrelC_transform *:SHELDON_RIG:model|*:SHELDON_RIG:face|*:SHELDON_RIG:faceBeauty"
+		$objs;
+
+	string $lidsI[];
+	tokenize "*:SHELDON_RIG:eyelid_r_b_Outer *:SHELDON_RIG:eyelid_r_b_Middle *:SHELDON_RIG:eyelid_r_b_Inner *:SHELDON_RIG:eyelid_l_b_Outer *:SHELDON_RIG:eyelid_l_b_Middle *:SHELDON_RIG:eyelid_l_b_Inner *:SHELDON_RIG:eyelid_l_t_Outer *:SHELDON_RIG:eyelid_l_t_Middle *:SHELDON_RIG:eyelid_l_t_Inner *:SHELDON_RIG:eyelid_r_t_Outer *:SHELDON_RIG:eyelid_r_t_Middle *:SHELDON_RIG:eyelid_r_t_Inner" $lidsI;
+
+	createRenderLayer -mc -name "BeautyShadow" -noRecurse $newEyes $objs $lights $lidsI;
+
+	connectAttr -f initialShadingGroup.message BeautyShadow.shadingGroupOverride;
+
+	string $lid;
+	for ($lid in $lidsI) {
+		setAttr ($lid+".primaryVisibility") 0;
+	}
+
+	catchQuiet(`connectAttr -nextAvailable BeautyShadow.renderPass AO.owner`);
+	catchQuiet(`connectAttr -nextAvailable BeautyShadow.renderPass Depth.owner`);
+//	connectAttr -nextAvailable BeautyShadow.renderPass MotionVector2D.owner;
+	catchQuiet(`connectAttr -nextAvailable BeautyShadow.renderPass Shadow.owner`);
+}
+
+proc Beauty()
+{
+
+	string $lights[];
+	tokenize "*:|SHELDON_RIG:fill *:|SHELDON_RIG:key" $lights;
+
+	string $eyes[];
+	tokenize "*:SHELDON_RIG:barrel_l *:SHELDON_RIG:iris_l *:SHELDON_RIG:barrel_r *:SHELDON_RIG:iris_r *:SHELDON_RIG:sclera_r *:SHELDON_RIG:sclera_l" $eyes;
+
+	string $bface = "*:SHELDON_RIG:faceBeauty";
+
+	string $sockets[];
+	tokenize "*:SHELDON_RIG:socket_transform *:SHELDON_RIG:socket_transform1" $sockets;
+
+	string $lids[];
+	tokenize "*:SHELDON_RIG:eyelid_r_b_Outer *:SHELDON_RIG:eyelid_r_b_Middle *:SHELDON_RIG:eyelid_r_b_Inner *:SHELDON_RIG:eyelid_l_b_Outer *:SHELDON_RIG:eyelid_l_b_Middle *:SHELDON_RIG:eyelid_l_b_Inner *:SHELDON_RIG:eyelid_l_t_Outer *:SHELDON_RIG:eyelid_l_t_Middle *:SHELDON_RIG:eyelid_l_t_Inner *:SHELDON_RIG:eyelid_r_t_Outer *:SHELDON_RIG:eyelid_r_t_Middle *:SHELDON_RIG:eyelid_r_t_Inner" $lids;
+
+	//createRenderLayer -mc -name "Beauty" -noRecurse $lights $eyes $bface $lids $sockets;
+	createRenderLayer -mc -name "Beauty" -noRecurse $lights $eyes $bface $lids;
+
+/*
+	string $lid;
+	for ($lid in $lids) {
+		setAttr ($lid+".primaryVisibility") 0;
+	}
+*/
+
+	//sets -e -forceElement "*:SHELDON_RIG:BlackHole_SG" $sockets;
+
+	//sets -e -forceElement "*:SHELDON_RIG:BlackHole_SG" $lids;
+	//sets -e -forceElement "*:SHELDON_RIG:BlackHole_SG" $bface;
+
+	sets -e -forceElement "*:SHELDON_RIG:bigFace_SG" $lids;
+	sets -e -forceElement "*:SHELDON_RIG:bigFace_SG" $bface;
+
+	catchQuiet(`connectAttr -nextAvailable Beauty.renderPass AO.owner`);
+	catchQuiet(`connectAttr -nextAvailable Beauty.renderPass Depth.owner`);
+	catchQuiet(`connectAttr -nextAvailable Beauty.renderPass Diffuse.owner`);
+	catchQuiet(`connectAttr -nextAvailable Beauty.renderPass Indirect.owner`);
+//	connectAttr -nextAvailable Beauty.renderPass MotionVector2D.owner`);
+	catchQuiet(`connectAttr -nextAvailable Beauty.renderPass Reflection.owner`);
+	catchQuiet(`connectAttr -nextAvailable Beauty.renderPass IncidenceCN.owner`);
+
+	for ($socket in $sockets) {
+		setAttr ($socket+".primaryVisibility") 0;
+	}
+	for ($lid in $lids) {
+		setAttr ($lid+".primaryVisibility") 0;
+	}
+}
+
+proc Lens()
+{
+
+	string $lights[];
+	tokenize "*:|SHELDON_RIG:fill *:|SHELDON_RIG:key" $lights;
+
+	string $lids[];
+	tokenize "*:SHELDON_RIG:eyelid_r_b_Outer *:SHELDON_RIG:eyelid_r_b_Middle *:SHELDON_RIG:eyelid_r_b_Inner *:SHELDON_RIG:eyelid_l_b_Outer *:SHELDON_RIG:eyelid_l_b_Middle *:SHELDON_RIG:eyelid_l_b_Inner *:SHELDON_RIG:eyelid_l_t_Outer *:SHELDON_RIG:eyelid_l_t_Middle *:SHELDON_RIG:eyelid_l_t_Inner *:SHELDON_RIG:eyelid_r_t_Outer *:SHELDON_RIG:eyelid_r_t_Middle *:SHELDON_RIG:eyelid_r_t_Inner" $lids;
+
+	string $bface = "*:SHELDON_RIG:faceBeauty";
+
+	string $lens[];
+	tokenize "*:SHELDON_RIG:fran_lenz_l *:SHELDON_RIG:fran_lenz_r" $lens;
+
+	string $irisl[];
+	tokenize "*:SHELDON_RIG:iris_l" $irisl;
+
+	string $irisr[];
+	tokenize "*:SHELDON_RIG:iris_r" $irisr;
+
+	string $barrel[];
+	tokenize "*:SHELDON_RIG:barrel_r *:SHELDON_RIG:barrel_l" $barrel;
+
+	string $scelra[];
+	tokenize "*:SHELDON_RIG:sclera_r *:SHELDON_RIG:sclera_l" $scelra;
+
+	createRenderLayer -mc -name "Lens" -noRecurse $lights $lids $bface $lens $irisl $irisr $barrel $scelra;
+
+	sets -e -forceElement "*:SHELDON_RIG:BlackHole_SG" $lids $bface $barrel;
+	sets -e -forceElement "*:SHELDON_RIG:irisReflR_SG" $irisr;
+	sets -e -forceElement "*:SHELDON_RIG:irisReflL_SG" $irisl;
+	sets -e -forceElement "*:SHELDON_RIG:scleraRefl_SG" $scelra;
+
+	catchQuiet(`connectAttr -nextAvailable Lens.renderPass Depth.owner`);
+	catchQuiet(`connectAttr -nextAvailable Lens.renderPass Specular.owner`);
+	catchQuiet(`connectAttr -nextAvailable Lens.renderPass Reflection.owner`);
+	catchQuiet(`connectAttr -nextAvailable Lens.renderPass Refraction.owner`);
+//	connectAttr -nextAvailable Lens.renderPass MotionVector2D.owner;
+}
+
+proc Motion()
+{
+	string $lids[];
+	tokenize "*:SHELDON_RIG:eyelid_r_b_Outer *:SHELDON_RIG:eyelid_r_b_Middle *:SHELDON_RIG:eyelid_r_b_Inner *:SHELDON_RIG:eyelid_l_b_Outer *:SHELDON_RIG:eyelid_l_b_Middle *:SHELDON_RIG:eyelid_l_b_Inner *:SHELDON_RIG:eyelid_l_t_Outer *:SHELDON_RIG:eyelid_l_t_Middle *:SHELDON_RIG:eyelid_l_t_Inner *:SHELDON_RIG:eyelid_r_t_Outer *:SHELDON_RIG:eyelid_r_t_Middle *:SHELDON_RIG:eyelid_r_t_Inner" $lids;
+
+	string $bface = "*:SHELDON_RIG:faceBeauty";
+
+	string $lens[];
+	tokenize "*:SHELDON_RIG:fran_lenz_l *:SHELDON_RIG:fran_lenz_r" $lens;
+
+	string $iris[];
+	tokenize "*:SHELDON_RIG:iris_l *:SHELDON_RIG:iris_r" $iris;
+
+	string $barrel[];
+	tokenize "*:SHELDON_RIG:barrel_r *:SHELDON_RIG:barrel_l" $barrel;
+
+	string $scelra[];
+	tokenize "*:SHELDON_RIG:sclera_r *:SHELDON_RIG:sclera_l" $scelra;
+
+	string $lips[];
+	tokenize "*:SHELDON_RIG:geo_Lip_L *:SHELDON_RIG:geo_Lip_R *:SHELDON_RIG:geo_Lip_Top_L *:SHELDON_RIG:geo_Lip_Top_L1 *:SHELDON_RIG:geo_Lip_Top_R *:SHELDON_RIG:geo_Lip_Top_R1 *:SHELDON_RIG:geo_Lip_Top_Mid_Mid *:SHELDON_RIG:geo_Lip_Bottom_Mid_Mid *:SHELDON_RIG:geo_Lip_Bot_L *:SHELDON_RIG:geo_Lip_Bot_R" $lips;
+
+	createRenderLayer -mc -name "Motion" -noRecurse $lids $bface $lens $iris $barrel $scelra $lips;
+	connectAttr -f initialShadingGroup.message Motion.shadingGroupOverride;
+	catchQuiet(`connectAttr -nextAvailable Motion.renderPass MotionVector2D.owner`);
+	catchQuiet(`connectAttr -nextAvailable Motion.renderPass Depth.owner`);
+	setAttr "*:SHELDON_RIG:faceBeautyShape.primaryVisibility" 1;
+}
+
+
+proc Edges()
+{
+	string $lights[];
+	tokenize "*:|SHELDON_RIG:fill *:|SHELDON_RIG:key" $lights;
+
+	string $lipEdgeMasks[];
+	tokenize "*:SHELDON_RIG:lipEdgeMask0 *:SHELDON_RIG:lipEdgeMask1 *:SHELDON_RIG:lipEdgeMask3 *:SHELDON_RIG:lipEdgeMask4 *:SHELDON_RIG:lipEdgeMask5 *:SHELDON_RIG:lipEdgeMask6 *:SHELDON_RIG:lipEdgeMask7 *:SHELDON_RIG:lipEdgeMask11 *:SHELDON_RIG:lipEdgeMask233 *:SHELDON_RIG:lipEdgeMask1222" $lipEdgeMasks;
+
+	string $lipEdges[];
+	tokenize "*:SHELDON_RIG:lipEdge0 *:SHELDON_RIG:lipEdge1 *:SHELDON_RIG:lipEdge2 *:SHELDON_RIG:lipEdge3 *:SHELDON_RIG:lipEdge4 *:SHELDON_RIG:lipEdge5 *:SHELDON_RIG:lipEdge6 *:SHELDON_RIG:lipEdge7 *:SHELDON_RIG:lipEdge8 *:SHELDON_RIG:lipEdge9" $lipEdges;
+
+	string $edges[];
+	tokenize "*:SHELDON_RIG:eyelidRims0 *:SHELDON_RIG:eyelidRims1 *:SHELDON_RIG:eyelidRims2 *:SHELDON_RIG:eyelidRims3 *:SHELDON_RIG:eyelidRims4 *:SHELDON_RIG:eyelidRims5 *:SHELDON_RIG:eyelidRims6 *:SHELDON_RIG:eyelidRims7 *:SHELDON_RIG:eyelidRims8 *:SHELDON_RIG:eyelidRims9 *:SHELDON_RIG:eyelidRims10 *:SHELDON_RIG:eyelidRims11 *:SHELDON_RIG:lipService" $edges;
+
+	string $bface = "*:SHELDON_RIG:faceBeauty";
+
+	createRenderLayer -mc -name "Edges" -noRecurse $lipEdges $edges $lights $bface $lipEdgeMasks;
+
+	sets -e -forceElement "*:SHELDON_RIG:BlackHole_SG" $bface; 
+	sets -e -forceElement "*:SHELDON_RIG:lipService_SG" $edges; 
+	sets -e -forceElement "*:SHELDON_RIG:lipService_SG" $lipEdges; 
+	sets -e -forceElement "*:SHELDON_RIG:BlackHole_SG" $lipEdgeMasks; 
+
+	setAttr "*:SHELDON_RIG:faceBeautyShape.primaryVisibility" 1;
+	setAttr "*:SHELDON_RIG:lipService.tz" 0.025;
+	setAttr "*:SHELDON_RIG:lipService.sx" 0.999;
+}
+
+proc MouthRamp()
+{
+	string $lips[];
+	tokenize "*:SHELDON_RIG:geo_Lip_L *:SHELDON_RIG:geo_Lip_R *:SHELDON_RIG:geo_Lip_Top_L *:SHELDON_RIG:geo_Lip_Top_L1 *:SHELDON_RIG:geo_Lip_Top_R *:SHELDON_RIG:geo_Lip_Top_R1 *:SHELDON_RIG:geo_Lip_Top_Mid_Mid *:SHELDON_RIG:geo_Lip_Bottom_Mid_Mid *:SHELDON_RIG:geo_Lip_Bot_L *:SHELDON_RIG:geo_Lip_Bot_R" $lips;
+	createRenderLayer -mc -name "MouthRamp" -noRecurse $lips;
+	sets -e -forceElement "*:SHELDON_RIG:mouthRamp_SG" $lips; 
+}
+
+proc BigFaceMatte()
+{
+	string $bfm = "*:SHELDON_RIG:bigFaceMatte";
+	createRenderLayer -mc -name "BigFaceMatte" -noRecurse $bfm;
+}
+
+string $rls[] = `listConnections renderLayerManager.renderLayerId`;
+createRenderPasses;
+
+if (stringArrayContains("AOcc", $rls) == 0)
+	AOcc;
+if (stringArrayContains("Beauty", $rls) == 0)
+	Beauty;
+if (stringArrayContains("BigFace", $rls) == 0)
+	BigFace;
+if (stringArrayContains("BigFaceMatte", $rls) == 0)
+	BigFaceMatte;
+if (stringArrayContains("Edges", $rls) == 0)
+	Edges;
+if (stringArrayContains("EyelidMouthFlat", $rls) == 0)
+	EyelidMouthFlat;
+if (stringArrayContains("EyelidMouthShadow", $rls) == 0)
+	EyelidMouthShadow;
+if (stringArrayContains("EyeMattes", $rls) == 0)
+	EyeMattes;
+if (stringArrayContains("EyeSockets", $rls) == 0)
+	EyeSockets;
+if (stringArrayContains("FaceMask", $rls) == 0)
+	FaceMask;
+if (stringArrayContains("Lens", $rls) == 0)
+	Lens;
+if (stringArrayContains("Motion", $rls) == 0)
+	Motion;
+if (stringArrayContains("MouthRamp", $rls) == 0)
+	MouthRamp;
+
+setAttr "mentalrayGlobals.exportMotionOffset" 0;
+setAttr "miDefaultOptions.finalGatherRays" 256;
+

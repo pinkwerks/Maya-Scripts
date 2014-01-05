@@ -1,0 +1,338 @@
+// Dynamica Bake
+//
+// Bakes Dynamica rigid bodies into new objects, primitives or EasyBaked Hull / Mesh
+//
+// Usage: Run script, select options, press Ok, ESC to stop
+//
+// Note that simulation view must be visible during sim for bake to work!
+//
+// Date: 2009-07-25, Author: "RBD" from Physics Simulation Forum
+// Forum: http://www.bulletphysics.com/Bullet/phpBB3/viewforum.php?f=12
+//
+proc string dynamicaGetSphere(string $name, int $geotype, int $instances)
+{
+    global string $dynamicaRenderSphere;
+    string $sphere[];
+    string $drsphere = ($geotype ? "drnSphere1" : "drpSphere1");
+    if (!$instances || ($instances && !`objExists $drsphere`)) {
+        if ($geotype) // NURBS
+            $sphere = `sphere -n $drsphere`;
+        else // Polygon
+            $sphere = `polySphere -n $drsphere`;
+        $sphere[0] = `rename -is ($sphere[0]) ("dBaked_"+$name)`;
+        rename -is ($sphere[1]) $drsphere;
+        $dynamicaRenderSphere = $sphere[0];
+    }
+    else {
+        $sphere = `instance -n ("dBaked_"+$name) ($dynamicaRenderSphere)`;
+        if (firstParentOf($sphere[0])!="")
+            parent -w $sphere[0]; // in case orig is in a group
+    }
+    return $sphere[0];
+}
+
+proc string dynamicaGetCube(string $name, int $geotype, int $instances)
+{
+    global string $dynamicaRenderCube;
+    string $cube[];
+    string $drcube = ($geotype ? "drnCube1" : "drpCube1");
+    if (!$instances || ($instances && !`objExists $drcube`)) {
+        if ($geotype) // NURBS
+            $cube = `nurbsCube -n $drcube`;
+        else // Polygon
+            $cube = `polyCube -n $drcube`;
+        $cube[0] = `rename -is ($cube[0]) ("dBaked_"+$name)`;
+        rename -is ($cube[1]) $drcube;
+        $dynamicaRenderCube = $cube[0];
+    }
+    else {
+        $cube = `instance -n ("dBaked_"+$name) ($dynamicaRenderCube)`;
+        if (firstParentOf($cube[0])!="")
+            parent -w $cube[0]; // in case orig is in a group
+    }
+    return $cube[0];
+}
+
+proc string dynamicaGetPlane(string $name, int $geotype, int $instances)
+{
+    global string $dynamicaRenderPlane;
+    string $plane[];
+    string $drplane = ($geotype ? "drnPlane1" : "drpPlane1");
+    if (!$instances || ($instances && !`objExists $drplane`)) {
+        if ($geotype) // NURBS
+            $plane = `nurbsPlane -w 1000 -n $drplane`;
+        else // Polygon
+            $plane = `polyPlane -w 1000 -h 1000 -n $drplane`;
+        $plane[0] = `rename -is ($plane[0]) ("dBaked_"+$name)`;
+        rename -is ($plane[1]) $drplane;
+        $dynamicaRenderPlane = $plane[0];
+    }
+    else {
+        $plane = `instance -n ("dBaked_"+$name) ($dynamicaRenderPlane)`;
+        if (firstParentOf($plane[0])!="")
+            parent -w $plane[0]; // in case orig is in a group
+    }
+    return $plane[0];
+}
+
+global proc dynamicaBake()
+{
+    global string $dynamicaBakeWindow;
+    global string $dynamicaBakeRBS;
+    global string $dynamicaBakePTOL;
+    global string $dynamicaBakeRTOL;
+    global string $dynamicaBakeGT;
+    global string $dynamicaBakeO;
+    global string $dynamicaBakeUNDO;
+    global string $gMainProgressBar;
+    int $selectall = (`radioButtonGrp -q -sl $dynamicaBakeRBS`)-1;
+    float $ptol[] = `floatFieldGrp -q -v $dynamicaBakePTOL`;
+    float $rtol[] = `floatFieldGrp -q -v $dynamicaBakeRTOL`;
+    int $geotype = (`radioButtonGrp -q -sl $dynamicaBakeGT`)-1;
+    int $instances = `checkBoxGrp -q -v1 $dynamicaBakeO`;
+    int $disableundo = `checkBoxGrp -q -v2 $dynamicaBakeO`;
+    deleteUI -window $dynamicaBakeWindow;
+    string $rbt[];  // Dynamica rigid body transform nodes
+    string $rbs[];  // Dynamica rigid body nodes
+    string $rbas[]; // Dynamica rigid body array nodes
+    int $cst;       // Collision shape types
+    string $bg[];   // Baked geometry
+    string $bgc;    // Main Copy for instances
+    vector $p;      // Positions
+    vector $r;      // Rotations
+    int $nbds;      // Number of rigid bodies in array node
+    int $ap;        // Array pointer
+    vector $lpk[];  // Last positon key
+    vector $lrk[];  // Last rotation key
+    vector $lp;     // Last positon
+    vector $lr;     // Last rotation
+    int $crb = 0;   // Current rigid body
+    string $t[];    // Transform
+    string $cs[];   // Collision Shape
+    vector $scale;
+    if ($disableundo)
+        undoInfo -state off; // DANGER: To save memory
+    float $min = `playbackOptions -q -minTime`;
+    float $max = `playbackOptions -q -maxTime`;
+    float $by = `playbackOptions -query -by`;
+    float $time;
+    if ($selectall) {
+        $rbs = `ls -type dRigidBody`;
+        $rbas = `ls -type dRigidBodyArray`;
+    }
+    else {
+        $rbs = `ls -sl -dag -ap -type dRigidBody`;
+        $rbas = `ls -sl -dag -ap -type dRigidBodyArray`;
+    };
+    // Create transforms and geometry for baking
+    for ($rb in $rbs) {
+        $t = `listRelatives -p -type transform $rb`;
+        $rbt[$crb] = $t[0];
+        $cs = `listConnections -type dCollisionShape $rb`;
+        $cst = getAttr($cs[0]+".type");
+        if ($cst < 2) {
+            $cs = `listRelatives -type transform $t`;
+            if(size($cs) > 0) {
+                $cs = `duplicate -rr -n ("dBaked_"+$t[0]) $cs[0]`;
+                $bg[$crb] = $cs[0];
+                parent -w ($bg[$crb]);
+            }
+        }
+        else if ($cst == 4) {
+            $bg[$crb] = dynamicaGetCube($t[0], $geotype, $instances);
+        }
+        else if ($cst == 5) {
+            $bg[$crb] = dynamicaGetSphere($t[0], $geotype, $instances);
+        }
+        else if ($cst == 6) {
+            $bg[$crb] = dynamicaGetPlane($t[0], $geotype, $instances);
+        };
+        // Collision shape scale appears to be ignored for non-array RBs
+        // Otherwise, we'd have to combine them...
+        //$scale = getAttr($cs[0]+".sc");
+        $scale = getAttr($t[0]+".s");
+        if ($cst == 5) // Dynamica sphere only pays attention to scaleX
+            scale ($scale.x) ($scale.x) ($scale.x) ($bg[$crb]);
+        else
+            scale ($scale.x) ($scale.y) ($scale.z) ($bg[$crb]);
+        $lpk[$crb] = pow(10,10);
+        $lrk[$crb] = pow(10,10);
+        $crb++;
+    };
+    for ($rba in $rbas) {
+        $t = `listRelatives -p -type transform $rba`;
+        $rbag = `group -w -em -n ("dBakedA_"+$t[0])`;
+        $p = getAttr($t[0]+".t");
+        move ($p.x) ($p.y) ($p.z) $rbag; // Kind of superfluous, rigid bodies array elements are in world space
+        // $rbt[$crb] = $t[0]; // Don't care.
+        $cs = `listConnections -type dCollisionShape $rba`;
+        $scale = getAttr($cs[0]+".sc");
+        // Transform node scale does not apply to rigid body arrays
+        $cst = getAttr($cs[0]+".type");
+        $nbds = getAttr($rba+".nbds");
+        $bgc = "";
+        for ($ap = 0; $ap < $nbds; $ap++) {
+            if ($cst < 2) {
+                if ($instances && $bgc != "") {
+                    $cs = `instance -n ("dBaked_"+$t[0]) $bgc`;
+                    $bg[$crb] = $cs[0];
+                    parent -w ($bg[$crb]); // lazy... to avoid error below
+                }
+                else {
+                    $cs = `listRelatives -type transform $t`;
+                    if(size($cs) > 0) {
+                        $cs = `duplicate -rr -n ("dBaked_"+$t[0]) $cs[0]`;
+                        setAttr ($cs[0]+".v") 1;
+                        $bg[$crb] = $cs[0];
+                        if ($instances) {
+                            $bgc = $cs[0];
+                        }
+                    };
+                };
+            }
+            else if ($cst == 4) {
+                $bg[$crb] = dynamicaGetCube($t[0]+"b"+$ap, $geotype, $instances);
+            }
+            else if ($cst == 5) {
+                $bg[$crb] = dynamicaGetSphere($t[0]+"b"+$ap, $geotype, $instances);
+            }
+            else if ($cst == 6) { // would happen?
+                $bg[$crb] = dynamicaGetPlane($t[0]+"b"+$ap, $geotype, $instances);
+            };
+            if ($cst == 5) // Dynamica spheres only pays attention to scaleX
+                scale ($scale.x) ($scale.x) ($scale.x) ($bg[$crb]);
+            else
+                scale ($scale.x) ($scale.y) ($scale.z) ($bg[$crb]);
+            parent ($bg[$crb]) $rbag;
+            $lpk[$crb] = pow(10,10);
+            $lrk[$crb] = pow(10,10);
+            $crb++;
+        };
+    };
+    // Bake
+    progressBar -e -bp -ii 1 -st "Baking..." -min $min -max $max $gMainProgressBar;
+    for ($time = $min; $time <= $max; $time+=$by) {
+        currentTime -edit $time;
+        $crb = 0;
+        for ($rb in $rbs) {
+            $lp = $lpk[$crb];
+            $p = getAttr($rbt[$crb]+".t");
+            move ($p.x) ($p.y) ($p.z) ($bg[$crb]);
+            if (!equivalentTol($p.x,$lp.x,$ptol[0])) {
+                setKeyframe -at "tx" $bg[$crb];
+                $lp = <<$p.x,$lp.y,$lp.z>>;
+            };
+            if (!equivalentTol($p.y,$lp.y,$ptol[0])) {
+                setKeyframe -at "ty" $bg[$crb];
+                $lp = <<$lp.x,$p.y,$lp.z>>;
+            };
+            if (!equivalentTol($p.z,$lp.z,$ptol[0])) {
+                setKeyframe -at "tz" $bg[$crb];
+                $lp = <<$lp.x,$lp.y,$p.z>>;
+            };
+            $lpk[$crb] = $lp;
+//             $lr = $lrk[$crb];
+            $r = getAttr($rbt[$crb]+".r");
+            rotate ($r.x) ($r.y) ($r.z) ($bg[$crb]);
+            setKeyframe -at "r" $bg[$crb]; // Need to bake all keys for euler filter to work?
+//             if (!equivalentTol($r.x,$lr.x,$rtol[0])) {
+//                 setKeyframe -at "rx" $bg[$crb];
+//                 $lr = <<$r.x,$lr.y,$lr.z>>;
+//             };
+//             if (!equivalentTol($r.y,$lr.y,$rtol[0])) {
+//                 setKeyframe -at "ry" $bg[$crb];
+//                 $lr = <<$lr.x,$r.y,$lr.z>>;
+//             };
+//             if (!equivalentTol($r.z,$lr.z,$rtol[0])) {
+//                 setKeyframe -at "rz" $bg[$crb];
+//                 $lr = <<$lr.x,$lr.y,$r.z>>;
+//             };
+            $lrk[$crb] = $lr;
+            $crb++;
+        };
+        for ($rba in $rbas) {
+            $nbds = getAttr($rba+".nbds");
+            for ($ap = 0; $ap < $nbds; $ap++) {
+                $lp = $lpk[$crb];
+                $p = getAttr($rba+".pos["+$ap+"]");
+                move -ws ($p.x) ($p.y) ($p.z) ($bg[$crb]);
+                if (!equivalentTol($p.x,$lp.x,$ptol[0])) {
+                    setKeyframe -at "tx" $bg[$crb];
+                    $lp = <<$p.x,$lp.y,$lp.z>>;
+                };
+                if (!equivalentTol($p.y,$lp.y,$ptol[0])) {
+                    setKeyframe -at "ty" $bg[$crb];
+                    $lp = <<$lp.x,$p.y,$lp.z>>;
+                };
+                if (!equivalentTol($p.z,$lp.z,$ptol[0])) {
+                    setKeyframe -at "tz" $bg[$crb];
+                    $lp = <<$lp.x,$lp.y,$p.z>>;
+                };
+//                 $lpk[$crb] = $lp;
+                $lr = $lrk[$crb];
+                $r = getAttr($rba+".rot["+$ap+"]");
+                rotate ($r.x) ($r.y) ($r.z) ($bg[$crb]);
+                setKeyframe -at "r" $bg[$crb]; // Need to bake all keys for euler filter to work?
+//                 if (!equivalentTol($r.x,$lr.x,$rtol[0])) {
+//                     setKeyframe -at "rx" $bg[$crb];
+//                     $lr = <<$r.x,$lr.y,$lr.z>>;
+//                 };
+//                 if (!equivalentTol($r.y,$lr.y,$rtol[0])) {
+//                     setKeyframe -at "ry" $bg[$crb];
+//                     $lr = <<$lr.x,$r.y,$lr.z>>;
+//                 };
+//                 if (!equivalentTol($r.z,$lr.z,$rtol[0])) {
+//                     setKeyframe -at "rz" $bg[$crb];
+//                     $lr = <<$lr.x,$lr.y,$r.z>>;
+//                 };
+                $lrk[$crb] = $lr;
+                $crb++;
+            };
+        };
+        if(`progressBar -q -isCancelled $gMainProgressBar`) {
+            print("Bake Stopped...");
+            break;
+        };
+        progressBar -e -pr $time $gMainProgressBar;
+    };
+    progressBar -e -ep $gMainProgressBar;
+    // Fix quaternion to Euler conv
+    for ($ap = 0; $ap < $crb; $ap++) {
+        // with multiple args doesn't work?
+        filterCurve -f euler ($bg[$ap]+".rx") ($bg[$ap]+".ry") ($bg[$ap]+".rz");
+        // Reduce keys...
+        filterCurve -f simplify -tol 0.0001 ($bg[$ap]+".rx") ($bg[$ap]+".ry") ($bg[$ap]+".rz");
+    };
+    // Do something with original RBs here
+    if ($disableundo)
+        undoInfo -state on; // We're done, turn it back on
+}
+
+{
+// If Dynamica is not loaded, nevermind
+if (!`pluginInfo -q -l BulletMayaPlugin`)
+    warning "This script requires the Dynamica plugin to be loaded";
+// Create UI
+global string $dynamicaBakeWindow;
+global string $dynamicaBakeRBS;
+global string $dynamicaBakePTOL;
+global string $dynamicaBakeRTOL;
+global string $dynamicaBakeGT;
+global string $dynamicaBakeO;
+$dynamicaBakeWindow = `window -t "Dynamica Bake" -w 420 -h 210 Bake`;
+columnLayout -rs 10;
+// warning text label: Simulation window must remain in focus during bake process
+$dynamicaBakeRBS = `radioButtonGrp -nrb 2 -l "Rigid bodies to bake: " -la2 "Selected" "All" -sl 1`;
+$dynamicaBakePTOL = `floatFieldGrp -l "Position tolerance: " -nf 1 -pre 4 -v1 0.01
+    -ann "How much movement is tolerated before a keyframe is baked, depends on scene/object size"`;
+$dynamicaBakeRTOL = `floatFieldGrp -l "Rotation tolerance: " -nf 1 -pre 3 -v1 0.1
+    -ann "How much rotation (in degrees) is tolerated before a keyframe is baked"`;
+$dynamicaBakeGT = `radioButtonGrp -nrb 2 -l "Replace primitives with: " -la2 "Polygons" "NURBS" -sl 1`;
+$dynamicaBakeO = `checkBoxGrp -ncb 2 -l "Options:" -l1 "Use Instances" -v1 1 -l2 "Disable Undo" -v2 0
+    -ann "Use instances for all primitives and arrays / Temporarily disable Undo to save memory (WARNING!)"`;
+// Other option: Rigid Bodies, after: () Nothing () Hide () Disable Solver () Delete
+rowColumnLayout -nc 2 -cw 1 170 -cw 2 170 -cs 1 25 -cs 2 25;
+button -l "Ok" -c "dynamicaBake()";
+button -l "Cancel" -c "deleteUI -window $dynamicaBakeWindow";
+showWindow;
+}

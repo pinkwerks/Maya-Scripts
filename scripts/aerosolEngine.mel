@@ -1,0 +1,243 @@
+// v20060823 --pink
+global proc
+aerosolEngine (string $particle, string $fluid)
+{
+	if ( `getAttr ($particle+".doAerosol")` == 0 )
+	   return;
+	global int $LBDEBUG;
+	global string $gSelect;
+	string $osel[] =`ls -sl -l`;
+	string $fluidXform[] =`listRelatives -parent $fluid`;
+	int $pntCnt =`getAttr ($particle +".count")`;
+	int $i, $ix, $iy, $iz;
+	float $px, $py, $pz;
+	int $update = 0;
+	float $xDen;
+	float $xHeat;
+	float $xFuel;
+	float $fVel[3];
+	float $xVel[3];
+	float $fPos[3] = `xform -q -ws -t $fluidXform[0]`;
+	int	$densityMethod= `getAttr ($particle +".densityMethod")`;
+	int	$velocityMethod = `getAttr ($particle +".velocityMethod")`;
+	float $velAmp	= `getAttr ($particle +".velocityAmp")`;
+	float $lifespanMode = `getAttr ($particle +".lifespanMode")`;
+	float $lifespan = `getAttr ($particle +".lifespan")`;
+	float $densityEmission = `getAttr ($particle +".densityEmission")`;
+	float $heatEmission = `getAttr ($particle +".heatEmission")`;
+	float $fuelEmission = `getAttr ($particle +".fuelEmission")`;
+	float $fade = `getAttr ($particle +".ageFade")`;
+	float $minDensity = `getAttr ($particle +".minDensity")`;
+	float $maxDensity	= `getAttr ($particle +".maxDensity")`;
+	float $vConserve = `getAttr ($particle +".conserveFluidVelocity")`;
+//	int $bbCull	= `getAttr ($particle +".bbCull")`;
+	int $clampDensity = `getAttr ($particle +".clampDensity")`;
+	float $xSize = `getAttr ($fluid +".dimensionsW")`;
+	float $ySize = `getAttr ($fluid +".dimensionsH")`;
+	float $zSize = `getAttr ($fluid +".dimensionsD")`;
+	float $ptAge[];
+	float $ptLifespan[];
+	float $fluidDen[];
+	float $ptPos[];
+	float $ptVel[];
+	float $ptDen[];
+	float $ptDen0[];
+	float $ptHeat[];
+	float $ptHeat0[];
+	float $ptFuel[];
+	float $ptFuel0[];
+	float $last[];
+	float $res[];
+	float $id[];
+	int $xRes;
+	int $yRes;
+	int $zRes;
+
+	if ($densityMethod == 0 && $velocityMethod == 0)
+		return;
+	if (`getAttr ($particle +".isd")` !=1)
+		return;
+
+	// Turn off undo.
+	undoInfo -state off;
+	// Set tool to 'select' otherwise maya complains about selecting particles.
+	setToolTo $gSelect;
+
+	//
+	// loop over our particles
+	//
+	if ($LBDEBUG)
+	{
+      print ("// Fluid position = "+ $fPos[0] +" "+ $fPos[1] +" "+ $fPos[2] +"\n");
+      print ("// Start particle loop.\n");
+	}
+
+	for ($i = 0; $i < $pntCnt; $i++)
+    {
+		if ( $LBDEBUG )
+			print("// Dealing with point "+ $i +"\n");
+		$id = `getParticleAttr -at id ($particle +".pt["+ $i +"]")`;
+		$res =`getAttr ($fluid +".resolution")`;
+		$xRes = $res[0];
+		$yRes = $res[1];
+		$zRes = $res[2];
+		// retrieve particlePosition in fluid coordinates
+		$ptPos = `getParticleAttr -at position ($particle +".pt["+ $i +"]")`;
+		$px = ($ptPos[0] - $fPos[0] + $xSize / 2) * $xRes / $xSize;
+		$py = ($ptPos[1] - $fPos[1] + $ySize / 2) * $yRes / $ySize;
+		$pz = ($ptPos[2] - $fPos[2] + $zSize / 2) * $zRes / $zSize;
+		$ix = int($px);
+		$iy = int($py);
+		$iz = int($pz);
+		//     vector $voxelCenter = <<1-abs(($px-$ix)-.5),1-abs(($py-$iy)-.5),1-abs(($pz-$iz)-.5)>>;
+
+		//
+		// bounding box check
+		//
+		if (
+				$ix < $xRes && $ix >= 0
+				&& $iy < $yRes && $iy >= 0
+				&& $iz < $zRes && $iz >= 0
+				&& $px >= 0
+				&& $py >= 0
+				&& $pz >= 0
+				)
+		{
+			// We're inside the fluid bounding box.  Don't be alarmed.
+			// have we been here before?
+			$last = `getParticleAttr -at lastCellPP ($particle +".pt["+ $i +"]")`;
+			if ( $LBDEBUG )
+				print ("//\t In the bounding box!\n");
+			if ( $last[0] != $ix || $last[1] != $iy || $last[2] != $iz )
+			{
+				if ($LBDEBUG)
+					print ("//\t XXX We don't get here with particle caching on!\n");
+				$update = 1;
+			}
+			else
+				$update = 0;
+
+			if ( $fade != 0 )
+			{
+				$ptAge = `getParticleAttr -at age ($particle +".pt["+ $i +"]")`;
+				$ptLifespan = `getParticleAttr -at lifespanPP ($particle +".pt["+ $i +"]")`;
+				$ptDen0 = `getParticleAttr -at density0PP ($particle +".pt["+ $i +"]")`;
+				if ( $lifespanMode == 1 )
+					$ptLifespan[0] = $lifespan;
+				if ( $LBDEBUG )
+				  print ("//\t Age / Lifespan = "+ $ptAge[0] +" "+ $ptLifespan[0] +"\n");
+			}
+
+			//
+			// Insert Density into the fluid voxels.
+			//
+			if ( $densityMethod != 0 && $update )
+			{
+				$fluidDen = `getFluidAttr -at "density" -xi $ix -yi $iy -zi $iz $fluid`;
+				$ptDen = `getParticleAttr -at densityPP ($particle +".pt["+ $i +"]")`;
+				if ( $densityMethod == 1 )	// additive
+					$xDen = $ptDen[0] + $fluidDen[0];
+				if ( $densityMethod == 2 )	// average
+					$xDen = $ptDen[0] + $fluidDen[0] / 2;
+				if ( $clampDensity )
+					$xDen = clamp ($minDensity, $maxDensity, $xDen);
+				if ( $LBDEBUG )
+					print ("//\t Inserting Density = "+ $xDen +"\n");
+				setFluidAttr -at "density" -fv $xDen -xi $ix -yi $iy -zi $iz $fluid;
+				if ( $fade != 0 )
+				{
+					$xDen = $ptDen0[0] * (1 - ($ptAge[0] * $fade / $ptLifespan[0]));
+					if ( $LBDEBUG )
+					  print ("//\t Remaining densityPP = "+ $xDen +"\n");
+					select ($particle +".pt["+ $i +"]");
+					setParticleAttr -at densityPP -fv $xDen;
+				}
+			}
+
+			//
+			// Insert Velocity into the fluid voxels.
+			//
+			if ( $velocityMethod != 0 && $update )
+			{
+				$fVel = `getFluidAttr -at "velocity" -xi $ix -yi $iy -zi $iz $fluid`;
+				$ptVel = `getParticleAttr -at velocity ($particle +".pt["+ $i +"]")`;
+				if ($velocityMethod == 1)
+				// additive
+				{
+					$xVel[0] = ($vConserve * $fVel[0] + $velAmp * $ptVel[0]);
+					$xVel[1] = ($vConserve * $fVel[1] + $velAmp * $ptVel[1]);
+					$xVel[2] = ($vConserve * $fVel[2] + $velAmp * $ptVel[2]);
+				}
+				else if ($velocityMethod == 2) // average
+				{
+					$xVel[0] = ($vConserve * $fVel[0] + $velAmp * $ptVel[0]) / 2;
+					$xVel[1] = ($vConserve * $fVel[1] + $velAmp * $ptVel[1]) / 2;
+					$xVel[2] = ($vConserve * $fVel[2] + $velAmp * $ptVel[2]) / 2;
+				}
+				if ($LBDEBUG)
+				  print ("//\t Inserting Velocity = "+ $xVel[0] +" "+ $xVel[1] +" "+ $xVel[2] +"\n");
+
+				setFluidAttr -at "velocity" -vv $xVel[0] $xVel[1] $xVel[2] -xi $ix -yi $iy -zi $iz $fluid;
+			}
+
+			//
+			// Insert Heat into the fluid voxels.
+			//
+			if ( $update )
+			{
+				$fHeat = `getFluidAttr -at "temperature" -xi $ix -yi $iy -zi $iz $fluid`;
+				$ptHeat = `getParticleAttr -at heatPP ($particle +".pt["+ $i +"]")`;
+				$xHeat = ($fHeat[0] + $heatEmission * $ptHeat[0]);
+				if ($LBDEBUG)
+					print ("//\t Inserting Heat = "+ $xHeat +"\n");
+				setFluidAttr -at "temperature" -fv $xHeat -xi $ix -yi $iy -zi $iz $fluid;
+				if ( $fade != 0 )
+				{
+					$xHeat = $ptHeat0[0] * (1 - ($ptAge[0] * $fade / $ptLifespan[0]));
+					if ( $LBDEBUG )
+					  print ("//\t Remaining heatPP = "+ $xDen +"\n");
+					select ($particle +".pt["+ $i +"]");
+					setParticleAttr -at heatPP -fv $xHeat;
+				}
+			}
+
+			//
+			// Insert Fuel into the fluid voxels.
+			//
+			if ( $update )
+			{
+				$fFuel = `getFluidAttr -at "fuel" -xi $ix -yi $iy -zi $iz $fluid`;
+				$ptFuel = `getParticleAttr -at fuelPP ($particle +".pt["+ $i +"]")`;
+				$xFuel = ($fFuel[0] + $fuelEmission * $ptFuel[0]);
+				if ($LBDEBUG)
+					print ("//\t Inserting Fuel = "+ $xFuel +"\n");
+				setFluidAttr -at "fuel" -fv $xFuel -xi $ix -yi $iy -zi $iz $fluid;
+				if ( $fade != 0 )
+				{
+					$xFuel = $ptFuel0[0] * (1 - ($ptAge[0] * $fade / $ptLifespan[0]));
+					if ( $LBDEBUG )
+					  print ("//\t Remaining fuelPP = "+ $xFuel+"\n");
+					select ($particle +".pt["+ $i +"]");
+					setParticleAttr -at fuelPP -fv $xFuel;
+				}
+			}
+
+			//
+			// Update our last location in the grid
+			//
+			if ( $update )
+			{
+				select ($particle +".pt["+ $i +"]");
+				setParticleAttr -at lastCellPP -vv $ix $iy $iz;
+			}
+
+		} // End bb check
+
+	} // End for()
+
+	// Turn undo back on.
+	undoInfo -st on;
+	if ($LBDEBUG)
+		print ("// END particle loop.\n\n");
+	select $osel;
+}

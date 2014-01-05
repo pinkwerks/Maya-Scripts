@@ -1,0 +1,89 @@
+//
+// madPolyMesh.mel
+// Author: Bitch-ass-motherfucker-pink
+// Version : .2
+//
+// Creates a poly mesh based on the transforms of
+// the selected objects, and optionally exports a
+// series as OBJs.
+//
+// usage :
+// 	madPolyMesh
+//
+
+global proc
+madPolyMesh ()
+{
+    global string $gMainProgressBar; // This is defined on maya startup
+
+    float $globalScale = 1;
+    $amount = 0;
+
+    // Ensure we are dealing with centimeters
+    // if not, store the current setting, and change it
+    //
+    $unitReset = 0;
+    $originalUnits = `currentUnit -query -linear`;
+    if ( $originalUnits != "cm" ) {
+	warning("madPolyMesh : setting temp units");
+	currentUnit -linear cm;
+	$unitReset = 1;
+    }
+
+    // Bring up a progress Window to notify to edumacate the user
+    //
+    $objs = `ls -sl -l -fl`;
+    float $total = `size $objs`;
+
+    // the real window
+    progressBar -edit
+      -beginProgress
+      -isInterruptable true
+      -status "Sifting Points..."
+      -maxValue $total
+      $gMainProgressBar;
+
+    if ( $total < 1 ) {
+	progressBar -edit -endProgress $gMainProgressBar;
+	error("Nothing Selected!");
+    }
+
+    $oi = 1;	// object index for calc of $amount
+
+    // stores the built polyCreateFacet command string
+    string $pcfCmd;
+
+    // stores the built vertex locations for $pcfCmd
+    string $pcfPoints = "";
+
+    // loop through our selected things
+    for ($obj in $objs) {
+	// Check if the dialog has been cancelled
+	if ( `progressBar -query -isCancelled $gMainProgressBar` ) {
+	    progressBar -edit -endProgress $gMainProgressBar;
+	    error ("Generation of madPolyMesh Cancelled.");
+	}
+
+	// update our "progress"
+	progressBar -edit -step 1 $gMainProgressBar;
+
+	// World Space Position, stores poly vertex locations
+	float $wsp[] = `xform -q -ws -t $obj`;
+
+	$pcfPoints += (" -p " + $wsp[0] * $globalScale + " " + $wsp[1] * $globalScale + " " + $wsp[2] * $globalScale);
+
+	$oi++;
+    }
+
+    $frame = `currentTime -q`;
+    $meshBaseName = "madPolyMesh";
+    $meshName = ( $meshBaseName + $frame );
+    $pcfCmd = ( "polyCreateFacet -n " + $meshName + "-ch off -tx 1 -s 1" + $pcfPoints );
+    $madMesh = `eval $pcfCmd`;
+    select -r $madMesh;
+
+    if ( $unitReset ) currentUnit -linear $originalUnits;
+
+    print ("\nGeneration of poly-mesh Complete. ");
+    progressBar -edit -endProgress $gMainProgressBar;
+}

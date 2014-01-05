@@ -1,0 +1,24 @@
+// v20060731 pinkwerks
+// this is for all you lazy fucks that don't wanna type
+global proc uniqEmitterSeeds()
+{
+	string $objs[] = `ls -sl -l`;
+	if ( size($objs) < 1 )
+		error("Select at least one particleShape object!");
+	for ($obj in $objs)
+	{
+		float $seeds[];
+		if ( `nodeType $obj` == "particle" )
+		{
+			$seeds = `getAttr ($obj +".seed")`;
+			int $size = `size $seeds`;
+			for ( $i = 0; $i < $size; $i++ )
+			{
+				// maya's seed range is 0-100
+				setAttr ($obj+".seed["+$i+"]") ($i%100);
+			}
+		}
+		else
+			warning($obj +" is not a particle, skipping.");
+	}
+}

@@ -1,0 +1,23 @@
+global proc float fractal(vector $p, int $octaves)
+{
+    $gain   = 0.5;
+    $lac    = 2.0;
+
+    $P = $p;
+    $val = 0.0;
+    $amp = 1.0;
+    for ($i=0; $i<$octaves; $i++) {
+	$val	+= $amp * noise($P);
+	$amp	*= $gain;
+	$P	*= $lac;
+    }
+    return $val;
+}
+
+global proc vector turb(vector $p, int $octaves)
+{
+    return <<fractal($p, $octaves),
+	     fractal($p+<<1000,1000,1000>>, $octaves),
+	     fractal($p+<<2000,2000,2000>>, $octaves)>>;
+}
+

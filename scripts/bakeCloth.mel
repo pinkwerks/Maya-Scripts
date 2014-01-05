@@ -1,0 +1,161 @@
+/*  This file downloaded from Highend3d.com
+''  
+''  Highend3d.com File Information:
+''  
+''    Script Name: bakeCloth v0.9
+''    Author: Erick Miller
+''    Last Updated: May 13, 2001
+''    Update/Change this file at:
+''    http://www.highend3d.com/maya/mel/?section=cloth#1024
+''  
+''  History:
+''    bakeCloth v0.8 on March 27, 2001 by erick miller
+''    bakeCloth v0.7 on March 26, 2001 by erick miller
+''    bakeCloth v0.5 on March 22, 2001 by erick miller
+''  
+''  Please do not alter any information above this line
+''  it is generated dynamically by Highend3d.com and will
+''  be changed automatically on any updates.
+*/
+
+
+
+
+//
+// title:  bakeCloth.mel
+// author:  erick miller
+//
+// description:
+// Here is a little script to bake the
+// solver out of your maya cloth simulations.
+// Primarily this script was written for maya cloth 
+// animations, after a really good cloth solve
+// has been achieved, you can use this script
+// to bake the cache file directly into your maya scene
+// file. The script works by taking a copy of the 
+// vertice location at every frame, and then doing
+// an in-between blendshape and keyframing it based 
+// on the maximum and minimum in your time-line. Theoretically
+// this script could be used to bake deformations into any
+// object that has vertex transformations across time... if
+// this is useful to you :)
+// The script will hide your original cloth object,
+// and rename it as "original", as well as creating
+// a new, visible object, that is "baked".  You can export  
+// the baked object into a new file, or delete the "original solver nodes"
+// if you want to be completely rid of the maya cloth 
+// sover/cache file... this way you can transport cloth
+// animations onto maya complete, without any hassle.
+// 
+// 	UPDATE:
+// 	Now works properly on negative frames. Also now works with cloth/mesh 
+//	constraints that are children of the cloth geometry node :)
+//	
+//
+// usage:
+// copy the script to your user/script directory, and source the script.
+// select your cloth geometry. type: bakeCloth
+// 
+// limitations (I'll post an update for this later):
+// -doesnt work on mutliple objects at the same time
+// -written using Maya 3.0.1
+//
+// 	enjoy.
+
+global proc
+bakeCloth()
+{
+    string $clothObj[] = `ls -sl -l -fl`;
+    if ($clothObj[0] == "") {
+	string $whatShouldiDo = `confirmDialog 
+				-title "Nothing is selected!" 
+				-message "You must first select your geometry before running this script.\nIf you would like the script to select the object named cloth, then click \"AutoSelect\""
+			   	-button "AutoSelect" -button "Cancel" -defaultButton "AutoSelect"
+			    	-cancelButton "Cancel" -dismissString "Cancel"`;
+
+	if ($whatShouldiDo == "Cancel") {
+		print ("AutoSelect canceled. Select the cloth geometry first, then execute the script.");
+		return;
+	} else if ($whatShouldiDo == "AutoSelect") {
+		select "cloth\*";
+	}
+}
+
+string $clothObj[] = `ls -sl -l -fl`;
+catch(`ungroup`);
+select -r $clothObj[0];
+string $startTime = `playbackOptions -q -min`;
+string $maxEndTime = `playbackOptions -q -max`;
+
+int $startInt = $startTime;
+int $endInt = $maxEndTime;
+
+int $i;
+for ($i = $startTime; $i <= $endInt; $i++) {
+	currentTime $i;
+	select -r $clothObj[0];
+	duplicatePreset(1,1,2,0,0,0,0,0,0,0,0,0,1,1,1);
+	int $now = `currentTime -q`;
+	string $selected[] = `ls -sl -l -fl`;
+	rename  $selected[0] ("baked_frame_"+$now);
+	
+	if ($i != $startTime) {
+		hideKeepSelection `ls -sl -l -fl`;
+	}
+	
+	if ($maxEndTime == $now) {
+		play -st 0;
+		break;
+	}
+	
+}
+
+select -cl;
+select $clothObj[0];
+hide;
+select -cl;
+
+for ($i = $startTime; $i <= $endInt; $i++)
+{
+    if ($i < 0) {
+	 string $frameNum = $i;
+	 string $temp[];
+	 tokenize $frameNum "-" $temp;
+	 select -tgl ("baked_frame__"+$temp[0]);
+    } else if ($i >= 0) {
+	select -tgl ("baked_frame_"+$i);
+    }
+}
+
+if ( $startInt < 0 ) {
+    string $temp[];
+    tokenize $startTime "-" $temp;
+    $startTime = "_"+$temp[0];
+
+    if ($endInt<0) {
+	string $temp[];
+	tokenize $maxEndTime "-" $temp;
+	$maxEndTime = "_"+$temp[0];		
+    }
+}
+
+select -d ("baked_frame_"+$startTime);
+select -tgl ("baked_frame_"+$startTime);
+
+blendShapeDeleteTarget ("blendShape -ib -n "+$clothObj[0]+"BS");
+
+currentTime $endInt;
+setAttr ($clothObj[0]+"BS.baked_frame_"+$maxEndTime) 1;
+setKeyframe ($clothObj[0]+"BS.baked_frame_"+$maxEndTime);
+
+currentTime $startInt;
+setAttr ($clothObj[0]+"BS.baked_frame_"+$maxEndTime) 0;
+setKeyframe ($clothObj[0]+"BS.baked_frame_"+$maxEndTime);
+
+select $clothObj[0];
+rename $clothObj[0] ("ORIGINAL_"+$clothObj[0]);
+rename ("baked_frame_"+$startTime) ("BAKED_"+$clothObj[0]);
+
+select -cl;
+
+}

@@ -1,0 +1,814 @@
+// assetManager
+// vim:ts=4:sw=4
+//   pink wrote this
+
+proc string[] removeHiddenDirs(string $in[])
+{
+	string $s;
+	string $out[];
+	string $prefix = ".";
+	int $i = 0;
+	for ($s in $in) {
+		if (startsWith($s, $prefix))
+			continue;
+		$out[$i] = $s;
+		$i++;
+	}
+	return $out;
+}
+
+proc string jobFromCurrentFile()
+{
+	string $result;
+	string $filename = `file -q -sn`; 
+	string $projdir = `workspace -q -rd`; 
+	string $p[];
+	if ($filename != "") {
+		tokenize $filename "/" $p;
+		$result = $p[1];
+	} else if ($projdir != "") {
+		tokenize $projdir "/" $p;
+		$result = $p[1];
+	} else {
+		warning("jobFromCurrentFile() : Untitled file.");
+	}
+	return $result;
+}
+
+proc string[] getJobs()
+{
+	string $jobs[] = `getFileList -folder "/jobs/"`;
+	string $jobs2[] = `removeHiddenDirs $jobs`;
+	return $jobs2;
+}
+
+proc string[] getAssetsForJob(string $job)
+{
+//warning("getAssetsForJob");
+	string $assets[];
+	string $test = ("/jobs/"+$job+"/common/assets/");
+	string $test2 = ("/jobs/"+$job+"/assets/");
+//warning($test);
+//warning($test2);
+
+	if (`filetest -d $test`) {
+		$assets = `getFileList -folder $test`;
+//		print($test+"\n");
+	} else if (`filetest -d $test2`) {
+		$assets = `getFileList -folder $test2`;
+//		print($test+"\n");
+	}
+//	else
+//	warning("Couldn't find assets for job");
+//	print($assets);
+	// get rid of crap we don't want listed
+	string $rm[] = {"resources"};
+	$assets = stringArrayRemove($rm, $assets);
+	string $rm[] = {".DS_Store"};
+	$assets = stringArrayRemove($rm, $assets);
+	return $assets;
+}
+
+proc string[] getShotsForJob(string $job)
+{
+//warning("getAssetsForJob");
+	string $assets[];
+	string $test = ("/jobs/"+$job+"/shots/");
+//warning($test);
+//warning($test2);
+
+	if (`filetest -d $test`) {
+		$assets = `getFileList -folder $test`;
+//		print($test+"\n");
+	}
+//	print($assets);
+//	string $rm[] = {"resources"};
+//	$assets = stringArrayRemove($rm, $assets);
+	return $assets;
+}
+
+proc string[] getTypesForJobWithAsset(string $job, string $asset)
+{
+//warning("getTypesForJobWithAsset"+" "+$job+" "+$asset);
+	string $comps[];
+	string $test = ("/jobs/"+$job+"/common/assets/"+$asset+"/pub/");
+	string $test2 = ("/jobs/"+$job+"/assets/"+$asset+"/pub/");
+	string $test3 = ("/jobs/"+$job+"/shots/"+$asset+"/pub/");
+
+	if (`filetest -d $test`) {
+		$comps = `getFileList -folder $test`;
+//warning($test);
+	} else if (`filetest -d $test2`) {
+		$comps = `getFileList -folder $test2`;
+//warning($test2);
+	} else if (`filetest -d $test3`) {
+		$comps = `getFileList -folder $test3`;
+//warning($test3);
+	}
+/*
+ else {
+		warning("No pub/ found for Job and Asset combination.");
+	}
+*/
+	return $comps;
+}
+
+proc string getFileOwner(string $file)
+{
+	// return system("ls -l "+$file+" | awk '{print $3}' | tr -d '\n'");
+    string $ls = `system("ls -l "+$file)`;
+    string $ownerBuffer[];
+    tokenize( $ls, $ownerBuffer );
+    return $ownerBuffer[2];
+}
+
+proc string getFileDate(string $file)
+{
+	// return system("ls -l "+$file+" | awk '{print $6\" \"$7\" \"$8}' | tr -d '\n'");
+//warning($file);
+	string $ls = `system("ls -l "+$file)`;
+    string $dateBuffer[];
+    tokenize( $ls, $dateBuffer );
+    $date = $dateBuffer[5] + " " + $dateBuffer[6];
+    return $date;
+}
+
+proc string getLinkSource(string $link)
+{
+	// XXX doesn't work with hardlinks - yet
+	// return system("ls -l "+$link+" | awk '{print $11}' | tr -d '\n'");
+warning("getLinkSource : link="+$link);
+	string $src = strip(system("readlink "+ $link));
+warning("getLinkSource : src="+$src);
+	return $src;
+}
+
+proc string getPubFileForJobWithAssetAndType(string $job, string $asset, string $type)
+{
+//warning("getPubFileForJobWithAssetAndType()");
+	string $result;
+	string $pubdir = ("/jobs/"+$job+"/assets/"+$asset+"/pub/"+$type);
+	if (!`filetest -d $pubdir`)
+		$pubdir = ("/jobs/"+$job+"/common/assets/"+$asset+"/pub/"+$type);
+	if (!`filetest -d $pubdir`)
+		$pubdir = ("/jobs/"+$job+"/shots/"+$asset+"/pub/"+$type);
+	string $pubname = ($asset+"_"+$type+"_MASTER");
+//warning("getPubFileForJobWithAssetAndType() : pubname="+$pubname);
+	string $file = ($pubdir+"/"+$pubname);
+//warning("getPubFileForJobWithAssetAndType() : file="+$pubname);
+	if (`filetest -f $file`) {
+		// grab what our link points too & chop off the newline
+		$result = getLinkSource($file);
+		$result = ($pubdir+"/"+$result);
+//		string $cmd = ("echo "+$result+" | awk '{print $11}' | tr -d '\n'");
+//warning($cmd);
+//		$result = system($cmd);
+//warning("getPubFileForJobWithAssetAndType() : "+$result);
+	}
+	return $result;
+}
+
+proc string[] splitColonString(string $in)
+{
+	string $array[];
+	$num = `tokenize $in ";" $array`;
+	return $array;
+}
+
+proc string[] makeIdList(string $array[])
+{
+	string $ids[];
+	int $i = 0;
+	for ($a in $array) {
+		string $split[];
+		int $num = `tokenize $a "," $split`;
+		if ($num != 2)
+			error("assetManager -makeIdList : bad value" + $num);
+		$ids[$i] = $split[0];
+		$i++;
+	}
+	return $ids;
+}
+
+proc string[] makeNameList(string $array[])
+{
+	string $ids[];
+	int $i = 0;
+	for ($a in $array) {
+		/*
+		   string $split[];
+		   int $num = `tokenize $a "," $split`;
+		   if ($num != 2)
+		   error("assetManager -makeNameList : bad value, " + $num);
+		   $ids[$i] = $split[1];
+		 */
+		$ids[$i] = $a;
+		$i++;
+	}
+	return $ids;
+}
+
+proc buildTextScrollListItems(string $ctl, string $items[])
+{
+	for ($item in $items) {
+		textScrollList -e -append $item $ctl;
+	} 
+}
+
+proc buildOptionMenuGrpItems(string $ctl, string $items[])
+{
+	for ($item in $items) {
+		//print("// Building menu item : " + $ctl + "|OptionMenu " + $item + "\n");
+		menuItem -parent ($ctl + "|OptionMenu") -label $item $item;
+	} 
+	// HACK:0 is needed to redraw optionMenus correctly
+	if (`size $items` <= 1)
+		menuItem -parent ($ctl + "|OptionMenu") -label "";
+	if (`size $items` < 2)
+		menuItem -parent ($ctl + "|OptionMenu") -label "";
+}
+
+proc deleteTextScrollListItems(string $ctl)
+{
+	// Delete exisiting menu items.
+	int $numItems = `textScrollList -q -ni $ctl`;
+	if ($numItems != 0) {
+		string $itemsToDelete[] = `optionMenuGrp -q -ill $ctl`;
+		for ($item in $itemsToDelete) {
+			//print("// Deleting menu item : " + $item + "\n");
+			deleteUI -menuItem $item;
+		}
+	}
+}
+
+proc deleteOptionMenuGrpItems(string $ctl)
+{
+	// Delete exisiting menu items.
+	int $numItems = `optionMenuGrp -q -ni $ctl`;
+	if ($numItems != 0) {
+		string $itemsToDelete[] = `optionMenuGrp -q -ill $ctl`;
+		for ($item in $itemsToDelete) {
+			//print("// Deleting menu item : " + $item + "\n");
+			deleteUI -menuItem $item;
+		}
+	}
+}
+
+proc updateTextScrollListWithJobAndAsset(string $ctl, string $job, string $asset)
+{
+//warning("updateTextScrollListWithJobAndAsset "+$ctl+" "+$job+" "+$asset+";");
+	string $components[] = `getTypesForJobWithAsset $job $asset`;
+	textScrollList -e -ra $ctl;
+	if (`size $components` > 0) {
+		buildTextScrollListItems($ctl, $components);
+	}
+}
+
+global proc assetManagerUpdate(
+		string $mode,
+		string $jobsCtl,
+		string $assetsCtl,
+		string $shotsCtl,
+		string $typeCtl,
+		string $attrOptsCtl,
+		string $lastPubFileCtl)
+{
+	global string $lastPubFileDateCtl;
+	global string $lastPubFileUserCtl;
+	global string $origPubFileCtl;
+/*
+warning("assetManagerUpdate "
+	+$mode+" "
+	+$jobsCtl+" "
+	+$assetsCtl+" "
+	+$shotsCtl+" "
+	+$typeCtl+" "
+	+$attrOptsCtl+" "
+	+$lastPubFileCtl+" "
+	);
+*/
+
+	// Jobs
+	//
+	string $jobs[] = `getJobs`;
+	if ($mode == "init") {
+		buildTextScrollListItems($jobsCtl, $jobs);
+		$job = `jobFromCurrentFile`;
+		if ($job != "") {
+			textScrollList -e -selectItem $job $jobsCtl;
+			int $i[] = `textScrollList -q -sii $jobsCtl`;
+			textScrollList -e -shi $i[0] $jobsCtl;
+		}
+	}
+	string $job[] = `textScrollList -q -si $jobsCtl`;
+
+	// Assets
+	//
+	if ($mode == "jobchange" || $mode == "shotchange" || $mode == "init" ) {
+		if ($mode == "jobchange" || $mode == "init" ) {
+			string $assets[] = `getAssetsForJob $job[0]`;
+			textScrollList -e -ra $assetsCtl;
+			if (`size $assets` > 0)
+				buildTextScrollListItems($assetsCtl, $assets);
+		} else if ($mode == "shotchange") {
+			textScrollList -e -da $assetsCtl;
+		}
+	}
+
+	// Shots
+	//
+	if ($mode == "jobchange" || $mode == "assetchange" || $mode == "init") {
+		if ($mode == "jobchange" || $mode == "init") {
+			string $shots[] = `getShotsForJob $job[0]`;
+			textScrollList -e -ra $shotsCtl;
+			if (`size $shots` > 0) {
+				buildTextScrollListItems($shotsCtl, $shots);
+				string $s = `shotFromCurrentFile`;
+				string $assItems[] = `textScrollList -q -ai $assetsCtl`;
+				string $shotItems[] = `textScrollList -q -ai $shotsCtl`;
+				if (stringArrayContains($s, $shotItems)) {
+					$result = `textScrollList -e -selectItem $s $shotsCtl`;
+					int $i[] = `textScrollList -q -sii $shotsCtl`;
+					textScrollList -e -shi $i[0] $shotsCtl;
+				} else if (stringArrayContains($s, $assItems)) {
+					$result = `textScrollList -e -selectItem $s $assetsCtl`;
+					int $i[] = `textScrollList -q -sii $assetsCtl`;
+					textScrollList -e -shi $i[0] $assetsCtl;
+				}
+			}
+		} else if ($mode == "assetchange") {
+			textScrollList -e -da $shotsCtl;
+		}
+	}
+
+	// Asset Types
+	//
+	if ($mode == "assetchange" || $mode == "shotchange" || $mode == "jobchange" || $mode == "init") {
+		string $things[];
+		if ($mode == "assetchange") {
+			$things = `textScrollList -q -si $assetsCtl`;
+			updateTextScrollListWithJobAndAsset $typeCtl $job[0] $things[0];
+		} else if ($mode == "shotchange" || $mode == "init" || $mode == "jobchange") {
+			$things = `textScrollList -q -si $shotsCtl`;
+			updateTextScrollListWithJobAndAsset $typeCtl $job[0] $things[0];
+		}
+	}
+	string $type[] = `textScrollList -q -si $typeCtl`;
+
+	// Filename
+	//
+	if ($type[0] != "") {
+		string $things[];
+		$things = `textScrollList -q -si $assetsCtl`;
+		if ($things[0] == "")
+			$things = `textScrollList -q -si $shotsCtl`;
+		string $filename = `getPubFileForJobWithAssetAndType $job[0] $things[0] $type[0]`;
+//warning("filename = '"+$filename+"'");
+		if ($filename != "") {
+			textFieldGrp -e -en 1 -tx $filename $lastPubFileCtl;
+//warning("filename = "+$lastPubFileCtl);
+			string $date = getFileDate($filename);
+			string $owner = getFileOwner($filename);
+			textFieldGrp -e -en 1 -tx $date $lastPubFileDateCtl;
+			textFieldGrp -e -en 1 -tx $owner $lastPubFileUserCtl;
+		} else {
+			textFieldGrp -e -en 0 -tx "" $lastPubFileCtl;
+			textFieldGrp -e -en 0 -tx "" $lastPubFileDateCtl;
+			textFieldGrp -e -en 0 -tx "" $lastPubFileUserCtl;
+		}
+	} else {
+		textFieldGrp -e -en 0 -tx "" $lastPubFileCtl;
+		textFieldGrp -e -en 0 -tx "" $lastPubFileDateCtl;
+		textFieldGrp -e -en 0 -tx "" $lastPubFileUserCtl;
+		textFieldGrp -e -en 0 -tx "" $origPubFileCtl;
+	}
+}
+
+proc updateWorkspace(string $arg)
+{
+//	if ($arg != "") {
+	string $fileProj = projFromFilePath($arg);
+	$fileProj = $fileProj+"/"; // add a trailing slash hack for match below
+//warning ("projFromFilePath = "+$fileProj);
+	string $currentProj = `workspace -q -rd`;
+//warning ("currentProj      = "+$currentProj);
+	if ($fileProj != $currentProj) {
+		string $answer = `confirmDialog
+			-title "Confirm project setting"
+			-message ("Set project based on this file?")
+			-button "Yes"
+			-button "No"
+			-defaultButton "Yes"
+			-cancelButton "No"`;
+		if ($answer == "Yes") {
+			setProject $fileProj;
+			workspace -dir ($fileProj+"scenes/");
+			pv_redrawView;	// refresh the view.
+		}
+	}
+}
+
+//========================================================
+// assetManagerAction
+//========================================================
+global proc assetManagerAction(
+		string $mode,
+		string $jobsCtl,
+		string $assetsCtl,
+		string $shotsCtl,
+		string $typeCtl,
+		string $lastPubFileCtl,
+		string $ro,
+		string $io)
+{
+	string $jobs[] = `textScrollList -q -si $jobsCtl`;
+	string $job = $jobs[0];
+	string $assets[] = `textScrollList -q -si $assetsCtl`;
+	string $asset = $assets[0];
+	string $shots[] = `textScrollList -q -si $shotsCtl`;
+	string $shot = $shots[0];
+	string $types[] = `textScrollList -q -si $typeCtl`;
+	string $type = $types[0];
+	string $attrUpper = `toupper $type`;
+	string $attrLower = `tolower $type`;
+	string $currentFile = `file -q -sn`;
+	string $currentFileShort = `file -q -sn`;
+	string $filename = `textFieldGrp -q -tx $lastPubFileCtl`;
+	string $short = `file -q -sn -shn`;
+
+	// the interface should only ever have a one job or one shot
+	// asset selected at a time!
+	if ($shot != "" && $asset == "")
+		$asset = $shot;
+
+	string $assetLower = `tolower $asset`;
+	string $assetUpper = `toupper $asset`;
+	string $namespace = ($assetUpper+"_"+$attrUpper);
+
+	// what kind of asset do we have? job or shot?
+	string $pubAssetDir = ("/jobs/"+$job+"/assets/"+$asset+"/pub/"+$type);
+	if (!`filetest -d $pubAssetDir`)
+		$pubAssetDir = ("/jobs/"+$job+"/common/assets/"+$asset+"/pub/"+$type);
+	if (!`filetest -d $pubAssetDir`)
+		$pubAssetDir = ("/jobs/"+$job+"/shots/"+$asset+"/pub/"+$type);
+	if (!`filetest -d $pubAssetDir`)
+		error("Can't find published asset directory!");
+//warning("dest = "+$pubAssetDir);
+
+	string $pubname = ($assetLower+"_"+$attrLower+"_MASTER");
+	string $pubFilePath = ($pubAssetDir+"/"+$pubname);
+
+	if ($mode == "publish") {
+		// error checking.
+		if ($currentFile == "")
+			error("assetManagerAction : Won't publish bullshit (unsaved) files!");
+		if ($type == "")
+			error("No Asset Type selected to publish too!");
+
+		string $msg = "Please ensure everything below is correct!\n\n\n";
+		string $dialog = `confirmDialog
+			-message ("Publish this file as "+toupper($type)+" for "+toupper($asset)+"?")
+			-button "Publish"
+			-button "Cancel"
+			-defaultButton "Cancel"
+			-cancelButton "Cancel"
+			-dismissString "Cancel"`;
+		if ($dialog == "Publish") {
+//			if (`filetest -f ($pubAssetDir+"/"+$short)`) {
+//				error("File "+$short+" is not unique for publish to "+$pubAssetDir+", resave scene with new name and try again.");
+//			}
+			string $user = `getenv USER`;
+			$cmd = ("cp -p --backup=t "+$currentFile+" "+$pubAssetDir+"/");
+			warning($cmd);
+			system($cmd);
+//			$cmd = ("chmod 444 "+$pubAssetDir+"/"+$short);
+//			warning($cmd);
+//			system($cmd);
+			$cmd = ("cd "+$pubAssetDir+"; ln -sf "+$short+" "+$pubFilePath);
+			print("// "+$cmd);
+			system($cmd);
+			textFieldGrp -en 1 -e -tx ($pubAssetDir+"/"+$short) $lastPubFileCtl;
+		}
+	} else if ($mode == "reference") {
+		int $displayLayers = `checkBoxGrp -q -v1 $ro`;
+		int $shaders = `checkBoxGrp -q -v2 $ro`;
+		string $opts = "";
+		if ($displayLayers && $shaders)
+			file -r -gl -shd "displayLayers" -shd "shadingNetworks" -ns $namespace -op "v=0;p=17" $pubFilePath;
+		else if ($displayLayers)
+			file -r -gl -shd "displayLayers" -ns $namespace -op "v=0;p=17" $pubFilePath;
+		else if ($shaders)
+			file -r -gl -shd "shadingNetworks" -ns $namespace -op "v=0;p=17" $pubFilePath;
+		else
+			file -r -gl -ns $namespace -op "v=0;p=17" $pubFilePath;
+		updateWorkspace($pubFilePath);
+	} else if ($mode == "import") {
+		int $namespaces = `checkBoxGrp -q -v1 $io`;
+		int $shaders = `checkBoxGrp -q -v2 $io`;
+		if ($namespaces && $shaders)
+			file -i -rdn -ns $namespace -op "v=0;p=17" -pr $pubFilePath;
+		else if ($namespaces)
+			file -i -ns $namespace -op "v=0;p=17" -pr $pubFilePath;
+		else if ($shaders)
+			file -i -rdn -op "v=0;p=17" -pr $pubFilePath;
+		else
+			file -i -op "v=0;p=17" -pr $pubFilePath;
+	} else if ($mode == "open") {
+//warning($pubFilePath);
+//warning(`getLinkSource $pubFilePath`);
+		string $linkSrc = `getLinkSource $pubFilePath`;
+		file -f -op "v=0" -o ($pubAssetDir+"/"+$linkSrc);
+		updateWorkspace($pubFilePath);
+	} else {
+		error("assetManagerAction : Error in calling function.");
+	}
+}
+
+global proc AM_newTypeCmd(string $jobsCtl, string $assetsCtl, string $shotsCtl, string $typeCtl)
+{
+	string $job[] = `textScrollList -q -si $jobsCtl`;
+	string $asset[] = `textScrollList -q -si $assetsCtl`;
+	string $shot[] = `textScrollList -q -si $shotsCtl`;
+	string $dir;
+	string $dialog = `promptDialog
+		-message ("Enter name of new Type to create")
+		-button "Create"
+		-button "Cancel"
+		-defaultButton "Create"
+		-cancelButton "Cancel"
+		-dismissString "Cancel"`;
+	string $base;
+	if ($asset[0] != "")
+		$base = ("/jobs/"+$job[0]+"/common/assets/"+$asset[0]+"/pub");
+	else if ($shot[0] != "")
+		$base = ("/jobs/"+$job[0]+"/shots/"+$shot[0]+"/pub");
+	else
+		error("AM_newTypeCmd : no shots or assets!");
+	string $new = `promptDialog -q -tx`;
+	$new = `tolower $new`;
+	string $dir = ($base+"/"+$new);
+//warning $dir;
+	if ($dialog == "Create") {
+		if (`filetest -d $base`) {
+			warning("Creating "+$dir);
+			sysFile -md $dir;
+		} else
+			error($dir+" : No such directory.");
+	}
+	if ($asset[0] != "")
+		updateTextScrollListWithJobAndAsset $typeCtl $job[0] $asset[0];
+	else if ($shot[0] != "")
+		updateTextScrollListWithJobAndAsset $typeCtl $job[0] $shot[0];
+}
+
+global proc assetManager()
+{
+	global string $lastPubFileDateCtl = "";
+	global string $lastPubFileUserCtl = "";
+	global string $origPubFileCtl = "";
+
+	string $procName = "assetManager";
+	if (`window -exists $procName`)
+		deleteUI -window $procName;
+	string $window = `window -rtf 1 -t "ASSet MANager" $procName`;
+
+	string $form = `formLayout -nd 3 assform`;
+
+	string $jobsCtl = `textScrollList -numberOfRows 18 jobsCtl`;
+	string $assetsCtl = `textScrollList -numberOfRows 3 assetsCtl`;
+	string $shotsCtl = `textScrollList -numberOfRows 13 shotsCtl`;
+	string $typeCtl = `textScrollList -numberOfRows 18 typeCtl`;
+	string $subCtl = `textScrollList -vis 0 -numberOfRows 18 subCtl`;
+
+// older....
+	string $lastPubFileCtl = `textFieldGrp -label "Last Published File" -adj 2 -editable 0 -en 0 lastPubFileCtl`;
+	$lastPubFileDateCtl = `textFieldGrp -label "Publish Date" -adj 2 -editable 0 -en 0 lastPubFileDateCtl`;
+	$lastPubFileUserCtl = `textFieldGrp -label "Published by" -adj 2 -editable 0 -en 0 lastPubFileUserCtl`;
+	$origPubFileCtl = `textFieldGrp -label "Published From" -adj 2 -editable 0 -en 0 origPubFileCtl`;
+	string $attrOptsCtl = `checkBox -label "List All Attributes" -vis 0 -v 0 -al "left"`;
+	string $rs = `checkBoxGrp -label "Reference Sharing" -ncb 2 -v1 0 -v2 0 -la2 "Display Layers" "Shaders"`;
+	string $is = `checkBoxGrp -label "Import Options" -ncb 2 -v1 0 -v2 0 -la2 "Namespaces" "Share Shaders"`;
+	
+	string $jobsLabel = `text -label "Jobs" jobsLabel`;
+	string $assetsLabel = `text -label "Job Assets" assetsLabel`;
+	string $shotsLabel = `text -label "Shot Assets" shotsLabel`;
+	string $typeLabel = `text -label "Asset Types" typeLabel`;
+	string $subLabel = `text -vis 0 -label "Sub-types" subLabel`;
+
+	// Update the command callbacks
+	string $cc;
+
+	$cc = ("assetManagerUpdate jobchange"
+			+" "+$jobsCtl+" "+$assetsCtl+" "+$shotsCtl+" "+$typeCtl+" "+$attrOptsCtl+" "+$lastPubFileCtl);
+	textScrollList -e -sc $cc $jobsCtl;
+
+	$cc = ("assetManagerUpdate assetchange"
+			+" "+$jobsCtl+" "+$assetsCtl+" "+$shotsCtl+" "+$typeCtl+" "+$attrOptsCtl+" "+$lastPubFileCtl);
+	textScrollList -e -sc $cc $assetsCtl;
+
+	$cc = ("assetManagerUpdate shotchange"
+			+" "+$jobsCtl+" "+$assetsCtl+" "+$shotsCtl+" "+$typeCtl+" "+$attrOptsCtl+" "+$lastPubFileCtl);
+	textScrollList -e -sc $cc $shotsCtl;
+
+	$cc = ("assetManagerUpdate typechange"
+			+" "+$jobsCtl+" "+$assetsCtl+" "+$shotsCtl+" "+$typeCtl+" "+$attrOptsCtl+" "+$lastPubFileCtl);
+	textScrollList -e -sc $cc $typeCtl;
+
+	$cc = ("assetManagerUpdate attrOptsChange"
+			+" "+$jobsCtl+" "+$assetsCtl+" "+$shotsCtl+" "+$typeCtl+" "+$attrOptsCtl+" "+$lastPubFileCtl);
+	checkBox -e -cc $cc $attrOptsCtl;
+
+	// Initialize
+	assetManagerUpdate "init" $jobsCtl $assetsCtl $shotsCtl $typeCtl $attrOptsCtl $lastPubFileCtl;
+
+	// UI Controls
+	string $sep = `separator`;
+	string $sep2 = `separator`;
+	string $sep3 = `separator`;
+	string $newAssetBtn = `button -vis 0 -en 0 -label "New Asset" newAssetBtn`;
+	string $newTypeBtn = `button -label "New Asset Type" newTypeBtn`;
+	string $cc = ("AM_newTypeCmd "+$jobsCtl+" "+$assetsCtl+" "+$shotsCtl+" "+$typeCtl);
+	button -e -c $cc $newTypeBtn;
+
+	// Buttons
+	string $bf = `formLayout -numberOfDivisions 6`;
+	string $pubBtn = `button -label "Publish" publish`;
+	string $openBtn = `button -label "Open Published" open`;
+	string $openOrigBtn = `button -label "Open Original" -en 0 openOrig`;
+	string $ra = `button -label "Reference" reference`;
+	string $ia = `button -label "Import" import`;
+	string $cl = `button -label "Close" -c ("window -e -vis 0 " + $window)`;
+
+
+	// Assign button commands
+	// Publish
+	$cc = ("assetManagerAction publish "+
+			$jobsCtl+" "+$assetsCtl+" "+$shotsCtl+" "+$typeCtl+" "+$lastPubFileCtl+" "+$rs+" "+$is);
+	button -e -c $cc $pubBtn;
+	// Reference
+	$cc = ("assetManagerAction reference "+
+			$jobsCtl+" "+$assetsCtl+" "+$shotsCtl+" "+$typeCtl+" "+$lastPubFileCtl+" "+$rs+" "+$is);
+	button -e -c $cc $ra;
+	// Import
+	$cc = ("assetManagerAction import "+
+			$jobsCtl+" "+$assetsCtl+" "+$shotsCtl+" "+$typeCtl+" "+$lastPubFileCtl+" "+$rs+" "+$is);
+	button -e -c $cc $ia;
+	// Open
+	$cc = ("assetManagerAction open "+
+			$jobsCtl+" "+$assetsCtl+" "+$shotsCtl+" "+$typeCtl+" "+$lastPubFileCtl+" "+$rs+" "+$is);
+	button -e -c $cc $openBtn;
+
+	formLayout -edit
+		-af $jobsLabel "top" 5
+		-af $jobsLabel "left" 5
+		-an $jobsLabel "right"
+		-an $jobsLabel "bottom"
+
+		-ac $jobsCtl "top" 5 $jobsLabel
+		-af $jobsCtl "left" 5
+		-ap $jobsCtl "right" 5 1
+		-an $jobsCtl "bottom"
+
+		-af $assetsLabel "top" 5
+		-ac $assetsLabel "left" 5 $jobsCtl
+		-an $assetsLabel "right"
+		-an $assetsLabel "bottom"
+
+		-ac $assetsCtl "top" 5 $assetsLabel
+		-ap $assetsCtl "left" 5 1
+		-ap $assetsCtl "right" 5 2
+		-an $assetsCtl "bottom"
+
+		-ac $shotsLabel "top" 5 $assetsCtl
+		-ac $shotsLabel "left" 5 $jobsCtl
+		-an $shotsLabel "right"
+		-an $shotsLabel "bottom"
+
+		-ac $shotsCtl "top" 5 $shotsLabel
+		-ap $shotsCtl "left" 5 1
+		-ap $shotsCtl "right" 5 2
+		-an $shotsCtl "bottom"
+
+		-af $typeLabel "top" 5
+		-ac $typeLabel "left" 5 $assetsCtl
+		-an $typeLabel "right"
+		-an $typeLabel "bottom"
+
+		-ac $typeCtl "top" 5 $typeLabel
+		-ac $typeCtl "left" 5 $assetsCtl
+		-ap $typeCtl "right" 5 3
+		-an $typeCtl "bottom" 
+
+		-af $subLabel "top" 5
+		-ac $subLabel "left" 5 $typeCtl
+		-an $subLabel "right"
+		-an $subLabel "bottom"
+
+		-ac $subCtl "top" 5 $subLabel
+		-ac $subCtl "left" 5 $typeCtl
+		-af $subCtl "right" 5
+		-an $subCtl "bottom" 
+
+		-ac $newAssetBtn "top" 5 $jobsCtl
+		-ac $newAssetBtn "left" 5 $jobsCtl
+		-an $newAssetBtn "right"
+		-an $newAssetBtn "bottom"
+		
+		-ac $newTypeBtn "top" 5 $jobsCtl
+		-ac $newTypeBtn "left" 5 $assetsCtl
+		-af $newTypeBtn "right" 5
+		-an $newTypeBtn "bottom"
+
+		-ac $sep2 "top"    5 $newTypeBtn
+		-af $sep2 "left"   0
+		-af $sep2 "right"  0
+		-an $sep2 "bottom"
+
+		-ac $lastPubFileCtl "top"    5 $sep2
+		-af $lastPubFileCtl "left"   5
+		-af $lastPubFileCtl "right"  5
+		-an $lastPubFileCtl "bottom" 
+
+		-ac $lastPubFileDateCtl "top"    5 $lastPubFileCtl
+		-af $lastPubFileDateCtl "left"   5
+		-af $lastPubFileDateCtl "right"  5
+		-an $lastPubFileDateCtl "bottom" 
+
+		-ac $lastPubFileUserCtl "top"    5 $lastPubFileDateCtl
+		-af $lastPubFileUserCtl "left"   5
+		-af $lastPubFileUserCtl "right"  5
+		-an $lastPubFileUserCtl "bottom" 
+
+		-ac $origPubFileCtl "top"    5 $lastPubFileUserCtl
+		-af $origPubFileCtl "left"   5
+		-af $origPubFileCtl "right"  5
+		-an $origPubFileCtl "bottom" 
+
+		-ac $sep "top"    5 $origPubFileCtl
+		-af $sep "left"   0
+		-af $sep "right"  0
+		-an $sep "bottom"
+
+		-ac $attrOptsCtl "top"	5	$sep2
+		-ac $attrOptsCtl "left"	5	$typeCtl
+		-af $attrOptsCtl "right"	5
+		-an $attrOptsCtl "bottom"
+
+		-ac $rs "top"	5	$sep
+		-af $rs "left"   5
+		-af $rs "right"  5
+		-an $rs "bottom"
+
+		-ac $is "top"	5	$rs
+		-af $is "left"   5
+		-af $is "right"  5
+		-an $is "bottom"
+
+		-ac $sep3 "top"	5 $is
+		-af $sep3 "left" 5
+		-af $sep3 "right" 5
+		-an $sep3 "bottom"
+
+		-ac $bf "top"    5 $sep3
+		-af $bf "left"   5
+		-af $bf "right"  5
+		-af $bf "bottom" 5
+
+		$form;
+
+	formLayout -edit
+		-af  $pubBtn "top"    5
+		-af  $pubBtn "left"   5
+		-af  $pubBtn "bottom" 5
+		-ap  $pubBtn "right"  5 1
+
+		-af  $openBtn "top"    5
+		-ap  $openBtn "left"   5 1
+		-ap  $openBtn "right"  5 2
+		-af  $openBtn "bottom" 5
+
+		-af  $openOrigBtn "top"    5
+		-ap  $openOrigBtn "left"   5 2
+		-ap  $openOrigBtn "right"  5 3
+		-af  $openOrigBtn "bottom" 5
+
+		-af  $ra "top"    5
+		-ap  $ra "left"   5 3
+		-ap  $ra "right"  5 4
+		-af  $ra "bottom" 5
+
+		-af  $ia "top"    5
+		-ap  $ia "left"   5 4
+		-ap  $ia "right"  5 5
+		-af  $ia "bottom" 5
+
+		-af  $cl "top"    5
+		-ap  $cl "left"   5 5
+		-af  $cl "right"  5  
+		-af  $cl "bottom" 5
+
+		$bf;
+
+	showWindow $window;
+}
+

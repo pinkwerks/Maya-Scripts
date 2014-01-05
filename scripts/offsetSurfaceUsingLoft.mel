@@ -1,0 +1,248 @@
+// Copyright (C) 1997-1998 Alias|Wavefront,
+// a division of Silicon Graphics Limited.
+//
+// The information in this file is provided for the exclusive use of the
+// licensees of Alias|Wavefront.  Such users have the right to use, modify,
+// and incorporate this code into other products for purposes authorized
+// by the Alias|Wavefront license agreement, without fee.
+//
+// ALIAS|WAVEFRONT DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
+// INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO
+// EVENT SHALL ALIAS|WAVEFRONT BE LIABLE FOR ANY SPECIAL, INDIRECT OR
+// CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
+// DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+// TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+// PERFORMANCE OF THIS SOFTWARE.
+//
+// offsetSurfaceUsingLoft - offsets one or more NURBS surfaces
+// 
+// Usage: 
+//   offsetSurfaceUsingLoft(float <distance>, int <nsamples>); 
+//
+//  where: <distance> is distance to offset the surface (can be negative) 
+//     <nsamples> is the number of points per surface
+//            patch that are sampled
+// 
+// How it works:
+//   1. Samples points along V isoparms and build degree 1 curves.
+//   2. Use fitBspline to build cubic splines which interpolate
+//    the points of the degree 1 curves.
+//   3. Use loft to build a surface through these cubic curves.
+// 
+// Usage hints:
+//  - Using a larger number of samples increases accuracy, but can get
+//      very slow. Try with 1 first, then increase as needed.
+//  - If the surface is periodic, try to have it periodic in U rather
+//      than V for best results. The reverseSurface 'swap' option can be
+//      used for this. One example where this is needed is for revolved
+//      surfaces, since these are created periodic in V, so should be
+//      swapped before offsetting. If the original surface is periodic in
+//      U, the offset surface will also be created periodic in U.
+//
+// Deficiencies:
+//   This is by no means an industrial strength surface offset.
+//   For example:
+//    - there is no check for self-intersection in the resulting
+//    offset surface, surfaces with sharp corners are unlikely to
+//    offset well, etc.
+//    - offsets of surfaces which are periodic in V, or closed in
+//      either direction can have kinks. For periodic surfaces, having
+//      the surface periodic in U rather than V will help.
+//    - Can be very slow for large surfaces or large numbers of samples.
+//    - as with all offsets, it works best if the offset distance is
+//    small relative to the size of the object.
+//
+// Author: MPW
+//
+//    This is an unsupported script, so use at your own risk.
+//
+proc int getNurbsSurfaceKnots(string $srfName, float $uKnots[], float $vKnots[] )
+//
+//      Description :
+//    Get surface knots in U and V
+{
+
+    // create info Node.
+    string $infoNode ;
+    if( catch( $infoNode = `createNode surfaceInfo` ) ) {
+        return 1; // failed
+    } 
+
+    // connect surface on to the info node.
+    string $outAttr = $srfName + ".local" ; 
+    string $inAttr = $infoNode + ".is" ;
+    connectAttr $outAttr $inAttr ;
+
+    // read the knots.
+    $uKnots = `getAttr ($infoNode + ".knotsU")`;    
+    $vKnots = `getAttr ($infoNode + ".knotsV")`;    
+
+    // delete surface info node.
+    delete $infoNode ;
+
+    // worked
+    return 0;
+}
+
+proc int getNurbsSurfaceOffset( 
+    string $srf, float $distance, int $samplesPerSpan)
+//
+//      Description :
+//    Compute offset surface by computing points 
+//  regularly spaced in U and V on the surface, fitting curves
+//  and then lofting a surface through the curves.
+// 
+{
+    int $i; // loop counter
+ 
+    // number of spans
+    int $nspansU = eval("getAttr " + $srf + ".spansU");
+    int $nspansV = eval("getAttr " + $srf + ".spansV");
+
+    // degree
+    int $degreeU = eval("getAttr " + $srf + ".degreeU");
+    int $degreeV = eval("getAttr " + $srf + ".degreeV");
+
+    // knots
+    float $uKnots[];
+    float $vKnots[];
+    if(getNurbsSurfaceKnots($srf, $uKnots, $vKnots)) {
+        return 1; // failed
+    }
+
+    // first and last knot values to use 
+    int $firstU = $degreeU - 1;
+    int $lastU = $nspansU + $firstU;
+    int $firstV = $degreeV - 1;
+    int $lastV = $nspansV + $firstV;
+
+    // loop over knot values
+    int $uIndex, $vIndex;
+    int $uSample, $vSample;
+    int $uSampleMax, $vSampleMax;
+    float $u, $v;
+
+    string $allCurves;
+
+    // check if periodic in U. If so, dont need to evaluate last U
+    // isoparm on surface since it is coincident with the first
+    int $formInU = eval("getAttr " + $srf + ".formU");
+
+    // loop over U spans
+    for($uIndex = $firstU; $uIndex < $lastU; $uIndex++) {
+
+        // maximum number of samples for this span
+        $uSampleMax = ($formInU == 2 || $uIndex < $lastU-1) ? $samplesPerSpan - 1 : $uSampleMax = $samplesPerSpan;
+
+        // parameter interval for this span
+        float $uInterval = $uKnots[$uIndex+1] - $uKnots[$uIndex];
+
+        // loop over U samples
+        for($uSample = 0; $uSample <= $uSampleMax; $uSample++) {
+
+            // get value of U
+            $u = $uKnots[$uIndex] + $uSample*$uInterval/float($samplesPerSpan);
+            // make sure rouding errors dont take it off the end
+            if($uIndex == ($formInU == 2 || $lastU-1) && $uSample == $uSampleMax) {
+                $u = $uKnots[$lastU];
+            }
+
+            // make a degree 1 curve passing through these offset points
+            string $curveCmd = "curve -d 1";
+
+            // loop over V spans
+            for($vIndex = $firstV; $vIndex < $lastV; $vIndex++) {
+
+                // maximum number of samples for this span
+                $vSampleMax = ($vIndex < $lastV-1) ? $samplesPerSpan - 1 : $vSampleMax = $samplesPerSpan;
+                // parameter interval for this span
+                float $vInterval = $vKnots[$vIndex+1] - $vKnots[$vIndex];
+
+                // loop over V samples
+                for($vSample = 0; $vSample <= $vSampleMax; $vSample++) {
+
+                    $v = $vKnots[$vIndex] + $vSample*$vInterval/float($samplesPerSpan);
+                    // make sure rouding errors dont take it off the end
+                    if($vIndex == ($lastV-1) && $vSample == $vSampleMax) {
+                        $v = $vKnots[$lastV];
+                    }
+
+                    // compute the surface point
+                    float $pos[] = eval ("pointOnSurface -u " + $u + " -v " + $v + " -top false -p " + $srf);
+                    float $norm[] = eval ("pointOnSurface -u " + $u + " -v " + $v + " -top false -n " + $srf);
+
+                    // adjust normal for the offset distance required
+                    float $scaling = $distance / sqrt($norm[0]*$norm[0] + $norm[1]*$norm[1] + $norm[2]*$norm[2]);
+                    
+                    float $offsetPos[3];
+                    for($i=0; $i<3; $i++) { 
+                        $offsetPos[$i] = $pos[$i] + $scaling*$norm[$i];
+                    }
+                    //print ("Position at uv " + $u + " " + $v + " is " + $pos[0] + " " + $pos[1] + " " + $pos[2] + "\n");
+                    //print ("Normal at uv " + $u + " " + $v + " is " + $norm[0] + " " + $norm[1] + " " + $norm[2] + "\n");
+                    //print ("Offset at uv " + $u + " " + $v + " is " + $offsetPos[0] + " " + $offsetPos[1] + " " + $offsetPos[2] + "\n");
+
+                    string $pt = (" -p " + $offsetPos[0] + " " + $offsetPos[1] + " " + $offsetPos[2]);
+                    $curveCmd += $pt;
+                }
+            }
+            //print ("Curve cmd is " + $curveCmd);
+            string $deg1crv = eval($curveCmd);
+            string $deg3crv[];
+            if(catch($deg3crv = eval("fitBspline -ch 0 -tol 0.0001 " + $deg1crv))) {
+                // unable to fit spline, maybe degenerate points. Use degree 1 curve instead
+                print ("Ignore above error - everything is under control\n");
+                $allCurves += " " + $deg1crv;
+            } else {
+                // worked - take degree 3 curve
+                $allCurves += " " + $deg3crv[0];
+                delete $deg1crv;
+            }
+        }
+    }
+    //print ("All curves are: " + $allCurves + "\n");
+    // now loft the curves
+    string $loftCmd = "loft -ch 0 -d 3 ";
+    if($formInU == 2) $loftCmd += " -c on ";
+    $loftCmd += $allCurves;
+    //print("Loft command is " + $loftCmd + "\n");
+
+    // close flag - check basic surface first...
+    string $outsrf[] = eval($loftCmd);
+    print ("Created offset surface " + $outsrf[0] + "\n");
+
+    // delete all input curves
+    eval("delete " + $allCurves);
+
+    // return the surface name??
+    return 0;
+}
+
+
+global proc offsetSurfaceUsingLoft(float $distance, int $samplesPerSpan)
+{
+    // Run filter to select only the NURBS surfaces
+    global int $gSelectNurbsSurfacesBit ;
+    string $srfList[] = `filterExpand -ex true 
+        -sm $gSelectNurbsSurfacesBit`;
+    int $len = size($srfList) ;
+    if( $len == 0 ) {
+        print "No NURBS surfaces selected\n" ;
+        return;
+    }
+
+    // always need at least one sample per span
+    if($samplesPerSpan < 1) $samplesPerSpan = 1;
+
+    // Work on all surfaces
+    for($srfNum = 0; $srfNum < $len; $srfNum++) {
+        string $srf = $srfList[$srfNum] ;
+
+        // do the offset
+        if(getNurbsSurfaceOffset($srf, $distance, $samplesPerSpan)) {
+            print ("Failed to compute box for surface " + $srf + "\n");
+            break;
+        }
+    }
+
+}

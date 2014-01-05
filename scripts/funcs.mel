@@ -1,0 +1,259 @@
+global proc float lerp(float $v0, float $v1, float $val)
+{
+    if ($val < 0) return $v0;
+    if ($val > 1) return $v1;
+    return (1.0 - $val) * $v0 + $val * $v1;
+}
+
+global proc float lerp2(float $v0, float $v1, float $val0, float $val1, float $val)
+{
+    float $ival;
+    if ($val1 > $val0) {
+	$ival = linstep($val0, $val1, $val);
+    } else {
+	$ival = 1.0 - linstep($val1, $val0, $val);
+    }
+    if ($ival < 0) return $v0;
+    if ($ival > 1) return $v1;
+    return (1.0 - $ival) * $v0 + $ival * $v1;
+}
+
+global proc vector mix(vector $v0, vector $v1, float $val)
+{
+    float $x = lerp($v0.x, $v1.x, $val);
+    float $y = lerp($v0.y, $v1.y, $val);
+    float $z = lerp($v0.z, $v1.z, $val);
+    return <<$x,$y,$z>>;
+}
+
+global proc float fractal(vector $p, int $octaves)
+{
+    $gain   = 0.5;
+    $lac    = 2.0;
+
+    $P = $p;
+    $val = 0.0;
+    $amp = 1.0;
+    for ($i=0; $i<$octaves; $i++) {
+	$val	+= $amp * noise($P);
+	$amp	*= $gain;
+	$P	*= $lac;
+    }
+    return $val;
+}
+
+global proc vector pfractal(vector $p, int $octaves)
+{
+    $gain   = 0.5;
+    $lac    = 2.0;
+
+    $P = $p;
+    $val = <<0.0,0.0,0.0>>;
+    $amp = 1.0;
+    for ($i=0; $i<$octaves; $i++) {
+	$val	+= $amp * <<noise($P.x), noise($P.y+1000), noise($P.z+2000)>>;
+	$amp	*= $gain;
+	$P	*= $lac;
+    }
+    return $val;
+}
+
+global proc vector turb(vector $p, int $octaves)
+{
+    return <<fractal($p, $octaves),
+	     fractal($p+<<1000,1000,1000>>, $octaves),
+	     fractal($p+<<2000,2000,2000>>, $octaves)>>;
+}
+
+global proc setCam(string $cam)
+{
+    $cams = `listCameras`;
+    for ($c in $cams) {
+	setAttr($c+".renderable", 0);
+    }
+    setAttr($cam+".renderable", 1);
+}
+
+global proc setImagePlane(string $plane)
+{
+    $planes	= `ls -type imagePlane`;
+    for ($p in $planes) {
+	setAttr($p+".displayMode", 0);
+    }
+    if ($plane != "") {
+	$planes	= `ls -type imagePlane $plane`;
+	for ($p in $planes) {
+	    setAttr($p+".displayMode", 3);
+	}
+    }
+}
+
+global proc setOutImagesDir(string $dir)
+{
+    workspace -rt images $dir;
+    workspace -u;
+    workspace -s;
+}
+
+global proc setShadows(string $type)
+{
+    $lights = `ls -type spotLight`;
+    for ($light in $lights) {
+	$shadows = (getAttr($light+".useDepthMapShadows") ||
+		    getAttr($light+".useRayTraceShadows"));
+	if ($type == "rt") {
+		setAttr($light+".useRayTraceShadows", $shadows);
+	} else {
+		setAttr($light+".useDepthMapShadows", $shadows);
+	}
+    }
+}
+		
+global proc prepRender (string $type, string $cam, int $fs, int $fe,
+			string $outdir, string $element)
+{
+    if ($type == "hw") {
+	setAttr defaultHardwareRenderGlobals.extension 4;
+	setAttr defaultHardwareRenderGlobals.startFrame $fs;
+	setAttr defaultHardwareRenderGlobals.endFrame $fe;
+	setAttr defaultHardwareRenderGlobals.geometryMask 1;
+	glRenderWin;
+	glRenderEditor -e -lookThru $cam hardwareRenderView;
+	setAttr -type "string" defaultHardwareRenderGlobals.filename $element;
+    } else {
+	setAttr defaultRenderGlobals.startFrame $fs;
+	setAttr defaultRenderGlobals.endFrame $fe;
+	setCam $cam;
+	setAttr -type "string" defaultRenderGlobals.imageFilePrefix $element;
+	setAttr defaultRenderQuality.enableRaytracing ($type == "rt"); 
+	setShadows($type);
+    }
+
+    setOutImagesDir($outdir);
+
+    print ("rendering "+$element+" to: "+$outdir);
+}
+
+global proc hideFamily(string $nodes){};
+global proc hideFamily(string $nodes)
+{
+    string $nodeList[];
+    tokenize($nodes, $nodeList);
+
+    for ($node in $nodeList) {
+	$parent	= `listRelatives -pa -parent $node`;
+	if (size($parent) == 1) {
+	    hideFamily($parent[0]);
+	    $siblings = `listRelatives -pa -children $parent`;
+	    for ($child in $siblings) {
+		hide $child;
+	    }
+	} else {
+	    hide $node;
+	}
+    }
+}
+
+global proc showOnly(string $nodes)
+{
+    string $nodeList[], $tmp[];
+    tokenize($nodes, $tmp);
+    $nodeList = `ls $tmp`;
+    for ($node in $nodeList) {
+	hideFamily($node);
+    }
+    for ($node in $nodeList) {
+	showHidden -above $node;
+    }
+}
+
+global proc setAttrs(string $nodes, string $attr, float $val)
+{
+    string $nodeList[], $tmp[];
+    tokenize($nodes, $tmp);
+    $nodeList = `ls $tmp`;
+    for ($node in $nodeList) {
+	setAttr($node+"."+$attr, $val);
+    }
+}
+
+global proc connectAttrs(string $outAttr, string $inAttr)
+{
+    string $nodeList[], $tmp[];
+    //    tokenize($nodes, $tmp);
+    $nodeList = `ls -sl`;
+    for ($node in $nodeList) {
+      connectAttr -f $outAttr ($node+"."+$inAttr);
+    }
+}
+
+global proc string mergeParts()
+{
+    $sel = `ls -sl`;
+
+    $cmd = "particle";
+    for ($node in $sel) {
+	$num = getAttr($node+".count");
+	for ($p=0; $p<$num; $p++) {
+	    float $pos[] = `particle -at worldPosition -order $p -q $node`;
+	    $cmd += " -p "+<<$pos[0],$pos[1],$pos[2]>>;
+	}
+    }
+    $result	= eval($cmd);
+    $newNode	= $result[0];
+
+    $renderType = getAttr($node+".particleRenderType");
+    setAttr($newNode+".particleRenderType", $renderType);
+    return $newNode;
+}
+
+global proc float mute(string $switchNode, float $val)
+{
+    $enabled = `getAttr ($switchNode+".visibility")`;
+    return ($enabled ? $val : 0.0);
+}
+
+global proc string isCurve(string $itemName)
+//
+//	Description:
+//		Return the shape name if the item is a curve or the
+//		transform above a curve. Else return "".
+//
+{
+	if (nodeType($itemName) != "nurbsCurve") {
+		string $children[] = `listRelatives $itemName`;
+		$itemName = "";
+		for ($child in $children) {
+			if (nodeType($child) == "nurbsCurve") {
+				int $intermediateObj = `getAttr ($child+".io")`;
+				if (! $intermediateObj) {
+					$itemName = $child;
+					break;
+				}
+			}
+		}
+	}
+	return $itemName;
+}
+
+global proc zeroCurve()
+{
+    $sel = `ls -sl`;
+    $curveName = isCurve($sel[0]);
+    //    print (size($curveName+".spans")+"\n");
+    $ncvs = `getAttr ($curveName+".spans")` + `getAttr ($curveName+".degree")`;
+    for ($i=0; $i<$ncvs; $i++) {
+	setAttr ($curveName+".controlPoints["+$i+"].xValue") 0;
+	setAttr ($curveName+".controlPoints["+$i+"].yValue") $i;
+	setAttr ($curveName+".controlPoints["+$i+"].zValue") 0;
+    }
+}
+
+global proc printMyParentCmd()
+{
+    $sel = `ls -sl`;
+    for ($node in $sel) {
+        $p = `listRelatives -p $node`;
+        print("parent -r "+$node+" "+$p[0]+";\n");
+    }
+};

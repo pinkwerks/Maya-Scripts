@@ -1,0 +1,58 @@
+global proc hdxMakeMotionCurve() 
+{
+
+print ( "HDX_INFO : The hdxMakeMotionCurve script makes an edit point per frame for accuracy - use rebuild curve to thin it out \n") ;
+print ( "HDX_INFO : If using curve as a motion path - make sure to have the \"Parametric Length\" toggled on for perframe accuracy \n" ) ; 
+
+int $start = `playbackOptions -query -min `  ; 
+int $end = `playbackOptions -query -max ` ; 
+string $snapShots[] = `snapshot  -motionTrail 1  -increment 1 -constructionHistory 0 -startTime $start -endTime $end ` ;
+
+string $node ; 
+string $cmd ; 
+	for ( $node in $snapShots )
+	{
+
+	float $pts[] = ` getAttr ($node + ".points" ) `  ; 
+	
+	delete $node ; 
+
+	// create a curve with n edit points 
+	// For each frame we need an ep 
+	// using editpoints instead of cvs so that I can guarantee that curve sticks to anim position 
+	// the snapShotHandle.points 
+
+	int $epCt = size($pts)/4 ; 
+	int $cvCt = $epCt + 2 ; // degree 3 curve , epCt + degree - 1 
+	int $i , $k ; 
+
+	// Make curve 
+	
+	// Beginner knots 
+	$cmd = "curve -d 3 -k 0 " ; 
+
+	for ( $i = 0 ; $i < $cvCt ; $i++ )
+	{
+	$k = $i < 2 ? 0 : $i - 1 ; 
+        $k = $i >= $epCt ? $epCt - 1 :  $k ; 
+	$cmd += " -k " + $k + " -p 0 0 0 " ; 
+
+	}
+	
+	$cmd  += " -k " + ($epCt - 1 ) ; 
+
+	string $crv = `eval  $cmd `; 
+
+	// Now that the curve is made , move the edit points to the per frame location 
+	// move -ws 0 0 0 curve2.ep[5] 
+
+	for ( $i = 0 ; $i < $epCt ; $i++ )
+	{
+	
+	move -ws $pts[$i*4] $pts[$i* 4 + 1] $pts[$i * 4 + 2] ($crv + ".ep[" + $i + "]" ) ; 
+
+	}
+
+
+}
+}

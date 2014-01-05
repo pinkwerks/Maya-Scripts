@@ -1,0 +1,58 @@
+//
+// v.11 <pinkwerks@netscape.net>
+//
+
+global proc
+cpLastThingToThings(string $mode)
+{
+    waitCursor -state on;
+
+    int $i;
+    float $position[];
+    string $things[] = `ls -sl -fl -l`;
+	int $size = `size $things`;
+    string $thing;
+    string $copyThing = $things[$size - 1];
+    string $originalSelection[] = $things;
+	string $dupe[];
+	float $m[16];
+	string $parent[];
+
+    for ($i = 0; $i < ($size - 1); $i++) {
+		$thing = $things[$i];
+		$parent = `listRelatives -p $thing`;
+		if (`nodeType $thing` == "particle")
+			$position = `getParticleAttr -at position $thing`;
+		else if (`nodeType $thing` == "transform") {
+			$position = `xform -q -ws -t $thing`;
+			$m = `xform -q -ws -m $thing`;
+		} else
+			warning($thing + "Only particles and transforms supported!");
+
+		if ($mode == "sibinstance")
+			$dupe = `instance $copyThing`;
+		else
+			$dupe = `duplicate -rr -un $copyThing`;
+
+//		warning($thing +" is thing.");
+//		warning($dupe[0] +" is dupe.\n");
+		if ($mode == "parent")
+			parent -r $dupe[0] $thing;
+		else {
+			xform -m
+			   	$m[0] $m[1] $m[2] $m[3]
+			   	$m[4] $m[5] $m[6] $m[7]
+			   	$m[8] $m[9] $m[10] $m[11]
+			   	$m[12] $m[13] $m[14] $m[15]
+			   	$dupe[0];
+			if ($mode == "sibling" || $mode == "sibinstance") {
+//				print("select "+$dupe[0]+" "+$parent[0]+";\n");
+				select $dupe[0] $parent[0];
+				parent;
+			}
+		}
+	}
+
+    waitCursor -state off;
+}
+

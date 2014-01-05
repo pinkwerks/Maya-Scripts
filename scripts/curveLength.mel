@@ -1,0 +1,339 @@
+/* curveLength.mel V1.0
+
+This script may be freely distributed. Modify at your own risk.
+
+Author: Dirk Bialluch <DirkB@Mayaring.com>
+
+Creation date:	08.10.2001
+Last update:	13.10.2001
+
+Description
+	Measure and modify length of selected nurbs curves. Increasing the
+	number of CV's will also increase measure accuracy.
+*/
+
+global proc curveLength()
+{
+	int $uiLabelWidth = 90;
+	int $uiInputWidth = 140;
+	int $uiWidth = $uiLabelWidth + $uiInputWidth;
+
+	if( `window -exists cl_ui` )
+		deleteUI cl_ui;
+
+	window
+		-wh 264 152
+		-titleBar 1
+		-maximizeButton 0
+		-resizeToFitChildren 0
+		-title "Curve Length V1.0"
+		-iconName "Curve Length"
+		-menuBar 1
+		-menuBarVisible 1
+		cl_ui;
+
+		menu
+			-label "Edit"
+			-tearOff false;
+		menuItem
+	    		-label "Reset Settings"
+	    		-c "cl_storeRecallUI reset; curveLength";
+
+ 		string $cl_form = `formLayout -numberOfDivisions 100`;
+			string $cl_scroll = `scrollLayout -hst 16 -vst 16 -childResizable true -minChildWidth $uiWidth`;
+				columnLayout -adjustableColumn 1;
+					frameLayout
+						-label "Curve Length Settings"
+						-labelAlign "center"
+						-cll true
+						-lw $uiWidth
+						-mh 3
+		                                -borderStyle "etchedIn"
+						-cc "cl_storeRecallUI store"
+						-ec "cl_storeRecallUI store"
+						-bv true
+						cl_clsFrame;
+						columnLayout -adjustableColumn 1;
+							rowLayout
+								-numberOfColumns 2
+								-cat 1 "right" 5
+								-columnWidth 1 $uiLabelWidth
+								cl_rCurveLength;
+								text
+									-l "Curve Length"
+									-ann "Scale curve to match the length specified";
+								floatField
+									-w 80
+									-value 1.0
+									-minValue 0.0001
+									-precision 4
+									-cc "cl_storeRecallUI store"
+									cl_curveLength;
+								setParent ..;
+							rowLayout
+								-numberOfColumns 2
+								-cat 1 "right" 5
+								-columnWidth 1 $uiLabelWidth
+								-columnWidth 2 $uiInputWidth
+								cl_rPivotMode;
+								text
+									-l "Pivot"
+									-ann "Specify where to place the pivot for the scale operation";
+								optionMenu
+									-label ""
+									-cc "cl_adjustUI"
+									cl_pivotMode;
+					    				menuItem -label "Scale Pivot";
+					    				menuItem -label "Bounding Box Center";
+					    				menuItem -label "Origin";
+								setParent ..;
+							setParent ..;
+						setParent ..;
+					setParent ..;
+				setParent ..;
+
+			button
+				-label "Get Length"
+				-ann "Get averaged length from selected curves"
+				-command "cl_main getCurveLength"
+				cl_b1;
+			button
+				-label "Set Length"
+				-ann "Scale each selected curve to match specified length"
+				-command "cl_main setCurveLength"
+				cl_b2;
+			button
+				-label "Print Length"
+				-ann "Print length value of each selected curve. Check Script Editor for results."
+				-command "cl_main printCurveLength"
+				cl_b3;
+			button
+				-label "Close"
+				-ann "Close window"
+				-command "deleteUI cl_ui"
+				cl_b4;
+
+	// set form layouts
+	formLayout -edit
+		-attachForm $cl_scroll "top" 2
+		-attachForm $cl_scroll "left" 2
+		-attachControl $cl_scroll "bottom" 2 cl_b1
+		-attachForm $cl_scroll "right" 2
+
+		-attachNone cl_b1 "top"
+		-attachPosition cl_b1 "left" 2 0
+		-attachForm cl_b1 "bottom" 2
+		-attachPosition cl_b1 "right" 2 28
+
+		-attachNone cl_b2 "top"
+		-attachPosition cl_b2 "left" 2 28
+		-attachForm cl_b2 "bottom" 2
+		-attachPosition cl_b2 "right" 2 56
+
+		-attachNone cl_b3 "top"
+		-attachPosition cl_b3 "left" 2 56
+		-attachForm cl_b3 "bottom" 2
+		-attachPosition cl_b3 "right" 2 84
+
+		-attachNone cl_b4 "top"
+		-attachPosition cl_b4 "left" 2 84
+		-attachForm cl_b4 "bottom" 2
+		-attachPosition cl_b4 "right" 2 100
+		$cl_form;
+
+	cl_storeRecallUI recall;
+	cl_adjustUI;
+	showWindow cl_ui;
+}
+
+global proc cl_adjustUI()
+{
+	cl_storeRecallUI store;
+}
+
+global proc cl_storeRecallUI( string $mode )
+{
+	string $frameLayoutList[] = {
+		"cl_clsFrame" };
+
+	string $floatFieldList[] = {
+		"cl_curveLength" };
+
+	string $checkBoxList[] = {
+		};
+
+	string $optionMenuList[] = {
+		"cl_pivotMode" };
+
+	int $cnt;
+
+	if ( $mode == "store" )
+	{
+		for ( $cnt = 0; $cnt < size( $frameLayoutList ); $cnt++ )
+			optionVar -intValue $frameLayoutList[$cnt] `frameLayout -q -collapse $frameLayoutList[$cnt]`;
+
+		for ( $cnt = 0; $cnt < size( $floatFieldList ); $cnt++ )
+			optionVar -floatValue $floatFieldList[$cnt] `floatField -q -value $floatFieldList[$cnt]`;
+
+		for ( $cnt = 0; $cnt < size( $checkBoxList ); $cnt++ )
+			optionVar -intValue $checkBoxList[$cnt] `checkBox -q -value $checkBoxList[$cnt]`;
+
+		for ( $cnt = 0; $cnt < size( $optionMenuList ); $cnt++ )
+			optionVar -intValue $optionMenuList[$cnt] `optionMenu -q -select $optionMenuList[$cnt]`;
+	}
+
+	if ( $mode == "recall" )
+	{
+		for ( $cnt = 0; $cnt < size( $frameLayoutList ); $cnt++ )
+			if ( `optionVar -exists $frameLayoutList[$cnt]` )
+				frameLayout -e -collapse `optionVar -q $frameLayoutList[$cnt]` $frameLayoutList[$cnt];
+
+		for ( $cnt = 0; $cnt < size( $floatFieldList ); $cnt++ )
+			if ( `optionVar -exists $floatFieldList[$cnt]` )
+				floatField -e -value `optionVar -q $floatFieldList[$cnt]` $floatFieldList[$cnt];
+
+		for ( $cnt = 0; $cnt < size( $checkBoxList ); $cnt++ )
+			if ( `optionVar -exists $checkBoxList[$cnt]` )
+				checkBox -e -value `optionVar -q $checkBoxList[$cnt]` $checkBoxList[$cnt];
+
+		for ( $cnt = 0; $cnt < size( $optionMenuList ); $cnt++ )
+			if ( `optionVar -exists $optionMenuList[$cnt]` )
+				optionMenu -e -select `optionVar -q $optionMenuList[$cnt]` $optionMenuList[$cnt];
+	}
+
+	if ( $mode == "reset" )
+	{
+		for ( $cnt = 0; $cnt < size( $frameLayoutList ); $cnt++ )
+			optionVar -remove $frameLayoutList[$cnt];
+
+		for ( $cnt = 0; $cnt < size( $floatFieldList ); $cnt++ )
+			optionVar -remove $floatFieldList[$cnt];
+
+		for ( $cnt = 0; $cnt < size( $checkBoxList ); $cnt++ )
+			optionVar -remove $checkBoxList[$cnt];
+
+		for ( $cnt = 0; $cnt < size( $optionMenuList ); $cnt++ )
+			optionVar -remove $optionMenuList[$cnt];
+	}
+}
+
+proc float cl_getCurveLength( string $curve )
+{
+	string $arcLenNode = `createNode arcLengthDimension`;
+	connectAttr -f ( $curve + ".worldSpace[0]" ) ( $arcLenNode + ".nurbsGeometry" );
+
+	setAttr ( $arcLenNode + ".uParamValue" ) `getAttr ( $curve + ".maxValue" )`;
+
+	float $curveLength = `getAttr ( $arcLenNode + ".arcLength" )`;
+
+	string $parent[] = `listRelatives -p $arcLenNode`;
+	delete $parent;
+
+	return $curveLength;
+}
+
+global proc cl_main ( string $function )
+{
+	string $sBuffer[];
+
+	// get settings from UI
+	float $newCurveLength = `floatField -q -v cl_curveLength`;
+	int $pivotMode = `optionMenu -q -select cl_pivotMode`; // 1 = scale pivot, 2 = bounding box, 3 = origin
+
+	string $curves[] = `ls -sl -dag -leaf -type "nurbsCurve"`;
+
+	if( !size( $curves ) )
+		error "No nurbs curves selected";
+
+	if( $function == "printCurveLength" )
+	{
+		for( $tmp in $curves )
+		{
+			float $curveLength = `cl_getCurveLength $tmp`;
+			print( "Curve \"" + $tmp + "\" length: " + $curveLength + "\n" );
+		}
+	}
+
+	if( $function == "getCurveLength" )
+	{
+		if( size( $curves ) > 1 )
+			print "Multiple curves selected. Calculating average length.";
+
+		float $curveLength = 0;
+
+		for( $tmp in $curves )
+		{
+			$curveLength += `cl_getCurveLength $tmp`;
+		}
+
+		$curveLength /= size( $curves );
+
+		if( $curveLength < 0.0001 )
+			error "Resulting (averaged) curve length is too short.";
+
+		floatField -e -v $curveLength cl_curveLength;
+		cl_storeRecallUI store;
+	}
+
+	if( $function == "setCurveLength" )
+	{
+		for( $tmp in $curves )
+		{
+			// check if scale attributes are connected or locked
+			string $sBuffer[] = `listRelatives -fullPath -p $tmp`;
+			string $parent = $sBuffer[0];
+			if( `connectionInfo -isLocked ( $parent + ".sx" )` ||
+			    `connectionInfo -isLocked ( $parent + ".sy" )` ||
+			    `connectionInfo -isLocked ( $parent + ".sz" )` )
+			{
+				catch( `error( "Curve \"" + $tmp + "\" scale attributes are locked. Curve length cannot be altered" )` );
+				continue;
+			}
+
+			if( `connectionInfo -isDestination ( $parent + ".sx" )` ||
+			    `connectionInfo -isDestination ( $parent + ".sy" )` ||
+			    `connectionInfo -isDestination ( $parent + ".sz" )` )
+			{
+				catch( `error( "Curve \"" + $tmp + "\" scale attributes are connected. Curve length cannot be altered" )` );
+				continue;
+			}
+
+			float $curveLength = `cl_getCurveLength $tmp`;
+			float $delta = $curveLength * 1000.0 / $newCurveLength; // * 1000 due to tolerance issues
+			if( $delta )
+			{
+				$delta = 1000.0 / $delta;
+
+				// use scale pivot
+				if( $pivotMode == 1 )
+					xform -r -scale $delta $delta $delta $parent;
+				// use bounding box center
+				else if( $pivotMode == 2 )
+				{
+					float $bb[] = `xform -q -bb $parent`;
+					float $center[];
+					$center[0] = ( $bb[3] + $bb[0] ) / 2.0;
+					$center[1] = ( $bb[4] + $bb[1] ) / 2.0;
+					$center[2] = ( $bb[5] + $bb[2] ) / 2.0;
+
+					float $scalePivot[] = `xform -q -sp $parent`;
+					xform -ws -a -sp $center[0] $center[1] $center[2] $parent;
+					xform -r -scale $delta $delta $delta $parent;
+					xform -ws -a -sp $scalePivot[0] $scalePivot[1] $scalePivot[2] $parent;
+				}
+				// use origin
+				else
+				{
+					float $scalePivot[] = `xform -q -sp $parent`;
+					xform -ws -a -sp 0 0 0 $parent;
+					xform -r -scale $delta $delta $delta $parent;
+					xform -ws -a -sp $scalePivot[0] $scalePivot[1] $scalePivot[2] $parent;
+				}
+			}
+			else
+				catch( `error( "Curve \"" + $tmp + "\" length too short. Curve length cannot be altered." )` );
+		}
+	}
+}
+
+// end of script

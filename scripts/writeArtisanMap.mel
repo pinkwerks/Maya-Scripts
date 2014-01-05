@@ -1,0 +1,12 @@
+global proc
+writeArtisanMap (string $filePath, int $fs, int $fe, int $inc)
+{
+  int $i;
+  string $pad;
+  for ($i = $fs; $i <= $fe; $i += $inc)
+    {
+        currentTime -e $i;
+	$pad = system("printf '%04.4d' "+$i+"");
+	artAttrCtx -e -esf ($filePath + "." + $pad) `currentCtx`;
+    }
+}

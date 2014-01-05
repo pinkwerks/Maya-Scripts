@@ -1,0 +1,24 @@
+proc areaSelect(string $obj, float $threshold)
+{
+	$shape = `listRelatives -s $thing`;
+	if ( `nodeType $shape` == "mesh" )
+	{
+		select $obj;
+		ConvertSelectionToFaces;
+		string $faces[] = `ls -sl -l -fl`;
+		string $face;
+		for ( $face in $faces )
+		{
+
+		}
+	}
+}
+global proc filterSeletion()
+{
+	string $selection = `ls -sl -l`;
+	string $thing;
+	for ( $thing in $selection )
+	{
+		areaSelect $thing $threshold;
+	}
+}

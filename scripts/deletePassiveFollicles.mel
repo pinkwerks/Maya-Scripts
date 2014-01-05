@@ -1,0 +1,19 @@
+// v20060216 pink
+// deletePassiveFollicles() : deletes hair follicles that are passive.
+global proc
+deletePassiveFollicles ()
+{
+  string $objs[] = `ls -sl -l `;
+  string $obj;
+  for ($obj in $objs)
+    {
+      if ( `attributeExists "simulationMethod" $obj` == 0 )
+	{
+	  if ( `getAttr ($obj + ".simulationMethod")` == 1 )
+	    {
+	      delete $obj;
+	    }
+	}
+    }
+}
+

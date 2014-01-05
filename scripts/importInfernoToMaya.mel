@@ -1,0 +1,475 @@
+//===========================================================================
+//  Second Unit Services www.secondunit.com Script File
+//  MODIFY THIS AT YOUR OWN RISK
+//
+//
+//  Creation Date:	04.02.02
+//  Version:           	1.0
+//  Author:            	Thomas Herrmann
+//
+//  Procedure Name:
+//      importInfernoToMaya()
+//
+//  Description:
+//      Imports a animated traget camera from inferno to Maya.
+//
+//	before generating the action-file, simplify the camera animation (no axis attached to camera).
+//	 
+//	Limits: The script supports no motionpath Cameras and right now just the FilmBack
+//		35mmFullAparture.	  
+//
+//  Input Arguments:
+//      None.
+//
+//  Return Value:
+//      None.
+//===========================================================================
+
+
+//-----------------------------------------------------------------------
+//--- printing procedure 
+//-----------------------------------------------------------------------
+
+global proc printOutput(string $channel) 
+{
+	global float $CamNode_Frame[];
+	global float $CamNode_Value[];
+	
+	for ($i=0; $i < size($CamNode_Frame); $i++)
+	{
+		print ($channel+": Frame: "+$CamNode_Frame[$i]+" Value: "+$CamNode_Value[$i]+"\n");
+	}
+}
+
+//-----------------------------------------------------------------------
+//--- set keyframes from global Var on Object
+//-----------------------------------------------------------------------
+
+global proc setAnim (string $objName, string $objAttribute)
+{
+	global float $CamNode_Frame[];
+	global float $CamNode_Value[];
+
+	for ($i=0; $i < size($CamNode_Frame); $i++)
+	{	
+		if (! `strcmp $objAttribute "focalLength"`)
+			$tmpValue = calcFocalLength ($objName, $CamNode_Value[$i]);
+		else
+			$tmpValue = $CamNode_Value[$i];
+		
+		setKeyframe -v $tmpValue -t $CamNode_Frame[$i] -at $objAttribute $objName; 
+	}
+}
+
+//-----------------------------------------------------------------------
+//--- clears string from \t & \n
+//-----------------------------------------------------------------------
+
+global proc string clearLine (string $line)
+{
+	string $buffer[];
+	int $x = `tokenize $line "\t,\n" $buffer`;
+	return $buffer[0];
+}
+
+//-----------------------------------------------------------------------
+//--- creates cameras with the inferno settings
+//-----------------------------------------------------------------------
+
+global proc createInfernoCam (int $camTyp)
+{
+	string $camName[] = `camera 
+		-centerOfInterest 1 
+		-focalLength 22 
+		-lensSqueezeRatio 1 
+		-cameraScale 1 
+		-horizontalFilmAperture 0.6305 
+		-horizontalFilmOffset 0 
+		-verticalFilmAperture 0.475 
+		-verticalFilmOffset 0 
+		-filmFit Horizontal 
+		-overscan 1 
+		-motionBlur 0 
+		-shutterAngle 144 
+		-nearClipPlane 1
+		-farClipPlane 10000 
+		-orthographic 0 
+		-orthographicWidth 30`;
+	
+	$camName[0] =`rename $camName[0] "infernoCam"`;
+		
+	objectMoveCommand; 
+	
+	if ($camTyp == 1)
+		cameraMakeNode 1 $camName[0];
+	else
+		cameraMakeNode 2 $camName[0];
+}
+
+//-----------------------------------------------------------------------
+//--- will adjust the mayaCam to the appropriate filmback
+//-----------------------------------------------------------------------
+
+global proc adjustFilmBack (string $camName, string $filmType)
+{
+	//--- switches the FilmAparture depending of Infernosettings
+	/*switch ($filmType)
+	{
+		case "35mmFullAparture":
+			$horFilmAp = 0.6305;
+			$vertFilmAp = 0.0.475;
+			break;	
+	}*/
+
+	camera -e  
+		//-horizontalFilmAperture $horFilmAp;  
+		//-verticalFilmAperture $vertFilmAp; 
+		$camName;
+}
+
+//-----------------------------------------------------------------------
+//--- calculates the maya-focalLength from the inferno FOV
+//-----------------------------------------------------------------------
+
+global proc float calcFocalLength (string $camName, float $camFov)	
+{
+	//--- calculates the focalLength depending from the angle of view / infernoFactor(1.333333)
+	float $aperture = `getAttr ($camName+".horizontalFilmAperture")`;
+	float $focal = tan (0.00872665 * $camFov);
+	$focal = ((0.5 * $aperture) / ($focal * 0.03937)) / 1.3333333;
+		
+	return $focal;
+}
+
+//-----------------------------------------------------------------------
+//--- extract keys & values for $channel and stores them in global float[] 
+//-----------------------------------------------------------------------
+
+global proc string getKeys ( int $fileID, string $channel, string $line, float $infernoFactor)
+{
+	global float $CamNode_Frame[];
+	global float $CamNode_Value[];
+	
+	string $bufferSize[]; string $bufferValue[]; string $tmpLine;	
+	
+	int $countFrame =0;
+	int $countValue =0;
+	int $noValues = 1; int $noKeys = 1;
+
+	//---------- searching for $channel
+	while ( ! `feof $fileID`  && match($channel, $line) == "" )
+	{
+		$line = fgetline($fileID);	
+	}
+	print ("\t--- "+$channel+"\n");
+	
+	//---------- searching for Value. If getting "End" no keys no this Cannel, skip process ------ 	
+	while ( ! `feof $fileID`  && match("Value", $line) == "" )
+	{
+		$line = fgetline($fileID);
+		$tmpLine = clearLine ($line);
+		if (!`strcmp $tmpLine "End"`)
+		{
+			$noValues = 0;			
+			print "\t\t--- no values on this Channel\n";
+			break;
+		}
+	}
+
+	if ($noValues)
+	{
+		string $absBuffer[]; float $absValue;
+		tokenize $line " " $absBuffer;
+		$absValue = (float)$absBuffer[1];
+			
+		//--------- searching for Value, getting iteration for Frames ----------
+		while ( ! `feof $fileID`  && match("Size", $line) == "" )
+		{
+			$line = fgetline($fileID);
+			$tmpLine = clearLine ($line);
+			if (!`strcmp $tmpLine "End"`)
+			{
+				$noKeys = 0;
+				$CamNode_Frame[0] = 1;
+				$CamNode_Value[0] = (float)$absBuffer[1];
+				print "\t\t--- current Channel has no Keys\n";
+				break;
+			}       
+		}		
+		tokenize $line " " $bufferSize;
+
+		if ($noKeys)
+		//--------- get key at frame[n] -------------
+		for ($i =0; $i < (int)$bufferSize[1]; $i++)
+		{
+			$line = fgetline($fileID);	
+			
+			//--------- searching for Frame, getting value of frame ----------
+			while ( ! `feof $fileID`  && match("Frame", $line) == "" )
+			{
+				$line = fgetline($fileID);	
+			}
+			string $bufferFrame[];
+			int $bufFrame =`tokenize $line " " $bufferFrame`;
+			$CamNode_Frame[$countFrame] = $bufferFrame[1];
+			$countFrame++;
+			
+			//--------- searching for Value, getting value of frame ----------
+			while ( ! `feof $fileID`  && match("Value", $line) == "" )
+			{
+				$line = fgetline($fileID);
+			}
+			string $bufferValue[];
+			tokenize $line " " $bufferValue;
+			$CamNode_Value[$countValue] = (float)$bufferValue[1]/$infernoFactor;
+			$countValue++;
+		}
+	}
+	return $line;	
+}
+
+//===============================================================================
+//=== imports movement of camera from Inferno via .action-file.
+//=== 	select camera and run importInfernoCam().
+//===	if you have a twoNodeCam: !!--first select the Cam and shiftselect the Target ---!!
+//===============================================================================
+
+global proc importInfernoToMaya()
+{
+	global float $CamNode_Frame[];
+	global float $CamNode_Value[];
+	float $infernoFactor =1;
+	
+	string $channel;
+	
+	int $camType =2;	//---- $camType == 2 -> twoNodeCam, $camNode == 1 -> oneNodeCam
+	int $countFrame =0;
+	int $countValue =0;
+	
+	string $tmpLine; 
+	
+	//------------------------------------------------------------------
+	//--- open file 
+	//------------------------------------------------------------------ 
+	string $fileName = `fileDialog -directoryMask "~/*.action"`;
+
+	//--- Open the file for reading	
+	$fileID = fopen($fileName, "r");
+	if ( $fileID == 0 )
+	{
+		print ("Error opening file: "+$fileID+"\n");	
+	}
+	else
+	{
+	
+		print("Reading file: " + $fileName + "\n");
+
+		//------------------------------------------------------------------
+		//--- reading camera animation data (translation, rotation, roll)
+		//------------------------------------------------------------------
+
+		string $line = "";
+
+		//--- get maxFrames
+		while ( ! `feof $fileID` && match("MaxFrames", $line) == "" )
+		{
+			$line = fgetline($fileID);
+		//	print $line;
+		}
+		string $bufferFrameMax[];
+		tokenize $line " " $bufferFrameMax;
+		if (`playbackOptions -q -aet` < (float)$bufferFrameMax[1])
+			eval ("playbackOptions -aet "+ $bufferFrameMax[1]); 
+
+		//--- check for CamNode, picking CameraType
+		while ( ! `feof $fileID` && match("Node Camera", $line) == "" )
+		{
+			$line = fgetline($fileID);
+		}
+		$tmpLine = clearLine ($line);
+		
+		//--- checking for CameraNode
+		if (!`strcmp $tmpLine "Node Camera"`)
+		{		
+			//--- picking CameraType
+			while ( ! `feof $fileID` && match("Type Free", $line) == "" )
+			{
+				$line = fgetline($fileID);
+				$tmpLine = clearLine ($line);
+				if (!`strcmp $tmpLine "Type Free"`)
+				{
+					$camType = 1;
+					print "oneNodeCam detected ---> processing\n";
+				}
+				else if (!`strcmp $tmpLine "CamChannel"`)
+				{
+					print "twoNodeCam ---> processing\n";
+					break;
+				}
+			}
+			
+			//--- creating camera
+			if ($camType == 1)
+			{
+				createInfernoCam ($camType);	
+			}
+			else
+			{
+				createInfernoCam($camType);
+			}		
+			string $camName[2] =`ls -sl`;
+
+			//--------- Channel position/x ---------
+			$channel = "Channel position/x";
+			$line = getKeys ( $fileID, $channel, $line, $infernoFactor);
+
+			//printOutput($channel);
+			setAnim ($camName[0], "translateX");
+			clear $CamNode_Frame; clear $CamNode_Value;
+		
+			//--------- Channel position/y ---------
+			$channel = "Channel position/y";
+			$line = getKeys ( $fileID, $channel, $line, $infernoFactor);
+
+			//printOutput($channel);
+			setAnim ($camName[0], "translateY");
+			clear $CamNode_Frame; clear $CamNode_Value;
+		
+			//--------- Channel position/z ---------
+			$channel = "Channel position/z";
+			$line = getKeys ( $fileID, $channel, $line, $infernoFactor);
+
+			//printOutput($channel);
+			setAnim ($camName[0], "translateZ");
+			clear $CamNode_Frame; clear $CamNode_Value;
+
+			//---------- twoNodeCamera ------------------
+			if (`size($camName)` == 2)
+			{
+				//--------- Channel interest/x ---------
+				$channel = "Channel interest/x";
+				$line = getKeys ( $fileID, $channel, $line,$infernoFactor);	
+
+				//printOutput($channel);
+				setAnim ($camName[1], "translateX");
+				clear $CamNode_Frame; clear $CamNode_Value;
+			
+				//--------- Channel interest/y ---------
+				$channel = "Channel interest/y";
+				$line = getKeys ( $fileID, $channel, $line, $infernoFactor);
+
+				//printOutput($channel);
+				setAnim ($camName[1], "translateY");
+				clear $CamNode_Frame; clear $CamNode_Value;
+			
+				//--------- Channel interest/z ---------
+				$channel = "Channel interest/z";
+				$line = getKeys ( $fileID, $channel, $line, $infernoFactor);
+
+				//printOutput($channel);
+				setAnim ($camName[1], "translateZ");
+				
+				clear $CamNode_Frame; clear $CamNode_Value;
+				
+				//--------- Channel roll ---------
+				string $camGrp[1] = `listRelatives -parent $camName[0]`;	
+				
+				$channel = "Channel roll";
+				$line = getKeys ( $fileID, $channel, $line, $infernoFactor);
+
+				//printOutput($channel);
+				setAnim ($camGrp[0], "twist");
+				clear $CamNode_Frame; clear $CamNode_Value;				
+			}
+		
+			//---------- oneNodCamera ---------------------------	
+			else
+			{
+				//--------- Channel rotation/x ---------
+				$channel = "Channel rotation/x";
+				$line = getKeys ( $fileID, $channel, $line, (-1));
+
+				//printOutput($channel);
+				setAnim ($camName[0], "rotateX");
+				clear $CamNode_Frame; clear $CamNode_Value;
+		
+				//--------- Channel rotation/y ---------
+				$channel = "Channel rotation/y";
+				$line = getKeys ( $fileID, $channel, $line, (-1));
+
+				//printOutput($channel);
+				setAnim ($camName[0], "rotateY");
+				clear $CamNode_Frame; clear $CamNode_Value;
+		
+				//--------- Channel rotation/z ---------
+				$channel = "Channel rotation/z";
+				$line = getKeys ( $fileID, $channel, $line, (-1));
+
+				//printOutput($channel);
+				setAnim ($camName[0], "rotateZ");
+				clear $CamNode_Frame; clear $CamNode_Value;
+			}
+			
+			//------------------------------------------------------------------
+			//--- reading Camera setting and adjusting Camera (fov, filmback)
+			//------------------------------------------------------------------
+						
+			//---- getting cam fov -------
+			$channel = "Channel fov";
+			$line = getKeys ( $fileID, $channel, $line,$infernoFactor);
+			
+			//printOutput($channel);
+			float $cameraFov; int $animatedFov =0;
+			if (`size($CamNode_Value)`)
+			{
+				if (`size($CamNode_Value)` > 1)
+				{
+					$animatedFov = 1;
+					print ("\t\t--- Fov: animated\n");
+				}
+				else
+				{
+					$cameraFov = $CamNode_Value[0];
+					print ("\t\t--- Fov: "+$cameraFov+"\n");
+				}
+			}
+			else
+			{
+				$cameraFov = 40;
+				print ("\t\t--- Fov: 40\n");			
+			}
+			
+			//--- checking for FilmTyp
+			while ( ! `feof $fileID` && match("Film_Type", $line) == "" )
+			{
+				$line = fgetline($fileID);
+			}
+			$tmpLine = clearLine ($line);
+			
+			string $filmType[];
+			tokenize $tmpLine " " $filmType;
+			print ("\t--- "+$filmType[0]+": "+$filmType[1]+"\n");
+			
+				//adjustFilmBack ($camName[0], $filmType[1]);
+			
+			//---- keying animated focalLength
+			if (!$animatedFov)
+			{
+				float $focal = calcFocalLength ($camName[0] , $cameraFov);
+				camera -e  
+					-focalLength $focal
+					$camName;	
+			}
+			else
+				setAnim ($camName[0], "focalLength");
+				
+			clear $CamNode_Frame; clear $CamNode_Value;
+		}
+		else
+			print "!----- no camNode in File -----!";
+		
+		fclose($fileID);
+		print("!--------- READY ---------!\n");
+	}
+}
+// importInfernoToMaya()

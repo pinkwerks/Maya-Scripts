@@ -1,0 +1,4 @@
+global proc string fixWhiteSpace(string $s)
+{
+    return(substituteAllString($s, " ", "_"));
+}

@@ -1,0 +1,73 @@
+//
+// writeSelectionArray.mel
+//
+// v.1 <pinkwerks@netscape.net>
+//
+// prints the current selection as compilable mel code.
+//
+// writeSelectionArray arrayName mode
+//
+//	arrayName	: string : name of arrayCreated
+//	mode		: string : long for long-listings
+//
+
+proc string createUI()
+{
+    $cgroot = `getenv CGROOT`;
+    $show = `getenv SHOW`;
+    $shot = `getenv SHOT`;
+
+    $tx = "selectionArray";
+
+    $x = `
+    	promptDialog
+	-message "Enter array name :"
+	-tx $tx
+	-button "OK"
+	-button "Cancel"
+        -defaultButton "OK"
+	-cancelButton "Cancel"
+	-dismissString "Cancel"
+    `;
+
+    if ($x == "Cancel") return "_CANCEL";
+
+    return `promptDialog -q -tx`;
+}
+
+proc writeSelectionArrayGuts(string $arrayName, string $mode)
+{
+    $me = "writeSelectionArray";
+    int $i = 0;
+    string $thing;
+    string $things[];
+
+    if ( $mode == "long" )
+	$things = `ls -sl -fl -l`;
+    else 
+	$things = `ls -sl -fl`;
+
+    int $sthings = `size $things`;
+
+    print("\n//---- " + $me + " : begin ----//\n\n");
+    print("string $" + $arrayName + "[] = {\n");
+
+    for ( $thing in $things ) {
+	if ( $i < $sthings - 1 )
+	    print("\t\"" + $thing + "\",\n");
+	else
+	    print("\t\"" + $thing + "\"\n");
+
+	$i++;
+    }
+    print("};\n");
+    print("\n//---- " + $me + " : end ----//");
+}
+
+global proc writeSelectionArray(string $arrayName, string $mode)
+{
+    if ($arrayName == "_GUI") $arrayName = createUI();
+
+    //if ($arrayName != "_CANCEL") writeSelectionArrayGuts $arrayName $mode;
+    if ($arrayName != "_CANCEL") writeSelectionArrayGuts $arrayName "long";
+}

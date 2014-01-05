@@ -1,0 +1,10 @@
+global proc
+deleteDuplicatePolys()
+{
+    int $i = 0;
+    $polys = `ls -sl`;
+    for ($poly in $polys) {
+	if ($i != 0) delete $poly;
+	$i++;
+    }
+};

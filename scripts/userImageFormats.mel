@@ -1,0 +1,9 @@
+global string  $gUserImageFormatData[] =
+{
+// name width height aspect ratio
+"2k_Film 2048 1556 1.316",
+"1k_Film 1024 778 1.316",
+"3perf_Super35_Film 2048 1168 1.753",
+"RedEpic2k 2560 1350 1.896",
+"RedEpic1k 1280 675 1.896"
+}; 

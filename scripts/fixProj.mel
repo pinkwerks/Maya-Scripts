@@ -1,0 +1,44 @@
+// load the required plugin
+waitCursor -state on;
+catch(`loadPlugin "/movie/plugins/jptFixProj.so"`);
+waitCursor -state off;
+
+global proc int fixProj() {
+    $selected = `ls -sl`;
+    print $selected;
+
+    if (size($selected) < 2) {
+	print("select projection then one or more geometry nodes.");
+	return(1);
+    }
+
+    $projNode = $selected[0];
+    print $projNode;
+    
+    if (nodeType($projNode) != "projection") {
+	print("first selected node is not of projection type.");
+	return(1);
+    }
+
+    for ($i = 1; $i <= size($selected); $i++) {
+	if (nodeType($selected[$i]) != "nurbsSurface") {
+	    print("selected nodes are not of correct type.");
+	    return(1);
+	}
+
+	// create the jptFixProj node
+	$fixNode = `shadingNode -asTexture -asUtility jptFixProj`;
+
+	// connect the fix to the projection
+	$a = $fixNode + ".pointCamera";
+	$b = $projNode + ".pointCamera";
+	connectAttr -f $a $b;
+
+	// connect geometry's world space cords to the Fix
+	$c = $selected[$i] + ".ws[0]";
+	$d = $fixNode + ".is";
+	connectAttr -f $c $d;
+    }
+
+    return(0);
+}

@@ -1,0 +1,11 @@
+// given many things, it will delete all but one of them
+global proc
+deleteDuplicates()
+{
+    int $i = 0;
+    $dupes = `ls -sl`;
+    for ($dupe in $dupes) {
+	if ($i != 0) delete $dupe;
+	$i++;
+    }
+};

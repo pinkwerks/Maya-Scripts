@@ -1,0 +1,20 @@
+global proc curveFromMotionPath()
+{
+	string $things[] = `ls -sl -type snapshot`;
+	float $p[];
+	int $sp;
+	string $c;
+	int $i;
+	for ($thing in $things) {
+		$p = `getAttr ($thing +".points")`;
+		$sp = `size $p`;
+		warning("Sifting "+ $sp/4 +" points.");
+		$c = `curve -d 3 -p $p[0] $p[1] $p[2]`;
+		$i = 4;
+		while ($i < $sp) {
+			curve -a -p $p[$i] $p[$i + 1] $p[$i + 2] $c;
+			$i += 4;
+		}
+	}
+}
+

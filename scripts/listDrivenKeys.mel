@@ -1,0 +1,54 @@
+// listDrivenKeys 1.1
+//
+//
+// Creation Date:  October 2000
+// Author: 	   Stefan Orbilt (stefan@megafront.com)
+//
+//
+// Procedure name: listDrivenKeys
+//
+// Description:
+//
+//  This simple script prints out which Set Driven Keys exist in the scene.
+//  You´ll get a list in the Script Editor over the driven attributes and
+//  their drivers.
+//
+//
+// Changes in version 1.1 from version 1.0:
+//
+// Fixed a bug that if multiple objects had the same
+// driver it wouldn´t print the driver on nothing but
+// the first object in the list. Also added a message
+// that is printed when the script is run and auto
+// opening of the Script Editor.
+//
+//
+// Some other scripts of mine available at www.highend3d.com:
+// boxSelect, multiShade, randSel, savePos, selectByName, dimensions
+// More should be available at http://www.megafront.com/mayaZone soon.
+//
+
+
+
+global proc listDrivenKeys()
+{
+string $allObj[] = `ls "*"`;
+
+string $driven[] = `setDrivenKeyframe -q -driven $allObj`;
+
+
+print "\n- - - - - - - - - - - - - - - - - - - - - - - - - -\n";
+
+
+for ($i=0; $i < size ($driven) > 0; $i++)
+{
+string $driver[] = `setDrivenKeyframe -q -driver $driven[$i]`;
+print ($driven[$i] + " is driven by ");
+print ($driver[0] + "\n");
+}
+
+
+print "- - - - - - - - - - - - - - - - - - - - - - - - - -\n";
+print "A list of the Set Driven Keys have been printed. Look in the Script Editor.\n";
+ScriptEditor;
+}

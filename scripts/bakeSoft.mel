@@ -1,0 +1,180 @@
+/*
+ _______________________________________________________________________
+
+ ______________       A L I A S  /  W A V E F R O N T       ____________
+ |
+ |       $Source: bakeSoft.mel $
+ |
+ |   $Author: jschleifer $
+ |   $Revision: /main/1 $
+ |   $Date: 1997/11/06 10:46:33 $
+ |
+ |   Original Author:
+ |       Jason Schleifer
+ |
+ |   Description:
+ |           Bakes out softbody animations so there are curves for all the 
+ |               cv's.
+ |
+ |       Usage:
+ |               Select the softBody you want and type:
+ |
+ |                              bakeSoft <start frame> <end frame> <step>
+ |
+ |               ex:
+ |
+ |                              bakeSoft 1 200 1;
+ |
+ |                 Copyright (C) 1997 Alias|Wavefront Inc. 
+ |
+ |   These coded instructions, statements and computer programs contain
+ |   unpublished information proprietary to Alias|Wavefront Inc. and
+ |   are protected by the Canadian and US federal copyright law. They
+ |   may not be disclosed to third parties or copied or duplicated, in 
+ |   whole or in part, without prior written consent of 
+ |   Alias|Wavefront Inc.
+ |
+ |   Unpublished -- rights reserved under the Copyright Laws of 
+ |                  the United States.
+ |
+ |
+ ______________       A L I A S  /  W A V E F R O N T       ____________
+ _______________________________________________________________________
+ */
+
+global proc bakeSoft ( int $start, int $end, int $by)
+{
+        // variable declaration
+        string $softShape;
+        string $object;
+        string $item;
+        string $newObject;
+        string $particleShape;
+        string $parent;
+        string $objectParent;
+        string $objSel;
+        int $numCp;
+        string $softType;
+
+        // get the name of the object selected
+        
+        $tmp = `ls -sl`;
+        $objSel = $tmp[0];
+
+        // figure out what type of object this is
+
+        $shapes = `listRelatives -s $objSel`;
+        
+        for ($item in $shapes)
+        {
+                $type = `ls -showType $item`;
+                if ($type[1] == "nurbsSurface")
+                {
+                        $numCp = ((`getAttr ($item + ".spansU")` + 3) *
+(`getAttr ($item + ".spansV")` + 3) - 1);
+                        $softShape = $item;
+                        $softType = "nurbsSurface";
+                }
+                if ($type[1] == "nurbsCurve")
+                {
+                        $numCp = ((`getAttr ($item + ".spans")` + 3)
+-1);
+                        $softShape = $item;
+                        $softType = "nurbsCurve";
+                }
+                if ($type[1] == "lattice")
+                {
+                        $numCp = ((`getAttr ($item + ".sDivisions")`) *
+(`getAttr ($item + ".tDivisions")`) * (`getAttr ($item +
+".uDivisions")`) -1);
+                        $softShape = $item;
+                        $softType = "lattice";
+                }
+                if ($type[1] == "mesh")
+                {
+                        int $tmpCp[]= `polyEvaluate -v $item`;
+                        $numCp = ($tmpCp[0] -1);
+                        $softShape = $item;
+                        $softType = "mesh";
+                        print ("bakeSoft doesn't really work at all on
+polys.. you're on your own... \n");
+                }
+                if ($type[1] == "particle")
+                        $particleShape = $item;
+        }
+        print ("This is a " + $softType + ".  It has " + $numCp + "
+points.\n");
+
+        // get the name of the parent of the softObject
+        $tmp = `listRelatives -p $softShape`;
+        $parent = $objSel;
+
+        // duplicate shape to get new object
+        $tmp = `duplicate $softShape`;
+        $object = $tmp[0];
+        
+        // cycle through the frame range
+        for ($x = $start; $x <=$end; $x = $x + $by)
+        {       
+                currentTime $x;
+                
+                // for each of the cv's bake out the animation
+                for ($i = 0; $i <= $numCp; $i++)
+                {
+                        $item = ($softShape + ".cp[" + $i+"]");
+                        $value = `xform -q -ws -t $item`;
+                        $newObject = `substitute $softShape $item
+$object`;
+                        move $value[0] $value[1] $value[2] $newObject;
+                        setKeyframe -at xValue $newObject; 
+                        setKeyframe -at yValue $newObject; 
+                        setKeyframe -at zValue $newObject; 
+                }
+
+        }
+
+        // delete the particle
+        delete $particleShape;
+
+        // break the anim curves on the new object & put them on the
+original
+        // softBody
+        currentTime $start;
+        for ($i = 0; $i <= $numCp ; $i++)
+        {
+                        $xValueCon = `listConnections -p true ($object +
+".cp["+$i+"].xValue")`;
+                        $yValueCon = `listConnections -p true ($object +
+".cp["+$i+"].yValue")`;
+                        $zValueCon = `listConnections -p true ($object +
+".cp["+$i+"].zValue")`;
+                
+                        if (size ($xValueCon) >0)
+                        {
+                                $cmd = ("connectAttr " + $xValueCon[0] +
+" " + $softShape + ".cp["+$i+"].xValue");
+                                eval $cmd;
+                                $cmd = ("connectAttr " + $yValueCon[0] +
+" " + $softShape + ".cp["+$i+"].yValue");
+                                eval $cmd;
+                                $cmd = ("connectAttr " + $zValueCon[0] +
+" " + $softShape + ".cp["+$i+"].zValue");
+                                eval $cmd;
+                                
+                                disconnectAttr $xValueCon[0] ($object +
+".cp["+$i+"].xValue");
+                                disconnectAttr $yValueCon[0] ($object +
+".cp["+$i+"].yValue");
+                                disconnectAttr $zValueCon[0] ($object +
+".cp["+$i+"].zValue");
+                        }
+        }
+
+
+        // delete the duplicateShape
+        select -r $object;
+        pickWalk -d "up";
+        delete;
+
+        print "Done..\n";
+}

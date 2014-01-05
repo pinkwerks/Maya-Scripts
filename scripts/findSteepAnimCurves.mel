@@ -1,0 +1,71 @@
+// v20070330 pink
+// find animation curves who's slopes escape reason.
+
+global proc int
+findSteepAnimCurves()
+{
+	string $animCrvs[] = `ls -type animCurve`;
+//	string $animCrvsTL[] = `ls -type animCurve`;
+//	string $animCrvs[] = $animCrvsReg;
+//	$animCrvs = stringArrayCatenate($animCrvs, $animCrvsTL);
+	if ( `size $animCrvs` == 0 )
+		return(0);
+
+	int $hugeNumber = 2147483647;
+	int $hugeNumber = 1000;
+	string $steepCrvs[];
+	string $animCrv;
+	int $numKeys = 0;
+	int $index = 0;
+	float $firstKeyTime[];
+	float $firstKeyValue[];
+
+	float $lastKeyTime[];
+	float $lastKeyValue[];
+
+	float $prevKeyValue[];
+	float $nextKeyValue[];
+
+	float $diff;
+	int $i = 0;
+
+	for ($animCrv in $animCrvs)
+	{
+		$numKeys = `keyframe -q -kc $animCrv`;
+		$index = $numKeys - 1;
+		if ($index < 0)
+			continue;
+
+		// Figure out the time before the first keyframe
+		// in our anim curve
+		$firstKeyTime = `keyframe -in 0 -q -tc $animCrv`;
+		if ( `size $firstKeyTime` != 0 )
+		{
+			$firstKeyValue = `keyframe -ev -t $firstKeyTime[0] -q -vc $animCrv`;
+			$prevKeyValue = `keyframe -ev -t ($firstKeyTime[0] + 1) -q -vc $animCrv`;
+			$diff = $firstKeyValue[0] - $prevKeyValue[0];
+			if ($animCrv == "simChunks_transform1006_translateX"){
+				warning($firstKeyValue[0]);
+				warning($prevKeyValue[0]);	
+				warning($diff);	
+			}
+			if ( $diff >= $hugeNumber )
+				$steepCrvs[$i++] = $animCrv;
+		}
+
+		// Figure out the time after our last keyframe
+		$lastKeyTime = `keyframe -in $index -q -tc $animCrv`;
+		if ( `size $lastKeyTime` != 0 )
+		{
+			$lastKeyValue = `keyframe -ev -t $lastKeyTime[0] -q -vc $animCrv`;
+			$nextKeyValue = `keyframe -ev -t ($lastKeyTime[0] + 1) -q -vc $animCrv`;
+			$diff = $lastKeyValue[0] - $nextKeyValue[0];
+			if ( $diff >= $hugeNumber )
+				$steepCrvs[$i++] = $animCrv;
+		}
+	}
+
+	select $steepCrvs;
+	return(size($steepCrvs)); 
+}
+

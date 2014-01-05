@@ -1,0 +1,15 @@
+//
+// v20070201 pinkwerks
+// launch an external xconfirm window
+// return the pid of the window (so you can kill it if need be)
+//
+
+global proc int
+breakFileConfirm(string $s)
+{
+	exec("/hdx/cg/scripts/xconfirmBreak.sh "+ $s);
+	string $o = system("ps -ef | grep "+ $s +" | grep xmessage | grep -v grep | awk '{print $2}' | tr -d '\n'");
+//	print("XXX"+ $o +"XXX\n");
+	return $o;
+}
+

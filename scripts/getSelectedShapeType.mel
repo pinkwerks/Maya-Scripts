@@ -1,0 +1,24 @@
+global proc string[]
+getSelectedShapeType(string $type)
+{
+	string $selected[] = `ls -l -sl`;
+	string $sel;
+	string $types[];
+	string $shapes[];
+	string $shape;
+	int $i = 0;
+	for ( $sel in $selected )
+	{
+		$shapes= `listRelatives -s $sel`;
+		for ( $shape in $shapes )
+		{
+			if ( `nodeType $shape` == $type )
+			{
+				$types[$i] = $shape;
+				$i++;
+			}
+		}
+	}
+	return $types;
+}
+

@@ -1,0 +1,59 @@
+proc string getShape( string $xform )
+{
+ string $shapes[];
+ $shapes[0] = $xform;
+ 
+ // If given node is not a transform, assume it is a shape  // and pass it through.
+ if ( "transform" == `nodeType $xform` )
+ {
+   $shapes = `listRelatives  -shapes $xform`;
+ }
+ 
+ return $shapes[0];
+}
+
+global proc bakeParticleInstances(int $fs, int $fe)
+{
+	$sel = `ls -sl`;
+	$part = getShape($sel[0]);
+	$group = "bakePartGroup";
+
+	if (objExists($group)) delete $group;
+	group -n $group -em;
+
+	string $data[] = `listConnections -type instancer $part`;
+	string $inst = $data[0];
+	string $geo[] = `listConnections -type transform $inst`;
+
+	$f = $fs;
+	while ($f <= $fe) {
+		currentTime $f;
+		$nParts = `getAttr ($part+".count")`;
+		$i = 0;
+		while ($i < $nParts) {
+			float $data[] = `particle -or $i -at "particleId" -q $part`;
+			float $pid = $data[0];
+			float $pos[] = `pointPosition -w ($part+".pt["+$i+"]")`;
+			float $rot[] = `particle -or $i -at "rotate" -q $part`;
+			$rot[0] = rad_to_deg($rot[0]);
+			$rot[1] = rad_to_deg($rot[1]);
+			$rot[2] = rad_to_deg($rot[2]);
+			float $scale[] = `particle -or $i -at "scalePP" -q $part`;
+
+			$obj = "bakePartObj_"+$pid;
+			if (! objExists($obj)) {
+				float $data[] = `particle -or $i -at "instID" -q $part`;
+				int $instId = fmod($data[0], size($geo));
+				duplicate -name $obj $geo[$instId];
+				parent $obj $group;
+				setKeyframe -at v $obj;
+				setKeyframe -at v -v 0 -t ($f - 1) $obj;
+			}
+			xform -ws -a -t $pos[0] $pos[1] $pos[2] -s $scale[0] $scale[1] $scale[2] $obj;
+			xform -a -ro $rot[0] $rot[1] $rot[2] $obj;
+			setKeyframe -at tx -at ty -at tz -at rx -at ry -at rz -at sx -at sy -at sz $obj;
+			$i += 1;
+		}
+		$f += 1;
+	}
+}
