@@ -1,4 +1,4 @@
-global proc checkForCache()
+global proc checkForNParticleCache()
 {
 	string $nParts[] = `ls -l -typ nParticle`;
 	string $shapes[];
