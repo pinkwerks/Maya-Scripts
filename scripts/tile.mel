@@ -1,3 +1,4 @@
+// returns -reg flags for region rendering tiles of an image
 global proc string
 tile(int $i, int $nx, int $ny, int $rx, int $ry)
 {
