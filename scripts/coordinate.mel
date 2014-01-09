@@ -1,6 +1,6 @@
 // reference http://en.wikipedia.org/wiki/List_of_canonical_coordinate_transformations#To_Cartesian_coordinates
 
-global proc float[] toSphereFromCartesian(float $x, float $y, float $z)
+global proc float[] sphereFromCartesian(float $x, float $y, float $z)
 {
 	float $x2 = $x * $x;
 	float $y2 = $y * $y;
