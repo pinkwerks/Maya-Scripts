@@ -1,3 +1,5 @@
+// experiments to use qhull to fracture gemoetry
+
 global proc qhullw(string $filename)
 {
   int $fileId = fopen($filename, "w");
