@@ -8,7 +8,7 @@ quantizeAnimationCurveKeyframes()
 	string $animCrvs[] = `ls -type animCurve`;
 	if ( `size $animCrvs` == 0 )
 		return 0;
-	int $cunt;
+	int $count;
 	string $animCrv;
 	int $numKeys = 0;
 	int $i = 0;
@@ -34,12 +34,12 @@ quantizeAnimationCurveKeyframes()
 				$v = round($keyTime[0]);
 				print("// Fixing "+$animCrv+"["+$i+"] "+$keyTime[0]+" -> "+$v+"\n");
 				keyframe -e -in $i -tc $v $animCrv;
-				$cunt++;
+				$count++;
 			}
 		}
 	}
-	if ($cunt > 0)
-		warning("Fixed "+$cunt+" keyframes.");
-	return($cunt);
+	if ($count > 0)
+		warning("Fixed "+$count+" keyframes.");
+	return($count);
 }
 
