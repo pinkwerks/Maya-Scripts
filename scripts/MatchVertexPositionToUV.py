@@ -7,5 +7,7 @@ for i in range(len(shape.vtx)):
     vtx = shape.vtx[i]
     print("i = ", vtx)
     uv = vtx.getUVs('MainUV');
+    # uv value is weird. is a list of lists... 
+    # not sure what Z comp numbers represent
     print(uv)
     move(vtx, uv[0][0], uv[1][0], vtx.getPosition()[2])
