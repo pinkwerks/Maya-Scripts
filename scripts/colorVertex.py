@@ -1,3 +1,4 @@
+from pymel.core import *
 import random
 
 def randomColor():
