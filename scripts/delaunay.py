@@ -1,14 +1,13 @@
-######################################################################################################################
-##                                                                                                                  ##
-##  DELAUNAY MATH                                                                                                   ##
-##  Classes to calculate Delaunay triangulations via mathematical operations                                        ##
-##                                                                                                                  ##
-##  Based on the algorithm by Paul Bourke (http://local.wasp.uwa.edu.au/~pbourke/papers/triangulate/index.html)         ##
-##                                                                                                                  ##
-##  Created by: Daniel da Rocha                                                                                         ##
-##  Last modified: 21.06.09 by Daniel da Rocha                                                                      ##
-##                                                                                                                  ##
-######################################################################################################################
+##
+##  DELAUNAY MATH
+##  Classes to calculate Delaunay triangulations via mathematical operations
+##
+##  Based on the algorithm by Paul Bourke
+## (http://local.wasp.uwa.edu.au/~pbourke/papers/triangulate/index.html)
+##
+##  Created by: Daniel da Rocha
+##  Last modified: 21.06.09 by Daniel da Rocha
+##  Modified by pinkwerks
 
 import maya.cmds as cmds
 import math
@@ -148,9 +147,11 @@ class Delaunay:
 
         #end loop for vertices
 
-        ###FINAL STEP
-        #now draw the triangles defined in the triangels list
+        # FINAL STEP
+        # now draw the triangles defined in the triangels list
+
         for t in triangles:
+            print(t)
             #check if this triangle does not belong to the supertriangle,
             #if it does, jump
             if t[0] > self.numPoints-1 or t[1] > self.numPoints-1 or t[2] > self.numPoints-1: continue
@@ -347,7 +348,7 @@ def centerOfFace(facet):
 
     return [centroidX, centroidY, centroidZ]
 
-def     faceNormal(face):
+def faceNormal(face):
     cmds.select(face, r=1)
     pin = cmds.polyInfo(fn=1)
     tokens = pin[0].split()
