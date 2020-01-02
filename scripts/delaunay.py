@@ -33,20 +33,20 @@ class Delaunay:
 		#check number of original points
 		self.numPoints = len(points)
 		#feedback:
-		print "New instance of the DelaunayMath class created."
-		print ">>", self.numPoints, "points."
-	
+		print("New instance of the DelaunayMath class created.")
+		print(">>", self.numPoints, "points.")
+
 	def triangulate(self, outType="curves", timer=0):
 		"Makes all calculation. You can specify the output type (curves or faces) and if you want to set a timer to see consumed time in the operation"
-		
+
 		#check if you want to display time consumed for the operation:
 		if timer: currTime = datetime.datetime.now()
-		
+
 		#create an empty triangle list
 		triangles = []
 		#and en empty list to store vertexes in order
 		vertex = []
-		
+
 		##we need to start with a supertriangle which encompasses all the points
 		##this is done by getting the minimum and maximum bounds of all points
 		##and by adding a triangle to the triangles list which is a tad bigger than this bounds
@@ -62,7 +62,7 @@ class Delaunay:
 			if vs[i][0] < xmin: xmin = vs[i][0]
 			if vs[i][0] > xmax: xmax = vs[i][0]
 			if vs[i][1] < ymin: ymin = vs[i][1]
-			if vs[i][1] > ymax: ymax = vs[i][1] 
+			if vs[i][1] > ymax: ymax = vs[i][1]
 		#get min and max distances
 		dx = xmax-xmin
 		dy = ymax-ymin
@@ -73,7 +73,7 @@ class Delaunay:
 		#get mid points of these distances
 		xmid = (xmax+xmin)/2
 		ymid = (ymax+ymin)/2
-		
+
 		#calculate the coordinates of the vertices of the supertriangle
 		#and add them to the end of the vertex list
 		#and add this triangle to the triangles list (it is the first)
@@ -85,31 +85,31 @@ class Delaunay:
 		vertex.append([v2x, v2y])
 		v3x = xmid + 2*dmax
 		v3y = ymid - dmax
-		vertex.append([v3x, v3y])		
+		vertex.append([v3x, v3y])
 		triangles.append([self.numPoints,self.numPoints+1,self.numPoints+2])
-		
+
 		##having already one triangle in the triangles list, we can start adding points
 		##and re-triangulate everytime we need
-		
+
 		#progress window > initialize before the loop
 		cmds.progressWindow(title='Creating Delaunay regions...', #here you input your message for the progress window/can be anything
 							minValue=0,
 							maxValue=self.numPoints,    # this is imporant: when will the progress be 100%?
 							status='Points left: %d' % self.numPoints,  # here is some status message /anything you want
 							isInterruptable=True )
-		
+
 		#Include each point one at a time into the existing triangulations
 		for i in range(len(vertex)):
-			#if i is more than the original number of points, stop loop 
+			#if i is more than the original number of points, stop loop
 			#cos then it is a vertex of the supertriangle, and we don't need to calculate them
 			if i >= self.numPoints: break
 			#get current point i coordinates
 			p = vertex[i]
 			#Set up the edge buffer.
-			#If the point (x,y) lies inside the circumcircle formed by each triangle, 
+			#If the point (x,y) lies inside the circumcircle formed by each triangle,
 			#then the three edges of that triangle are added to the edge buffer.
 			edges = []
-			
+
 			#create a copy of the triangles list to loop through
 			tcopy = []
 			tcopy.extend(triangles)
@@ -129,7 +129,7 @@ class Delaunay:
 					edges.append([t[2], t[0]])
 					#remove triangle from triangle list
 					triangles.remove(t)
-			
+
 			#delete all duplicate edges from the edge buffer
 			#this leaves the edges of the enclosing polygon only
 			edges = removeDuplicates(edges)
@@ -141,13 +141,13 @@ class Delaunay:
 				v2 = edges[j][1]
 				v3 = i
 				triangles.append([v1,v2,v3])
-			
+
 			#update progress window
 			if cmds.progressWindow( query=True, isCancelled=True ) : break
-			cmds.progressWindow( edit=True, step=1, status=('Points left: %d' % (self.numPoints-i)) ) 
-			
+			cmds.progressWindow( edit=True, step=1, status=('Points left: %d' % (self.numPoints-i)) )
+
 		#end loop for vertices
-		
+
 		###FINAL STEP
 		#now draw the triangles defined in the triangels list
 		for t in triangles:
@@ -169,20 +169,20 @@ class Delaunay:
 			if outType == "faces": cmds.planarSrf(crv)
 			#to see in real time, uncomment the line below (increase operation time by circa 5 times)
 			#cmds.refresh(cv=1)
-		
+
 		#end progress window
 		cmds.progressWindow(endProgress=1)
-		
+
 		#feedback
-		print "Delaunay triangulations created successfully!"
-		print ">> %d points" % self.numPoints
-		print ">> %d triangles" % len(triangles)
+		print("Delaunay triangulations created successfully!")
+		print(">> %d points" % self.numPoints)
+		print(">> %d triangles" % len(triangles))
 		#check if you want to see time consumed
-		if timer: 
-			delta_t = datetime.datetime.now() - currTime 
-			print ">> Time consumed: %s" % str(delta_t)
-			
-	
+		if timer:
+			delta_t = datetime.datetime.now() - currTime
+			print(">> Time consumed: %s" % str(delta_t))
+
+
 	def drawTriangle(self, t, vertex):
 		v1 = vertex[t[0]]
 		v2 = vertex[t[1]]
@@ -194,13 +194,13 @@ class Delaunay:
 		crv = cmds.closeCurve(crv, rpo=1)
 		cmds.refresh(cv=1)
 		return crv
-	
+
 	def inCircle(self, point=[0,0], triangle=[[0,0],[0,0],[0,0]]):
 		'''Series of calculations to check if a certain point lies inside lies inside the circumcircle
 		made up by points in triangle (x1,y1) (x2,y2) (x3,y3)'''
 		#adapted from Dimitrie Stefanescu's Rhinoscript version
-		
-		#Return TRUE if the point (xp,yp) 
+
+		#Return TRUE if the point (xp,yp)
 		#The circumcircle centre is returned in (xc,yc) and the radius r
 		#NOTE: A point on the edge is inside the circumcircle
 		xp = point[0]
@@ -212,9 +212,9 @@ class Delaunay:
 		x3 = triangle[2][0]
 		y3 = triangle[2][1]
 		eps = 0.0001
-		
+
 		if math.fabs(y1-y2) < eps and math.fabs(y2-y3) < eps: return False
-		
+
 		if math.fabs(y2-y1) < eps:
 			m2 = -(x3 - x2) / (y3 - y2)
 			mx2 = (x2 + x3) / 2
@@ -244,20 +244,20 @@ class Delaunay:
 		dx = xp - xc
 		dy = yp - yc
 		drsqr = dx * dx + dy * dy
-		
-		if drsqr <= rsqr: 
+
+		if drsqr <= rsqr:
 			return True
 		else:
 			return False
-		
+
 	def showAllNumbers(self):
 		"Method to apply number on each vertex (for debugging only...)"
 		for i in range(self.numPoints):
 			txt = cmds.textCurves(text=str(i))
 			cmds.scale(.5,.5,.5)
 			cmds.move(self.vertices[i][0], self.vertices[i][1], self.vertices[i][2], txt)
-			
-			
+
+
 ########################## AUXILIARY FUNCTIONS
 #### vector math functions
 def CrossProduct(a, b):
@@ -266,14 +266,14 @@ def CrossProduct(a, b):
 	y = -((a[2] * b[0]) - (a[0] * b[2]))
 	z = (a[0] * b[1]) - (a[1] * b[0])
 	return [x, y, z]
-	
+
 def sum(a, b):
 	"Returns the sum of vector a + b"
 	x = a[0]+b[0]
 	y = a[1]+b[1]
 	z = a[2]+b[2]
 	return [x,y,z]
-	
+
 def magnitude(a):
 	"Returns the magnitude of vector a"
 	#start and end must be lists xyz
@@ -290,30 +290,30 @@ def midPoint(a,b):
 	"Returns the mid point between point a and b"
 	mp = [ (a[0] + b[0])/2, (a[1] + b[1])/2, (a[2] + b[2])/2  ]
 	return mp
-	
+
 def direction(a,b):
 	"Returns the direction vector going from a to b"
 	# Calculate direction vector
 	dir = [  a[0] - b[0], a[1] - b[1], a[2] - b[2] ]  #  a-b
 	return dir
-	
+
 def unit(a):
 	"Returns the unit vector of vector a"
 	aMag = magnitude(a)
-	u = [  a[0]/aMag, a[1]/aMag, a[2]/aMag  ] 
+	u = [  a[0]/aMag, a[1]/aMag, a[2]/aMag  ]
 	return u
 
 def multiply(a, value):
 	"Return the product of vector a * value"
 	prod = [ a[0]*value, a[1]*value, a[2]*value ]
 	return prod
-	
+
 def IsBounded(item):
     for x in item:
         if x < 0:
             return False
     return True
-	
+
 def GetPlaneEquation(v1, v2, v3):
 	x1, y1, z1 = v1[0], v1[1], v1[2]
 	x2, y2, z2 = v2[0], v2[1], v2[2]
@@ -331,7 +331,7 @@ def centerOfFace(facet):
 	vertex = cmds.polyListComponentConversion(facet, ff=1, tv=1)
 	vertexFlat = cmds.ls(vertex, fl=1)
 	vertCount = len(vertexFlat)
-	#for each vertex go through and find it's world space position. 
+	#for each vertex go through and find it's world space position.
 	vertPositionSumX = 0.
 	vertPositionSumY = 0.
 	vertPositionSumZ = 0.
@@ -344,9 +344,9 @@ def centerOfFace(facet):
 	centroidX = vertPositionSumX/float(vertCount)
 	centroidY = vertPositionSumY/float(vertCount)
 	centroidZ = vertPositionSumZ/float(vertCount)
-	
+
 	return [centroidX, centroidY, centroidZ]
-	
+
 def	faceNormal(face):
 	cmds.select(face, r=1)
 	pin = cmds.polyInfo(fn=1)
@@ -367,7 +367,7 @@ def	faceNormal(face):
 
 	# Return it.
 	return normal
-	
+
 def unique(s):
     """Return a list of the elements in s, but without duplicates.
 
@@ -436,7 +436,7 @@ def unique(s):
             u.append(x)
     return u
 
-	
+
 def removeDuplicates(a):
 	"Gets a list of lists and removes the duplicates"
 	#first sort the sublists
@@ -446,6 +446,6 @@ def removeDuplicates(a):
 		times = 0
 		for j in a:
 			if i==j: times +=1
-		if times == 1: b.append(i)		
+		if times == 1: b.append(i)
 	return b
 #############################################
