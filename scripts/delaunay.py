@@ -20,7 +20,25 @@ import datetime
 ##d = Denaulay(points)
 ##
 ##To calculate, call the triangulate() method
-##
+
+### TLDR;Usage
+"""
+from pymel.core import *
+execfile(r"C:\Users\pink\Documents\GitHub\maya\scripts\delaunay.py")
+import random
+
+locatorNames = []
+
+for x in range(5):
+    x = random.random();
+    y = random.random();
+    sl = spaceLocator(p=[x, y, 0])
+    locatorNames.append(sl.name())
+
+d = Delaunay(locatorNames);
+
+d.triangulate()
+"""
 
 class Delaunay:
     def __init__(self, points):
